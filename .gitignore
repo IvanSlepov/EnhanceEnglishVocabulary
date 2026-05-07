@@ -56,7 +56,6 @@ Binaries/
 */Binaries/*
 Plugins/*/Binaries/*
 Android_ASTC/
-*/Android_ASTC/*
 
 # Builds
 */Build/*
