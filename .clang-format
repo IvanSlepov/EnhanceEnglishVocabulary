@@ -1,0 +1,27 @@
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 120
+
+BreakBeforeBraces: Allman
+
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+
+PointerAlignment: Left
+
+AlignAfterOpenBracket: Align
+AlignOperands: true
+
+SortIncludes: false
+
+NamespaceIndentation: None
+
+AccessModifierOffset: -4
+
+Cpp11BracedListStyle: true
+
+Standard: c++20

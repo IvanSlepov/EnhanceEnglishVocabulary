@@ -14,6 +14,7 @@ public class EnhanceVocabulary : ModuleRules
 			"Engine", 
 			"InputCore", 
 			"EnhancedInput",
+			"UMG",
 			"EnhanceVocabularyCore",
             "EnhanceVocabularyUI",
             "EnhanceVocabularyWeb",
@@ -21,7 +22,19 @@ public class EnhanceVocabulary : ModuleRules
             "EnhanceVocabularyDevice"
         });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		PrivateDependencyModuleNames.AddRange(new string[] {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "InputCore",
+            "EnhancedInput",
+            "UMG",
+            "EnhanceVocabularyCore",
+            "EnhanceVocabularyUI",
+            "EnhanceVocabularyWeb",
+            "EnhanceVocabularyStorage",
+            "EnhanceVocabularyDevice"
+        });
 
 		// Uncomment if you are using Slate UI
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
