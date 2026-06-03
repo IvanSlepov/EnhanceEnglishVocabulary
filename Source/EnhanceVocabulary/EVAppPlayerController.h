@@ -4,8 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "EVVocabularyStorageService.h"
-#include "EVWordSearchService.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -24,18 +22,6 @@ public:
 
     UPROPERTY()
     TObjectPtr<UUserWidget> RootWidgetInstance;
-
-    UPROPERTY()
-    TObjectPtr<UEVVocabularyStorageService> VocabularyStorageService;
-
-    UPROPERTY()
-    TObjectPtr<UEVWordSearchService> WordSearchService;
-
-    UFUNCTION(BlueprintCallable, Category = "Vocabulary Test")
-    bool TestSaveVocabularyEntry(const FWordSearchResult& WordSearchResult);
-
-    UFUNCTION(BlueprintCallable, Category = "Vocabulary Search")
-    FWordSearchResult SearchWordFake(const FString& Word);
 
 protected:
     virtual void BeginPlay() override;

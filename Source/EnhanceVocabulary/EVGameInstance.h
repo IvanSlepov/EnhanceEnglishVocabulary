@@ -4,14 +4,35 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "EVVocabularyStorageService.h"
+#include "EVWordSearchService.h"
 #include "EVGameInstance.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
 class ENHANCEVOCABULARY_API UEVGameInstance : public UGameInstance
 {
-	GENERATED_BODY()
-	
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    TObjectPtr<UEVVocabularyStorageService> VocabularyStorageService;
+
+    UPROPERTY()
+    TObjectPtr<UEVWordSearchService> WordSearchService;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool SaveVocabularyEntry(const FWordSearchResult& WordSearchResult);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber = 5);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Search")
+    FWordSearchResult SearchWordFake(const FString& Word);
+
+private:
+    virtual void Init() override;
+    virtual void Shutdown() override;
 };

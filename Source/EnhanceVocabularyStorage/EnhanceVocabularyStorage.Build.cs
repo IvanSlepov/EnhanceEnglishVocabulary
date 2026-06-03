@@ -8,14 +8,18 @@ public class EnhanceVocabularyStorage: ModuleRules
             "Core", 
             "CoreUObject", 
             "Engine",
-            "EnhanceVocabularyCore"
+            "EnhanceVocabularyCore",
+            "SQLiteCore",
+            "SQLiteSupport"
         });
 
         PublicDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",
             "Engine",
-            "EnhanceVocabularyCore"
+            "EnhanceVocabularyCore",
+            "SQLiteCore",
+            "SQLiteSupport"
         });
     }
 }
