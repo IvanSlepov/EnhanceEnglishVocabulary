@@ -2,9 +2,6 @@
 
 #include "EVAppPlayerController.h"
 
-#include "Blueprint/UserWidget.h"
-#include "EVRootWidget.h"
-
 AEVAppPlayerController::AEVAppPlayerController()
 {
     bShowMouseCursor = false;

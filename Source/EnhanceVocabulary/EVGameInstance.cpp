@@ -2,6 +2,9 @@
 
 #include "EVGameInstance.h"
 
+#include "EVVocabularyStorageService.h"
+#include "EVWordSearchService.h"
+
 void UEVGameInstance::Init()
 {
     Super::Init();
@@ -56,7 +59,7 @@ bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabula
 {
     if (VocabularyStorageService)
     {
-        OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(EntryNumber);
+        OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(10);
         return true;
     }
 

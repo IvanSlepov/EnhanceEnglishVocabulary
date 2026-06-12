@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "EVVocabularyStorageService.h"
 
 #include "Misc/Paths.h"
@@ -17,13 +15,13 @@ bool UEVVocabularyStorageService::InitializeStorage()
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Database opened successfully"));
-
     if (!Database.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("The Database is invalid"));
+        UE_LOG(LogTemp, Error, TEXT("Database is invalid"));
         return false;
     }
+
+    UE_LOG(LogTemp, Warning, TEXT("Database opened successfully"));
 
     return CreateVocabularyTable();
 }
@@ -35,12 +33,6 @@ FString UEVVocabularyStorageService::GetDatabaseFilePath() const
 
 bool UEVVocabularyStorageService::CreateVocabularyTable()
 {
-    if (!Database.IsValid())
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot create table: database is invalid"));
-        return false;
-    }
-
     const TCHAR* CreateTableSql = TEXT("CREATE TABLE IF NOT EXISTS VocabularyEntries ("
                                        "Id INTEGER PRIMARY KEY AUTOINCREMENT,"
                                        "Word TEXT NOT NULL,"
@@ -48,8 +40,8 @@ bool UEVVocabularyStorageService::CreateVocabularyTable()
                                        "Usage TEXT,"
                                        "TranslationRu TEXT,"
                                        "TranslationUa TEXT,"
-                                       "CreatedAt TEXT NOT NULL,"
-                                       "UpdatedAt TEXT NOT NULL"
+                                       "CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                                       "UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
                                        ");");
 
     if (!Database.Execute(CreateTableSql))
@@ -59,6 +51,9 @@ bool UEVVocabularyStorageService::CreateVocabularyTable()
     }
 
     UE_LOG(LogTemp, Warning, TEXT("VocabularyEntries table ready"));
+
+    LogVocabularyEntryCount();
+
     return true;
 }
 
@@ -70,22 +65,24 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
         return false;
     }
 
-    const FString Now = FDateTime::UtcNow().ToIso8601();
-
     FSQLitePreparedStatement Statement;
-    Statement.Create(Database,
-                     TEXT("INSERT INTO VocabularyEntries "
-                          "(Word, Definition, Usage, TranslationRu, TranslationUa, CreatedAt, UpdatedAt) "
-                          "VALUES (?, ?, ?, ?, ?, ?, ?);"),
-                     ESQLitePreparedStatementFlags::Persistent);
 
+    if (!Statement.Create(Database,
+                          TEXT("INSERT INTO VocabularyEntries "
+                               "(Word, Definition, Usage, TranslationRu, TranslationUa) "
+                               "VALUES (?, ?, ?, ?, ?);"),
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create INSERT statement"));
+        return false;
+    }
+
+    // 1-based
     Statement.SetBindingValueByIndex(1, Entry.Word);
     Statement.SetBindingValueByIndex(2, Entry.Definition);
     Statement.SetBindingValueByIndex(3, Entry.Usage);
     Statement.SetBindingValueByIndex(4, Entry.TranslationRu);
     Statement.SetBindingValueByIndex(5, Entry.TranslationUa);
-    Statement.SetBindingValueByIndex(6, Now);
-    Statement.SetBindingValueByIndex(7, Now);
 
     if (!Statement.Execute())
     {
@@ -93,7 +90,8 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Saved word to DB: %s"), *Entry.Word);
+    LogVocabularyEntryCount();
+
     return true;
 }
 
@@ -109,32 +107,69 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
 
     if (EntryNumber <= 0)
     {
+        UE_LOG(LogTemp, Error, TEXT("EntryNumber must be greater than 0"));
         return Entries;
     }
 
-    FSQLitePreparedStatement Statement;
-    Statement.Create(Database,
-                     TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
-                          "FROM VocabularyEntries "
-                          "ORDER BY Word ASC "
-                          "LIMIT ?;"),
-                     ESQLitePreparedStatementFlags::Persistent);
+    LogVocabularyEntryCount();
 
-    Statement.SetBindingValueByIndex(1, EntryNumber);
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database,
+                          TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
+                               "FROM VocabularyEntries "
+                               "ORDER BY Word ASC;"),
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create SELECT statement"));
+        return Entries;
+    }
 
     while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
     {
         FVocabularyEntry Entry;
+
+        // 0-based
         Statement.GetColumnValueByIndex(0, Entry.Word);
         Statement.GetColumnValueByIndex(1, Entry.Definition);
         Statement.GetColumnValueByIndex(2, Entry.Usage);
         Statement.GetColumnValueByIndex(3, Entry.TranslationRu);
         Statement.GetColumnValueByIndex(4, Entry.TranslationUa);
 
+        UE_LOG(LogTemp, Warning, TEXT("Loaded word: %s"), *Entry.Word);
+
         Entries.Add(Entry);
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("Loaded entries: %d"), Entries.Num());
+
     return Entries;
+}
+
+void UEVVocabularyStorageService::LogVocabularyEntryCount()
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot count entries: database is invalid"));
+        return;
+    }
+
+    FSQLitePreparedStatement CountStatement;
+
+    if (!CountStatement.Create(Database, TEXT("SELECT COUNT(*) FROM VocabularyEntries;"),
+                               ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create COUNT statement"));
+        return;
+    }
+
+    if (CountStatement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        int32 Count = 0;
+        CountStatement.GetColumnValueByIndex(0, Count);
+
+        UE_LOG(LogTemp, Warning, TEXT("VocabularyEntries row count: %d"), Count);
+    }
 }
 
 void UEVVocabularyStorageService::ShutdownStorage()

@@ -26,4 +26,5 @@ private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
     FString GetDatabaseFilePath() const;
+    void LogVocabularyEntryCount();
 };
