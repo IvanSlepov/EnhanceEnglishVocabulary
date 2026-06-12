@@ -4,9 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
-#include "EVVocabularyStorageService.h"
-#include "EVWordSearchService.h"
 #include "EVGameInstance.generated.h"
+
+class UEVVocabularyStorageService;
+class UEVWordSearchService;
 
 /**
  *
