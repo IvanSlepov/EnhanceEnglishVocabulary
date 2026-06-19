@@ -12,8 +12,9 @@
  *
  */
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSavePressed);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDiscardPressed);
+// USE OnClicked cause OnPressed may cause stale issues on Mobile
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveClicked);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDiscardClicked);
 
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVSearchResultsPanel : public UUserWidget
@@ -42,10 +43,10 @@ public:
 
     // Events
     UPROPERTY(BlueprintAssignable, Category = "Search Results Panel Button Events")
-    FOnSavePressed OnSavePressed;
+    FOnSaveClicked OnSaveClicked;
 
     UPROPERTY(BlueprintAssignable, Category = "Search Results Panel Button Events")
-    FOnDiscardPressed OnDiscardPressed;
+    FOnDiscardClicked OnDiscardClicked;
 
 protected:
     virtual void NativeOnInitialized() override;

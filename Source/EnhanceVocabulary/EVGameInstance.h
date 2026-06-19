@@ -12,6 +12,17 @@ class UEVWordSearchService;
 /**
  *
  */
+
+UENUM()
+enum class EEVVocabularyStorageServiceResult : uint8
+{
+    WordExists,
+    WordDoesNotExist,
+    DatabaseError,
+    VocabularyStorageInstanceError,
+    Empty
+};
+
 UCLASS()
 class ENHANCEVOCABULARY_API UEVGameInstance : public UGameInstance
 {
@@ -23,6 +34,9 @@ public:
 
     UPROPERTY()
     TObjectPtr<UEVWordSearchService> WordSearchService;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    EEVVocabularyStorageServiceResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool SaveVocabularyEntry(const FWordSearchResult& WordSearchResult);

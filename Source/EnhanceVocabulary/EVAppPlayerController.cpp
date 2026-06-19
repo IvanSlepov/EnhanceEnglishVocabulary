@@ -2,6 +2,9 @@
 
 #include "EVAppPlayerController.h"
 
+#include "EVWidgetErrorProvider.h"
+#include "EVErrorDisplayWidget.h"
+
 AEVAppPlayerController::AEVAppPlayerController()
 {
     bShowMouseCursor = false;
@@ -33,6 +36,50 @@ void AEVAppPlayerController::InitEVAppPlayerController()
         if (RootWidgetInstance)
         {
             RootWidgetInstance->AddToViewport();
+
+            if (IEVWidgetErrorProvider* ErrorProvider = Cast<IEVWidgetErrorProvider>(RootWidgetInstance))
+            {
+                ErrorProvider->GetOnWidgetErrorEvent().AddDynamic(this, &ThisClass::HandleWidgetErrors);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error,
+                       TEXT("Failed to create instance of IEVWidgetErrorProvider in EVAppPlayerController"));
+            }
         }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of RootWidgetClass in EVAppPlayerController"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("The RootWidgetClass was not provided to EVAppPlayerController"));
+    }
+}
+
+void AEVAppPlayerController::HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo)
+{
+    if (ErrorWidgetClass)
+    {
+        ErrorWidgetInstance = CreateWidget<UUserWidget>(this, ErrorWidgetClass);
+
+        if (ErrorWidgetInstance)
+        {
+            if (IEVErrorDisplayWidget* ErrorDisplay = Cast<IEVErrorDisplayWidget>(ErrorWidgetInstance))
+            {
+                ErrorDisplay->ShowError(WidgetErrorInfo.Message);
+            }
+
+            ErrorWidgetInstance->AddToViewport(9999);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of ErrorWidgetClass in EVAppPlayerController"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("The ErrorWidgetClass was not provided to EVAppPlayerController"));
     }
 }

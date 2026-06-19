@@ -13,6 +13,11 @@ void UEVRootWidget::NativeOnInitialized()
     bIsPopupSettingsActivated_internal = false;
     bIsImportExportActivated_internal = false;
 
+    if (AddWord)
+    {
+        AddWord->OnError.AddDynamic(this, &ThisClass::HandleOnAnyWidgedErrorDetected);
+    }
+
     if (Button_Menu)
     {
         Button_Menu->OnPressed.AddDynamic(this, &ThisClass::ButtonMenuPressed);
@@ -113,6 +118,10 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
 void UEVRootWidget::HandleQuitButtonPressed()
 {
-    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("This is an on screen message!"));
     UKismetSystemLibrary::QuitGame(GetWorld(), GetOwningPlayer(), EQuitPreference::Quit, false);
+}
+
+void UEVRootWidget::HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo)
+{
+    OnRootWidgetError.Broadcast(WidgetErrorInfo);
 }

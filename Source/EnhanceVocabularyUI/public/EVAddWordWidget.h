@@ -15,6 +15,9 @@
 /**
  *
  */
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnError, const FEVErrorInfo&, ErrorInfo);
+
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVAddWordWidget : public UUserWidget
 {
@@ -36,6 +39,10 @@ public:
     TObjectPtr<UEVSearchResultsPanel> WBP_SearchResultsPanel;
 
     class UEVGameInstance* EVGameInstance;
+
+    // Events
+    UPROPERTY(BlueprintAssignable, Category = "Add Word Widget Events")
+    FOnError OnError;
 
 protected:
     virtual void NativeOnInitialized() override;

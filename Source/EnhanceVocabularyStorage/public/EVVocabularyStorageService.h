@@ -11,6 +11,16 @@
 /**
  *
  */
+
+UENUM()
+enum class EEVWordLookupResult : uint8
+{
+    Exists,
+    DoesNotExist,
+    DatabaseError,
+    Empty
+};
+
 UCLASS()
 class ENHANCEVOCABULARYSTORAGE_API UEVVocabularyStorageService : public UObject
 {
@@ -21,10 +31,9 @@ public:
     bool SaveVocabularyEntry(const FVocabularyEntry& Entry);
     TArray<FVocabularyEntry> GetVocabularyEntries(int32 EntryNumber = 5);
     void ShutdownStorage();
+    EEVWordLookupResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
 private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
-    FString GetDatabaseFilePath() const;
-    void LogVocabularyEntryCount();
 };

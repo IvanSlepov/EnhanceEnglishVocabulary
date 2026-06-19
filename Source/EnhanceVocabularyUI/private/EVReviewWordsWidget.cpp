@@ -30,15 +30,26 @@ void UEVReviewWordsWidget::DisplayWords()
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to cast to EVGameInstance"));
+        return;
     }
 
+    if (!ListView_ReviewWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Missing ListView_ReviewWords"));
+        return;
+    }
+
+    ListView_ReviewWords->ClearListItems();
+
     TArray<FVocabularyEntry> VocabularyEntries;
-    EVGameInstance->GetVocabularyEntries(VocabularyEntries, 5);
+    EVGameInstance->GetVocabularyEntries(VocabularyEntries, NumberOfWordsToDisplay);
 
     if (VocabularyEntries.IsEmpty())
     {
         UE_LOG(LogTemp, Error, TEXT("Vocabulary is empty!!!"));
     }
+
+    ListView_ReviewWords->ClearListItems();
 
     for (auto Entry : VocabularyEntries)
     {

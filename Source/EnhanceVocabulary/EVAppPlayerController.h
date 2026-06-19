@@ -5,11 +5,15 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
+#include "EVWidgetErrorProvider.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
  *
  */
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetsError, const FEVErrorInfo&, ErrorInfo);
+
 UCLASS()
 class ENHANCEVOCABULARY_API AEVAppPlayerController : public APlayerController
 {
@@ -24,7 +28,21 @@ public:
     UPROPERTY()
     TObjectPtr<UUserWidget> RootWidgetInstance;
 
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> ErrorWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UUserWidget> ErrorWidgetInstance;
+
+    // Events
+    UPROPERTY(BlueprintAssignable, Category = "PC Events")
+    FOnWidgetsError OnWidgetsError;
+
 protected:
     virtual void BeginPlay() override;
     void InitEVAppPlayerController();
+
+private:
+    UFUNCTION()
+    void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
 };
