@@ -8,28 +8,31 @@ void UEVSearchResultsPanel::NativeOnInitialized()
 
     if (Button_Save)
     {
-        Button_Save->OnPressed.AddDynamic(this, &UEVSearchResultsPanel::HandleSavePressed);
+        Button_Save->OnClicked.AddDynamic(this, &UEVSearchResultsPanel::HandleSavePressed);
     }
 
     if (Button_Discard)
     {
-        Button_Discard->OnPressed.AddDynamic(this, &UEVSearchResultsPanel::HandleDiscardPressed);
+        Button_Discard->OnClicked.AddDynamic(this, &UEVSearchResultsPanel::HandleDiscardPressed);
     }
 }
 
 void UEVSearchResultsPanel::NativeConstruct()
 {
     Super::NativeConstruct();
+
+    Button_Save->SetIsEnabled(true);
+    Button_Discard->SetIsEnabled(true);
 }
 
 void UEVSearchResultsPanel::HandleSavePressed()
 {
-    OnSavePressed.Broadcast();
+    OnSaveClicked.Broadcast();
     UE_LOG(LogTemp, Warning, TEXT("Save pressed"));
 }
 
 void UEVSearchResultsPanel::HandleDiscardPressed()
 {
     UE_LOG(LogTemp, Warning, TEXT("Discard pressed"));
-    OnDiscardPressed.Broadcast();
+    OnDiscardClicked.Broadcast();
 }

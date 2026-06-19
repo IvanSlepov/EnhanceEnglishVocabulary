@@ -32,6 +32,34 @@ void UEVGameInstance::Shutdown()
     Super::Shutdown();
 }
 
+EEVVocabularyStorageServiceResult UEVGameInstance::DoesWordExist(const FString& Word, FText& OutErrorMessage)
+{
+    OutErrorMessage = FText::GetEmpty();
+
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+        return EEVVocabularyStorageServiceResult::VocabularyStorageInstanceError;
+    }
+
+    switch (VocabularyStorageService->DoesWordExist(Word, OutErrorMessage))
+    {
+    case EEVWordLookupResult::DatabaseError:
+        return EEVVocabularyStorageServiceResult::DatabaseError;
+        break;
+    case EEVWordLookupResult::Exists:
+        return EEVVocabularyStorageServiceResult::WordExists;
+        break;
+    case EEVWordLookupResult::DoesNotExist:
+        return EEVVocabularyStorageServiceResult::WordDoesNotExist;
+        break;
+    default:
+        break;
+    }
+
+    return EEVVocabularyStorageServiceResult::Empty;
+}
+
 bool UEVGameInstance::SaveVocabularyEntry(const FWordSearchResult& WordSearchResult)
 {
     if (!VocabularyStorageService)
@@ -59,7 +87,7 @@ bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabula
 {
     if (VocabularyStorageService)
     {
-        OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(10);
+        OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(EntryNumber);
         return true;
     }
 

@@ -23,6 +23,9 @@ public:
 
     void DisplayWords();
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 NumberOfWordsToDisplay = 20;
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;

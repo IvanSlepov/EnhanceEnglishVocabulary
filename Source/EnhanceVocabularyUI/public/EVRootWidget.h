@@ -13,13 +13,17 @@
 #include "EVMainMenuWidget.h"
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
+#include "EVWidgetErrorProvider.h"
 #include "EVRootWidget.generated.h"
 
 /**
  *
  */
+
+// DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetError, const FEVErrorInfo&, ErrorInfo);
+
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget
+class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVWidgetErrorProvider
 {
     GENERATED_BODY()
 
@@ -44,6 +48,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVReviewWordsWidget> ReviewWords;
 
+    // Events
+    virtual FOnEVWidgetError& GetOnWidgetErrorEvent() override
+    {
+        return OnRootWidgetError;
+    }
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
@@ -65,6 +75,12 @@ private:
     UFUNCTION()
     void HandleQuitButtonPressed();
 
+    UFUNCTION()
+    void HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo);
+
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnEVWidgetError OnRootWidgetError;
 };

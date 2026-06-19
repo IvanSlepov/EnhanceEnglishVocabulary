@@ -2,18 +2,41 @@
 
 #include "Misc/Paths.h"
 #include "SQLitePreparedStatement.h"
+#include "EVVocabularySqlQueries.h"
+#include "EVHelpers.h"
+#include "HAL/FileManager.h"
 
 bool UEVVocabularyStorageService::InitializeStorage()
 {
-    const FString DbPath = GetDatabaseFilePath();
+#if WITH_EDITOR
 
-    UE_LOG(LogTemp, Warning, TEXT("DB path: %s"), *DbPath);
+    const FString DebugDbPath = UEVHelpers::GetVocabularyDebugDbPath();
 
-    if (!Database.Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+    UE_LOG(LogTemp, Warning, TEXT("Editor Debug DB path: %s"), *DebugDbPath);
+
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(DebugDbPath), true);
+
+    if (!Database.Open(*DebugDbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to open database"));
+        UE_LOG(LogTemp, Error, TEXT("Failed to open/create editor debug database"));
         return false;
     }
+
+#else
+
+    const FString LiveDbPath = UEVHelpers::GetVocabularyLiveDbPath();
+
+    UE_LOG(LogTemp, Warning, TEXT("Packaged Live DB path: %s"), *LiveDbPath);
+
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(LiveDbPath), true);
+
+    if (!Database.Open(*LiveDbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to open/create packaged live database"));
+        return false;
+    }
+
+#endif
 
     if (!Database.IsValid())
     {
@@ -26,33 +49,15 @@ bool UEVVocabularyStorageService::InitializeStorage()
     return CreateVocabularyTable();
 }
 
-FString UEVVocabularyStorageService::GetDatabaseFilePath() const
-{
-    return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("EnhanceVocabulary.db"));
-}
-
 bool UEVVocabularyStorageService::CreateVocabularyTable()
 {
-    const TCHAR* CreateTableSql = TEXT("CREATE TABLE IF NOT EXISTS VocabularyEntries ("
-                                       "Id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                                       "Word TEXT NOT NULL,"
-                                       "Definition TEXT,"
-                                       "Usage TEXT,"
-                                       "TranslationRu TEXT,"
-                                       "TranslationUa TEXT,"
-                                       "CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
-                                       "UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
-                                       ");");
-
-    if (!Database.Execute(CreateTableSql))
+    if (!Database.Execute(FEVVocabularySqlQueries::CreateVocabularyTable))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create VocabularyEntries table"));
         return false;
     }
 
     UE_LOG(LogTemp, Warning, TEXT("VocabularyEntries table ready"));
-
-    LogVocabularyEntryCount();
 
     return true;
 }
@@ -67,15 +72,14 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database,
-                          TEXT("INSERT INTO VocabularyEntries "
-                               "(Word, Definition, Usage, TranslationRu, TranslationUa) "
-                               "VALUES (?, ?, ?, ?, ?);"),
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::InsertVocabularyEntry,
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create INSERT statement"));
         return false;
     }
+
+    UE_LOG(LogTemp, Error, TEXT("Word is: %s"), *Entry.Word);
 
     // 1-based
     Statement.SetBindingValueByIndex(1, Entry.Word);
@@ -89,8 +93,6 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
         UE_LOG(LogTemp, Error, TEXT("Failed to insert vocabulary entry: %s"), *Entry.Word);
         return false;
     }
-
-    LogVocabularyEntryCount();
 
     return true;
 }
@@ -111,14 +113,9 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
         return Entries;
     }
 
-    LogVocabularyEntryCount();
-
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database,
-                          TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
-                               "FROM VocabularyEntries "
-                               "ORDER BY Word ASC;"),
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntries,
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create SELECT statement"));
@@ -146,30 +143,33 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
     return Entries;
 }
 
-void UEVVocabularyStorageService::LogVocabularyEntryCount()
+EEVWordLookupResult UEVVocabularyStorageService::DoesWordExist(const FString& Word, FText& OutErrorMessage)
 {
+    OutErrorMessage = FText::GetEmpty();
+
     if (!Database.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("Cannot count entries: database is invalid"));
-        return;
+        OutErrorMessage = FText::FromString(TEXT("The Database is invalid."));
+        return EEVWordLookupResult::DatabaseError;
     }
 
-    FSQLitePreparedStatement CountStatement;
+    FSQLitePreparedStatement Statement;
 
-    if (!CountStatement.Create(Database, TEXT("SELECT COUNT(*) FROM VocabularyEntries;"),
-                               ESQLitePreparedStatementFlags::Persistent))
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::WordExists, ESQLitePreparedStatementFlags::Persistent))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create COUNT statement"));
-        return;
+        OutErrorMessage = FText::FromString(TEXT("Failed to check word existence."));
+        return EEVWordLookupResult::DatabaseError;
     }
 
-    if (CountStatement.Step() == ESQLitePreparedStatementStepResult::Row)
+    Statement.SetBindingValueByIndex(1, Word);
+
+    if (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
     {
-        int32 Count = 0;
-        CountStatement.GetColumnValueByIndex(0, Count);
-
-        UE_LOG(LogTemp, Warning, TEXT("VocabularyEntries row count: %d"), Count);
+        OutErrorMessage = FText::FromString(TEXT("The word you search already exists in the Database"));
+        return EEVWordLookupResult::Exists;
     }
+
+    return EEVWordLookupResult::Empty;
 }
 
 void UEVVocabularyStorageService::ShutdownStorage()

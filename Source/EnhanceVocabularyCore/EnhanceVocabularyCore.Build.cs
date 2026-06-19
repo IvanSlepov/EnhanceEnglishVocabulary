@@ -7,7 +7,21 @@ public class EnhanceVocabularyCore: ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[] {
             "Core", 
             "CoreUObject", 
-            "Engine"
+            "Engine",
+            "InputCore",
+            "Json",
+            "JsonUtilities",
+            "JsonBlueprintUtilities"
+        });
+
+        PublicDependencyModuleNames.AddRange(new string[] {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "InputCore",
+            "Json",
+            "JsonUtilities",
+            "JsonBlueprintUtilities",
         });
     }
 }
