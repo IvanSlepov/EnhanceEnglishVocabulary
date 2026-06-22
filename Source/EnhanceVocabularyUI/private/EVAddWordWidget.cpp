@@ -57,7 +57,7 @@ void UEVAddWordWidget::HandleOnSearchPressed()
 {
     if (!EVGameInstance)
     {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr"));
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
     }
 
     FString NormalizedWord;
@@ -125,7 +125,7 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
 {
     if (!EVGameInstance)
     {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr"));
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
     }
 
     FEVErrorInfo EVErrorInfo;

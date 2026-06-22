@@ -4,14 +4,19 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "EVConnectionTypesAndEnums.h"
+
 #include "EVGameInstance.generated.h"
 
 class UEVVocabularyStorageService;
 class UEVWordSearchService;
+class UEVConnectivityService;
 
 /**
  *
  */
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnectionState, NewState);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -35,6 +40,9 @@ public:
     UPROPERTY()
     TObjectPtr<UEVWordSearchService> WordSearchService;
 
+    UPROPERTY()
+    TObjectPtr<UEVConnectivityService> ConnectivityService;
+
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     EEVVocabularyStorageServiceResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
@@ -47,7 +55,20 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Search")
     FWordSearchResult SearchWordFake(const FString& Word);
 
-private:
+    // Connection functions
+    EEVConnectionState GetConnectionState() const;
+
+    // Events
+    UPROPERTY(BlueprintAssignable)
+    FEVConnectionStateChanged OnConnectionStateChanged;
+
+protected:
     virtual void Init() override;
     virtual void Shutdown() override;
+
+private:
+    UFUNCTION()
+    void HandleConnectionStateChanged(EEVConnectionState NewState);
+
+    EEVConnectionState EVConnectionState;
 };

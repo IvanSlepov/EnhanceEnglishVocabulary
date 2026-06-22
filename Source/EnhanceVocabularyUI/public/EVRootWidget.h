@@ -14,13 +14,12 @@
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
 #include "EVWidgetErrorProvider.h"
+#include "EVConnectionTypesAndEnums.h"
 #include "EVRootWidget.generated.h"
 
 /**
  *
  */
-
-// DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetError, const FEVErrorInfo&, ErrorInfo);
 
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVWidgetErrorProvider
@@ -48,7 +47,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVReviewWordsWidget> ReviewWords;
 
-    // Events
+    class UEVGameInstance* EVGameInstance;
+
+    /*Events*/
+
+    // Interface derrived even declaration
     virtual FOnEVWidgetError& GetOnWidgetErrorEvent() override
     {
         return OnRootWidgetError;
@@ -78,9 +81,15 @@ private:
     UFUNCTION()
     void HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo);
 
+    UFUNCTION()
+    void HandleOnConnectionStateChanged(EEVConnectionState State);
+
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;
 
+    // Interface derrived event
     UPROPERTY(BlueprintAssignable)
     FOnEVWidgetError OnRootWidgetError;
+
+    EEVConnectionState EVConnectionState;
 };

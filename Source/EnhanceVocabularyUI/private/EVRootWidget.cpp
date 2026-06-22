@@ -1,12 +1,25 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "EVRootWidget.h"
+#include "EnhanceVocabulary/EVGameInstance.h"
 
 #include "Kismet/KismetSystemLibrary.h"
 
 void UEVRootWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
+    EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnConnectionStateChanged.AddDynamic(this, &ThisClass::HandleOnConnectionStateChanged);
+        HandleOnConnectionStateChanged(EVGameInstance->GetConnectionState());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVRootWidget.cpp is nullptr"));
+    }
 
     bIsAddWordActivated_internal = false;
     bIsReviewWordsActivated_internal = false;
@@ -124,4 +137,22 @@ void UEVRootWidget::HandleQuitButtonPressed()
 void UEVRootWidget::HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo)
 {
     OnRootWidgetError.Broadcast(WidgetErrorInfo);
+}
+
+void UEVRootWidget::HandleOnConnectionStateChanged(EEVConnectionState State)
+{
+    switch (State)
+    {
+    case EEVConnectionState::Offline:
+        UE_LOG(LogTemp, Warning, TEXT("We are Offline"));
+        break;
+    case EEVConnectionState::Connecting:
+        UE_LOG(LogTemp, Warning, TEXT("We are Connecting"));
+        break;
+    case EEVConnectionState::Online:
+        UE_LOG(LogTemp, Warning, TEXT("We are Online"));
+        break;
+    default:
+        break;
+    }
 }

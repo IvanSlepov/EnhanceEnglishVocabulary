@@ -4,6 +4,7 @@
 
 #include "EVVocabularyStorageService.h"
 #include "EVWordSearchService.h"
+#include "EVConnectivityService.h"
 
 void UEVGameInstance::Init()
 {
@@ -11,6 +12,28 @@ void UEVGameInstance::Init()
 
     VocabularyStorageService = NewObject<UEVVocabularyStorageService>(this);
     WordSearchService = NewObject<UEVWordSearchService>(this);
+
+    ConnectivityService = NewObject<UEVConnectivityService>(this);
+
+    if (ConnectivityService)
+    {
+        ConnectivityService->OnConnectionStateChanged.AddDynamic(this, &UEVGameInstance::HandleConnectionStateChanged);
+        ConnectivityService->Initialize();
+        ConnectivityService->RefreshConnection();
+
+        if (UWorld* World = GetWorld())
+        {
+            ConnectivityService->StartConnectionPolling(World);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("World is null; connection polling not started"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ConnectivityService is null"));
+    }
 
     if (VocabularyStorageService)
     {
@@ -27,6 +50,20 @@ void UEVGameInstance::Shutdown()
     if (VocabularyStorageService)
     {
         VocabularyStorageService->ShutdownStorage();
+    }
+
+    if (ConnectivityService)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            ConnectivityService->StopConnectionPolling(World);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("World is null; connection polling not stopped"));
+        }
+
+        ConnectivityService->Shutdown();
     }
 
     Super::Shutdown();
@@ -106,4 +143,28 @@ FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
     }
 
     return WordSearchService->SearchWordFake(Word);
+}
+
+EEVConnectionState UEVGameInstance::GetConnectionState() const
+{
+    if (ConnectivityService)
+    {
+        return ConnectivityService->GetConnectionState();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ConnectivityService is null in UEVGameInstance::GetConnectionState()"));
+        return EEVConnectionState::Offline;
+    }
+}
+
+void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
+{
+    if (EVConnectionState == NewState)
+    {
+        return;
+    }
+
+    EVConnectionState = NewState;
+    OnConnectionStateChanged.Broadcast(NewState);
 }
