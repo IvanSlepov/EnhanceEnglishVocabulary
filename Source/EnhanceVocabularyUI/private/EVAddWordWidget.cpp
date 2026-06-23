@@ -53,8 +53,17 @@ void UEVAddWordWidget::Init()
     Button_Clear->SetIsEnabled(false);
 }
 
+void UEVAddWordWidget::ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult)
+{
+    CachedWordSearchResult = FWordSearchResult{};
+}
+
 void UEVAddWordWidget::HandleOnSearchPressed()
 {
+    // We need to clear the local WordSearchResult struct to avoid setting
+    // WBP_SearchResultPanel Visible in case of the bad input/existing word
+    ClearStoredSearchResultVariable(WordSearchResult);
+
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
@@ -138,6 +147,8 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         EVErrorInfo.Source = EEVErrorSource::Database;
         EVErrorInfo.Type = EEVErrorType::DuplicateWord;
         EVErrorInfo.Message = OutErrorMessage;
+
+        EditableText_WordInput->SetText(FText::GetEmpty());
         OnError.Broadcast(EVErrorInfo);
     }
 
@@ -146,6 +157,10 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         Button_Search->SetIsEnabled(false);
         Button_Clear->SetIsEnabled(false);
         EditableText_WordInput->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
     }
 

@@ -7,6 +7,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "EVErrorDisplayWidget.h"
+#include "Engine/TimerHandle.h"
 #include "EVErrorWidget.generated.h"
 
 /**
@@ -34,5 +35,9 @@ protected:
 
 private:
     UFUNCTION()
-    void HandleOnCloseButtonPressed();
+    void HandleRemoveFromParent();
+
+    FTimerHandle AutoCloseTimerHandler;
+
+    float CloseThisIntervalSeconds = 5.f;
 };

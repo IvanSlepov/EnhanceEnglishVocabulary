@@ -9,11 +9,13 @@
 #include "Components/PanelWidget.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/WidgetSwitcherSlot.h"
+#include "Components/Image.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "EVAddWordWidget.h"
 #include "EVMainMenuWidget.h"
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
-#include "EVWidgetErrorProvider.h"
+#include "EVErrorProvider.h"
 #include "EVConnectionTypesAndEnums.h"
 #include "EVRootWidget.generated.h"
 
@@ -22,7 +24,7 @@
  */
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVWidgetErrorProvider
+class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVErrorProvider
 {
     GENERATED_BODY()
 
@@ -30,6 +32,9 @@ public:
     // Native UE5.7 widgets
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UButton* Button_Menu;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UImage> Image_ConnectionState;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UWidgetSwitcher> WidgetSwitcher_Main;
@@ -52,7 +57,7 @@ public:
     /*Events*/
 
     // Interface derrived even declaration
-    virtual FOnEVWidgetError& GetOnWidgetErrorEvent() override
+    virtual FOnEVError& GetOnErrorEvent() override
     {
         return OnRootWidgetError;
     }
@@ -86,10 +91,21 @@ private:
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;
+    bool bIsAppOnline = false;
 
     // Interface derrived event
     UPROPERTY(BlueprintAssignable)
-    FOnEVWidgetError OnRootWidgetError;
+    FOnEVError OnRootWidgetError;
 
     EEVConnectionState EVConnectionState;
+
+    // Connection state color
+    static const FName SphereColorParam;
+    static const FName OpacityParam;
+
+    UPROPERTY()
+    TObjectPtr<UMaterialInstanceDynamic> ConnectionMID = nullptr;
+
+    void HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
+                                    EEVConnectionState ConnectionState);
 };

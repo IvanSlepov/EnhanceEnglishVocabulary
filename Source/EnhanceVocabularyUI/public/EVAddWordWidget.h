@@ -51,6 +51,7 @@ protected:
 
 private:
     void Init();
+    void ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult);
 
     // Handle events from WBP_SearchResulsPanel
     UFUNCTION()

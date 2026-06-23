@@ -17,9 +17,9 @@ void UEVGameInstance::Init()
 
     if (ConnectivityService)
     {
-        ConnectivityService->OnConnectionStateChanged.AddDynamic(this, &UEVGameInstance::HandleConnectionStateChanged);
         ConnectivityService->Initialize();
         ConnectivityService->RefreshConnection();
+        ConnectivityService->OnConnectionStateChanged.AddDynamic(this, &UEVGameInstance::HandleConnectionStateChanged);
 
         if (UWorld* World = GetWorld())
         {
@@ -167,4 +167,15 @@ void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
 
     EVConnectionState = NewState;
     OnConnectionStateChanged.Broadcast(NewState);
+
+    if (EVConnectionState == EEVConnectionState::Offline)
+    {
+        FEVErrorInfo EVErrorInfo;
+
+        EVErrorInfo.Source = EEVErrorSource::ConnectionModule;
+        EVErrorInfo.Type = EEVErrorType::ConnectionError;
+        EVErrorInfo.Message = FText::FromString(TEXT("Failed to connect to the WEB. You are Offline."));
+
+        OnConnectionError.Broadcast(EVErrorInfo);
+    }
 }

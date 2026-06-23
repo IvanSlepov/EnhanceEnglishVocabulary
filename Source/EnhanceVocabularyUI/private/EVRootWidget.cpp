@@ -5,11 +5,21 @@
 
 #include "Kismet/KismetSystemLibrary.h"
 
+// Defining consts fpr the Color dynamic material instance params
+const FName UEVRootWidget::SphereColorParam(TEXT("SphereColor"));
+const FName UEVRootWidget::OpacityParam(TEXT("Opacity"));
+
 void UEVRootWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+
+    if (Image_ConnectionState)
+    {
+        ConnectionMID = Image_ConnectionState->GetDynamicMaterial();
+        ConnectionMID->SetScalarParameterValue(OpacityParam, 1.0f);
+    }
 
     if (EVGameInstance)
     {
@@ -78,8 +88,23 @@ void UEVRootWidget::ButtonMenuPressed()
         {
             if (bIsAddWordActivated_internal)
             {
-                WidgetSwitcher_Main->SetActiveWidget(AddWord);
-                MenuSwitcherCount = 0;
+                if (bIsAppOnline)
+                {
+                    WidgetSwitcher_Main->SetActiveWidget(AddWord);
+                    MenuSwitcherCount = 0;
+                }
+                else
+                {
+                    FEVErrorInfo EVErrorInfo;
+
+                    EVErrorInfo.Source = EEVErrorSource::ConnectionModule;
+                    EVErrorInfo.Type = EEVErrorType::ConnectionError;
+                    EVErrorInfo.Message = FText::FromString(TEXT(
+                        "Failed to connect to the WEB. You are Offline and this functionality may not be accessible."));
+
+                    MenuSwitcherCount = 0;
+                    OnRootWidgetError.Broadcast(EVErrorInfo);
+                }
             }
 
             else if (bIsReviewWordsActivated_internal)
@@ -109,8 +134,23 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
     if (bIsAddWordActivated)
     {
-        WidgetSwitcher_Main->SetActiveWidget(AddWord);
-        MenuSwitcherCount = 0;
+        if (bIsAppOnline)
+        {
+            WidgetSwitcher_Main->SetActiveWidget(AddWord);
+            MenuSwitcherCount = 0;
+        }
+        else
+        {
+            FEVErrorInfo EVErrorInfo;
+
+            EVErrorInfo.Source = EEVErrorSource::ConnectionModule;
+            EVErrorInfo.Type = EEVErrorType::ConnectionError;
+            EVErrorInfo.Message = FText::FromString(
+                TEXT("Failed to connect to the WEB. You are Offline and this functionality may not be accessible."));
+
+            MenuSwitcherCount = 0;
+            OnRootWidgetError.Broadcast(EVErrorInfo);
+        }
     }
 
     else if (bIsReviewWordsActivated)
@@ -145,14 +185,53 @@ void UEVRootWidget::HandleOnConnectionStateChanged(EEVConnectionState State)
     {
     case EEVConnectionState::Offline:
         UE_LOG(LogTemp, Warning, TEXT("We are Offline"));
+        bIsAppOnline = false;
+        HandleConnectionImageColor(ConnectionMID, State);
         break;
     case EEVConnectionState::Connecting:
+        bIsAppOnline = false;
+        HandleConnectionImageColor(ConnectionMID, State);
         UE_LOG(LogTemp, Warning, TEXT("We are Connecting"));
         break;
     case EEVConnectionState::Online:
+        bIsAppOnline = true;
+        HandleConnectionImageColor(ConnectionMID, State);
         UE_LOG(LogTemp, Warning, TEXT("We are Online"));
         break;
     default:
+        HandleConnectionImageColor(ConnectionMID, State);
         break;
+    }
+}
+
+void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
+                                               EEVConnectionState ConnectionState)
+{
+    if (MaterialInstanceDynamic)
+    {
+        switch (ConnectionState)
+        {
+        case EEVConnectionState::Online:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0x00, 0xBC, 0x00, 0xFF)));
+            break;
+        case EEVConnectionState::Connecting:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0xE7, 0xE7, 0x00, 0xFF)));
+            break;
+        case EEVConnectionState::Offline:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0xDA, 0x00, 0x00, 0xFF)));
+            break;
+        default:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0xDA, 0x00, 0x00, 0xFF)));
+            break;
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error,
+               TEXT("TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic is nullptr in WBP_RootWidget"));
     }
 }

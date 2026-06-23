@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "EVConnectionTypesAndEnums.h"
+#include "EVErrorProvider.h"
+#include "EVErrorTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -29,7 +31,7 @@ enum class EEVVocabularyStorageServiceResult : uint8
 };
 
 UCLASS()
-class ENHANCEVOCABULARY_API UEVGameInstance : public UGameInstance
+class ENHANCEVOCABULARY_API UEVGameInstance : public UGameInstance, public IEVErrorProvider
 {
     GENERATED_BODY()
 
@@ -58,9 +60,15 @@ public:
     // Connection functions
     EEVConnectionState GetConnectionState() const;
 
-    // Events
+    /*Events*/
     UPROPERTY(BlueprintAssignable)
     FEVConnectionStateChanged OnConnectionStateChanged;
+
+    // Interface derrived even declaration
+    virtual FOnEVError& GetOnErrorEvent() override
+    {
+        return OnConnectionError;
+    }
 
 protected:
     virtual void Init() override;
@@ -70,5 +78,15 @@ private:
     UFUNCTION()
     void HandleConnectionStateChanged(EEVConnectionState NewState);
 
-    EEVConnectionState EVConnectionState;
+    // We need to assign local ENUM var (Cause unassigned enum type var takes the very first entry from that enum)
+    // and we need to assign smth that differ from the Offline in this case, to address the issue when
+    // the app is launched with already disabled Internet access but the corresponding error message never appears
+    // since the even responsible for that action never fires at launch due to local var being Offline and
+    // the connectivity var being set to Offline and that makes the check in the corresponding Handler to return
+    // immediately
+    EEVConnectionState EVConnectionState = EEVConnectionState::Connecting;
+
+    // Interface derrived event
+    UPROPERTY(BlueprintAssignable)
+    FOnEVError OnConnectionError;
 };

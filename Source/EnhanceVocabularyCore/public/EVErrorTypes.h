@@ -10,7 +10,8 @@ enum class EEVErrorSource : uint8
     AddWord,
     ReviewWords,
     ImportExport,
-    Settings
+    Settings,
+    ConnectionModule
 };
 
 UENUM(BlueprintType)
@@ -22,7 +23,8 @@ enum class EEVErrorType : uint8
     DuplicateWord,
     SearchError,
     DatabaseError,
-    InternalError
+    InternalError,
+    ConnectionError
 };
 
 UENUM(BlueprintType)

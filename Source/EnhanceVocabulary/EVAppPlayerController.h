@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
-#include "EVWidgetErrorProvider.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -33,6 +32,8 @@ public:
 
     UPROPERTY()
     TObjectPtr<UUserWidget> ErrorWidgetInstance;
+
+    class UEVGameInstance* EVGameInstance;
 
     // Events
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
