@@ -33,8 +33,6 @@ public:
     UPROPERTY()
     TObjectPtr<UUserWidget> ErrorWidgetInstance;
 
-    class UEVGameInstance* EVGameInstance;
-
     // Events
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
     FOnWidgetsError OnWidgetsError;

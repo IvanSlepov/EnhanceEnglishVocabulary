@@ -14,6 +14,17 @@ void UEVAddWordWidget::NativeOnInitialized()
 
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
 
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnEVWordSearchCompletedFromEVGameInstance.AddDynamic(this,
+                                                                             &ThisClass::HandleSearchWordCompleted);
+    }
+
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is null"));
+    }
+
     if (WBP_SearchResultsPanel && Button_Search && Button_Clear && EditableText_WordInput)
     {
         WBP_SearchResultsPanel->OnSaveClicked.AddDynamic(this, &ThisClass::HandleOnSaveSearchResultPressed);
@@ -43,6 +54,8 @@ void UEVAddWordWidget::NativeConstruct()
 
 void UEVAddWordWidget::Init()
 {
+    ThisWidgetName = GetName();
+
     if (!WBP_SearchResultsPanel)
     {
         UE_LOG(LogTemp, Error, TEXT("WBP_SearchResultsPanel is nullptr"));
@@ -60,6 +73,13 @@ void UEVAddWordWidget::ClearStoredSearchResultVariable(FWordSearchResult& Cached
 
 void UEVAddWordWidget::HandleOnSearchPressed()
 {
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
     // We need to clear the local WordSearchResult struct to avoid setting
     // WBP_SearchResultPanel Visible in case of the bad input/existing word
     ClearStoredSearchResultVariable(WordSearchResult);
@@ -77,7 +97,10 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     switch (FEVWordInputValidator::ValidateSearchInput(WordToSearch, NormalizedWord, WordInputError))
     {
     case EEVInputValidationResult::Valid:
-        WordSearchResult = EVGameInstance->SearchWordFake(NormalizedWord);
+        // WordSearchResult = EVGameInstance->SearchWordFake(NormalizedWord); - leave this for debugging purposes
+        EVGameInstance->SearchWordOnline(NormalizedWord);
+        // EVGameInstance->SearchTranslationOnline(NormalizedWord, "uk"); // UK - stands for Ukrainian instead of UA
+        // EVGameInstance->SearchTranslationOnline(NormalizedWord, "ru");
         break;
     case EEVInputValidationResult::EmptyInput:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
@@ -95,7 +118,7 @@ void UEVAddWordWidget::HandleOnSearchPressed()
         break;
     }
 
-    if (WordSearchResult.bSuccess)
+    /*if (WordSearchResult.bSuccess)
     {
         Button_Search->SetIsEnabled(false);
         Button_Clear->SetIsEnabled(false);
@@ -114,11 +137,18 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance failed to search for result"));
         return;
-    }
+    }*/
 }
 
 void UEVAddWordWidget::HandleOnClearPressed()
 {
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
     Button_Search->SetIsEnabled(false);
     Button_Clear->SetIsEnabled(false);
     EditableText_WordInput->SetText(FText::GetEmpty());
@@ -126,12 +156,26 @@ void UEVAddWordWidget::HandleOnClearPressed()
 
 void UEVAddWordWidget::HandleEditableTextBoxTextChanged(const FText& NewText)
 {
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
     Button_Search->SetIsEnabled(true);
     Button_Clear->SetIsEnabled(true);
 }
 
 void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
 {
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
@@ -172,7 +216,61 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
 
 void UEVAddWordWidget::HandleOnDiscardSearchResultPressed()
 {
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
     Button_Search->SetIsEnabled(true);
     Button_Clear->SetIsEnabled(true);
     WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+}
+
+void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
+{
+    bAreInteractionElementsEnabled = bEnabled;
+}
+
+bool UEVAddWordWidget::GetControlsEnabled()
+{
+    return bAreInteractionElementsEnabled;
+}
+
+void UEVAddWordWidget::HandleOnWidgetInteractionDisabled()
+{
+    OnWidgetInteractionDisabled.Broadcast(bAreInteractionElementsEnabled, ThisWidgetName);
+}
+
+void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result)
+{
+    if (Result.bSuccess)
+    {
+        WordSearchResult = Result;
+
+        Button_Search->SetIsEnabled(false);
+        Button_Clear->SetIsEnabled(false);
+
+        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Visible);
+
+        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::FromString(Result.Definition));
+
+        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::FromString(Result.Usage));
+
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(
+            FText::FromString(Result.TranslationRu));
+
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(
+            FText::FromString(Result.TranslationUa));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Word search failed."));
+
+        // Later:
+        // Show an error popup
+        // Keep Search button enabled
+        // Hide SearchResultPanel
+    }
 }

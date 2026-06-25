@@ -56,25 +56,6 @@ void AEVAppPlayerController::InitEVAppPlayerController()
     {
         UE_LOG(LogTemp, Error, TEXT("The RootWidgetClass was not provided to EVAppPlayerController"));
     }
-
-    EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
-
-    if (EVGameInstance)
-    {
-
-        if (IEVErrorProvider* ErrorProvider = Cast<IEVErrorProvider>(EVGameInstance))
-        {
-            ErrorProvider->GetOnErrorEvent().AddDynamic(this, &ThisClass::HandleWidgetErrors);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of IEVErrorProvider in EVAppPlayerController"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAppPlayerController.cpp is nullptr"));
-    }
 }
 
 void AEVAppPlayerController::HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo)

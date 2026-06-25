@@ -13,6 +13,8 @@ void UEVRootWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
+    SetupConnectionErrorInfo(EVConnectionErrorInfo);
+
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
 
     if (Image_ConnectionState)
@@ -38,7 +40,12 @@ void UEVRootWidget::NativeOnInitialized()
 
     if (AddWord)
     {
-        AddWord->OnError.AddDynamic(this, &ThisClass::HandleOnAnyWidgedErrorDetected);
+        AddWord->OnError.AddDynamic(this, &ThisClass::HandleOnAnyWidgetErrorDetected);
+        if (IEVWidgetCommonEvents* WidgetCommonEvents = Cast<IEVWidgetCommonEvents>(AddWord))
+        {
+            WidgetCommonEvents->GetWidgetInteractionDisabledEvent().AddDynamic(
+                this, &ThisClass::HandleOnAnyWidgetControlsDisabled);
+        }
     }
 
     if (Button_Menu)
@@ -88,23 +95,9 @@ void UEVRootWidget::ButtonMenuPressed()
         {
             if (bIsAddWordActivated_internal)
             {
-                if (bIsAppOnline)
-                {
-                    WidgetSwitcher_Main->SetActiveWidget(AddWord);
-                    MenuSwitcherCount = 0;
-                }
-                else
-                {
-                    FEVErrorInfo EVErrorInfo;
-
-                    EVErrorInfo.Source = EEVErrorSource::ConnectionModule;
-                    EVErrorInfo.Type = EEVErrorType::ConnectionError;
-                    EVErrorInfo.Message = FText::FromString(TEXT(
-                        "Failed to connect to the WEB. You are Offline and this functionality may not be accessible."));
-
-                    MenuSwitcherCount = 0;
-                    OnRootWidgetError.Broadcast(EVErrorInfo);
-                }
+                HandleOnlineDependantWidgetsActivation(AddWord, bIsAppOnline);
+                HandleWidgetControlsState(AddWord, bIsAppOnline);
+                MenuSwitcherCount = 0;
             }
 
             else if (bIsReviewWordsActivated_internal)
@@ -134,23 +127,9 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
     if (bIsAddWordActivated)
     {
-        if (bIsAppOnline)
-        {
-            WidgetSwitcher_Main->SetActiveWidget(AddWord);
-            MenuSwitcherCount = 0;
-        }
-        else
-        {
-            FEVErrorInfo EVErrorInfo;
-
-            EVErrorInfo.Source = EEVErrorSource::ConnectionModule;
-            EVErrorInfo.Type = EEVErrorType::ConnectionError;
-            EVErrorInfo.Message = FText::FromString(
-                TEXT("Failed to connect to the WEB. You are Offline and this functionality may not be accessible."));
-
-            MenuSwitcherCount = 0;
-            OnRootWidgetError.Broadcast(EVErrorInfo);
-        }
+        HandleOnlineDependantWidgetsActivation(AddWord, bIsAppOnline);
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
+        MenuSwitcherCount = 0;
     }
 
     else if (bIsReviewWordsActivated)
@@ -169,14 +148,94 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
     }
 }
 
+void UEVRootWidget::SetupConnectionErrorInfo(FEVErrorInfo& ConnectionErrorInfo)
+{
+    ConnectionErrorInfo.Source = EEVErrorSource::ConnectionModule;
+    ConnectionErrorInfo.Type = EEVErrorType::ConnectionError;
+    ConnectionErrorInfo.Message = FText::FromString(
+        TEXT("Failed to connect to the WEB. You are Offline and some functionality may not be available"));
+}
+
+bool UEVRootWidget::HandleWidgetControlsState(IEVWidgetControllable* Widget, bool bIsConnectionStatusOnline)
+{
+    if (Widget)
+    {
+        if (bIsConnectionStatusOnline == true && Widget->GetControlsEnabled() == true)
+        {
+            return true;
+        }
+        else if (bIsConnectionStatusOnline == false && Widget->GetControlsEnabled() == true)
+        {
+            Widget->SetControlsEnabled(false);
+            return false;
+        }
+        else if (bIsConnectionStatusOnline == true && Widget->GetControlsEnabled() == false)
+        {
+            Widget->SetControlsEnabled(true);
+            return true;
+        }
+
+        return false;
+    }
+
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get instance of IEVWidgetControllable"));
+        return false;
+    }
+}
+
+void UEVRootWidget::HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, bool bIsConnectionStatusOnline)
+{
+    if (Widget)
+    {
+        if (bIsConnectionStatusOnline)
+        {
+            WidgetSwitcher_Main->SetActiveWidget(Widget);
+        }
+        else
+        {
+            HandleOnConnectionErrorDetected();
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get instance of UUserWidget"));
+    }
+}
+
 void UEVRootWidget::HandleQuitButtonPressed()
 {
     UKismetSystemLibrary::QuitGame(GetWorld(), GetOwningPlayer(), EQuitPreference::Quit, false);
 }
 
-void UEVRootWidget::HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo)
+void UEVRootWidget::HandleOnAnyWidgetErrorDetected(const FEVErrorInfo& WidgetErrorInfo)
 {
     OnRootWidgetError.Broadcast(WidgetErrorInfo);
+}
+
+void UEVRootWidget::HandleOnConnectionErrorDetected()
+{
+    OnRootWidgetError.Broadcast(EVConnectionErrorInfo);
+}
+
+void UEVRootWidget::HandleOnAnyWidgetControlsDisabled(bool bAreControlsEnabled, const FString& WidgetName)
+{
+    if (!bAreControlsEnabled)
+    {
+        if (EVConnectionState != EEVConnectionState::Online)
+        {
+            HandleOnConnectionErrorDetected();
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("The %s widget controls disabled but we are Online"), *WidgetName);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("The %s widget controls were not disabled"), *WidgetName);
+    }
 }
 
 void UEVRootWidget::HandleOnConnectionStateChanged(EEVConnectionState State)
@@ -186,15 +245,20 @@ void UEVRootWidget::HandleOnConnectionStateChanged(EEVConnectionState State)
     case EEVConnectionState::Offline:
         UE_LOG(LogTemp, Warning, TEXT("We are Offline"));
         bIsAppOnline = false;
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
+        HandleOnConnectionErrorDetected();
         HandleConnectionImageColor(ConnectionMID, State);
         break;
     case EEVConnectionState::Connecting:
         bIsAppOnline = false;
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
+        HandleOnConnectionErrorDetected();
         HandleConnectionImageColor(ConnectionMID, State);
         UE_LOG(LogTemp, Warning, TEXT("We are Connecting"));
         break;
     case EEVConnectionState::Online:
         bIsAppOnline = true;
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
         HandleConnectionImageColor(ConnectionMID, State);
         UE_LOG(LogTemp, Warning, TEXT("We are Online"));
         break;

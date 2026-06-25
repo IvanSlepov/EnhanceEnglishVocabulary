@@ -13,6 +13,18 @@ void UEVGameInstance::Init()
     VocabularyStorageService = NewObject<UEVVocabularyStorageService>(this);
     WordSearchService = NewObject<UEVWordSearchService>(this);
 
+    if (WordSearchService)
+    {
+        // Creating and HttpService instance within
+        WordSearchService->Initialize();
+        WordSearchService->OnEVWordSearchCompleted.AddDynamic(
+            this, &ThisClass::HandleEVWordSearchCompletedFromEVGameInstance);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("WordSearchService is null"));
+    }
+
     ConnectivityService = NewObject<UEVConnectivityService>(this);
 
     if (ConnectivityService)
@@ -138,11 +150,24 @@ FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
     {
         FWordSearchResult Result;
         Result.bSuccess = false;
-        Result.ErrorMessage = TEXT("WordSearchService is null");
+        Result.ErrorMessage = TEXT("WordSearchService/Fake search is null");
         return Result;
     }
 
     return WordSearchService->SearchWordFake(Word);
+}
+
+void UEVGameInstance::SearchWordOnline(const FString& Word)
+{
+    if (!WordSearchService)
+    {
+        FWordSearchResult Result;
+        Result.bSuccess = false;
+        Result.ErrorMessage = TEXT("WordSearchService/Real Online Search is null");
+        // return Result;
+    }
+
+    WordSearchService->SearchWordOnline(Word);
 }
 
 EEVConnectionState UEVGameInstance::GetConnectionState() const
@@ -167,15 +192,10 @@ void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
 
     EVConnectionState = NewState;
     OnConnectionStateChanged.Broadcast(NewState);
+}
 
-    if (EVConnectionState == EEVConnectionState::Offline)
-    {
-        FEVErrorInfo EVErrorInfo;
-
-        EVErrorInfo.Source = EEVErrorSource::ConnectionModule;
-        EVErrorInfo.Type = EEVErrorType::ConnectionError;
-        EVErrorInfo.Message = FText::FromString(TEXT("Failed to connect to the WEB. You are Offline."));
-
-        OnConnectionError.Broadcast(EVErrorInfo);
-    }
+void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
+    const FWordSearchResult& SearchWordResultPassedByGameInstance)
+{
+    OnEVWordSearchCompletedFromEVGameInstance.Broadcast(SearchWordResultPassedByGameInstance);
 }

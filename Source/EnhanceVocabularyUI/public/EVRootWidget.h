@@ -16,6 +16,7 @@
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
 #include "EVErrorProvider.h"
+#include "EVErrorTypes.h"
 #include "EVConnectionTypesAndEnums.h"
 #include "EVRootWidget.generated.h"
 
@@ -39,8 +40,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UWidgetSwitcher> WidgetSwitcher_Main;
 
-    // The EV app WBPs added to the WidgetSwitcher_Main
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    /*The EV app WBPs added to the WidgetSwitcher_Main*/
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "Online Dependant")
     TObjectPtr<UEVAddWordWidget> AddWord;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
@@ -56,7 +57,7 @@ public:
 
     /*Events*/
 
-    // Interface derrived even declaration
+    // Interface derrived event declaration
     virtual FOnEVError& GetOnErrorEvent() override
     {
         return OnRootWidgetError;
@@ -68,6 +69,10 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
+    void SetupConnectionErrorInfo(FEVErrorInfo& ConnectionErrorInfo);
+    bool HandleWidgetControlsState(IEVWidgetControllable* Widget, bool bIsConnectionStatusOnline);
+    void HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, bool bIsConnectionStatusOnline);
+
     UFUNCTION()
     void ButtonMenuPressed();
 
@@ -84,7 +89,21 @@ private:
     void HandleQuitButtonPressed();
 
     UFUNCTION()
-    void HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo);
+    void HandleOnAnyWidgetErrorDetected(const FEVErrorInfo& WidgetErrorInfo);
+
+    // We use this handler to invoke the ErrorWidget
+    // if any connection issues are detected
+    // Interface derrived event
+    UPROPERTY(BlueprintAssignable)
+    FOnEVError OnRootWidgetError;
+
+    UFUNCTION()
+    void HandleOnConnectionErrorDetected();
+
+    // Use this to handle an event fired back from any appropriate widget
+    // signaling that the controls have been disabled and further generate the appropriate error widget
+    UFUNCTION()
+    void HandleOnAnyWidgetControlsDisabled(bool bAreControlsEnabled, const FString& WidgetName);
 
     UFUNCTION()
     void HandleOnConnectionStateChanged(EEVConnectionState State);
@@ -93,9 +112,7 @@ private:
     int32 MenuSwitcherCount;
     bool bIsAppOnline = false;
 
-    // Interface derrived event
-    UPROPERTY(BlueprintAssignable)
-    FOnEVError OnRootWidgetError;
+    FEVErrorInfo EVConnectionErrorInfo;
 
     EEVConnectionState EVConnectionState;
 

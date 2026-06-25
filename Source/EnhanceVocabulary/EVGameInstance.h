@@ -5,8 +5,6 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "EVConnectionTypesAndEnums.h"
-#include "EVErrorProvider.h"
-#include "EVErrorTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -19,6 +17,7 @@ class UEVConnectivityService;
  */
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnectionState, NewState);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -31,7 +30,7 @@ enum class EEVVocabularyStorageServiceResult : uint8
 };
 
 UCLASS()
-class ENHANCEVOCABULARY_API UEVGameInstance : public UGameInstance, public IEVErrorProvider
+class ENHANCEVOCABULARY_API UEVGameInstance : public UGameInstance
 {
     GENERATED_BODY()
 
@@ -54,8 +53,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber = 5);
 
-    UFUNCTION(BlueprintCallable, Category = "Vocabulary Search")
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Fake/Debugging Search")
     FWordSearchResult SearchWordFake(const FString& Word);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Online Search")
+    void SearchWordOnline(const FString& Word);
 
     // Connection functions
     EEVConnectionState GetConnectionState() const;
@@ -64,11 +66,8 @@ public:
     UPROPERTY(BlueprintAssignable)
     FEVConnectionStateChanged OnConnectionStateChanged;
 
-    // Interface derrived even declaration
-    virtual FOnEVError& GetOnErrorEvent() override
-    {
-        return OnConnectionError;
-    }
+    UPROPERTY(BlueprintAssignable)
+    FEVWordSearchCompletedFromEVGameInstance OnEVWordSearchCompletedFromEVGameInstance;
 
 protected:
     virtual void Init() override;
@@ -78,6 +77,9 @@ private:
     UFUNCTION()
     void HandleConnectionStateChanged(EEVConnectionState NewState);
 
+    UFUNCTION()
+    void HandleEVWordSearchCompletedFromEVGameInstance(const FWordSearchResult& SearchWordResultPassedByGameInstance);
+
     // We need to assign local ENUM var (Cause unassigned enum type var takes the very first entry from that enum)
     // and we need to assign smth that differ from the Offline in this case, to address the issue when
     // the app is launched with already disabled Internet access but the corresponding error message never appears
@@ -85,8 +87,4 @@ private:
     // the connectivity var being set to Offline and that makes the check in the corresponding Handler to return
     // immediately
     EEVConnectionState EVConnectionState = EEVConnectionState::Connecting;
-
-    // Interface derrived event
-    UPROPERTY(BlueprintAssignable)
-    FOnEVError OnConnectionError;
 };

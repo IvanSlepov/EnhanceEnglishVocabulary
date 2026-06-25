@@ -10,6 +10,8 @@
 #include "Components/EditableText.h"
 #include "EVSearchResultsPanel.h"
 #include "EnhanceVocabularyCore/public/EVVocabularyTypes.h"
+#include "EVWidgetControllable.h"
+#include "EVWidgetCommonEvents.h"
 #include "EVAddWordWidget.generated.h"
 
 /**
@@ -19,7 +21,9 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnError, const FEVErrorInfo&, ErrorInfo);
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVAddWordWidget : public UUserWidget
+class ENHANCEVOCABULARYUI_API UEVAddWordWidget : public UUserWidget,
+                                                 public IEVWidgetControllable,
+                                                 public IEVWidgetCommonEvents
 {
     GENERATED_BODY()
 
@@ -40,9 +44,21 @@ public:
 
     class UEVGameInstance* EVGameInstance;
 
-    // Events
+    // Disable/Enable or Get controls status on demand
+    virtual void SetControlsEnabled(bool bEnabled) override;
+    virtual bool GetControlsEnabled() override;
+
+    /*Events*/
+
+    // Localy constructed event to pass the Storage/Validation/Widget related errors
     UPROPERTY(BlueprintAssignable, Category = "Add Word Widget Events")
     FOnError OnError;
+
+    // Common event for the web dependant widgets
+    virtual FOnWidgetInteractionDisabled& GetWidgetInteractionDisabledEvent() override
+    {
+        return OnWidgetInteractionDisabled;
+    }
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -72,4 +88,18 @@ private:
     void HandleEditableTextBoxTextChanged(const FText& NewText);
 
     FWordSearchResult WordSearchResult;
+
+    bool bAreInteractionElementsEnabled = true;
+
+    // Common Interface derrived event
+    UPROPERTY(BlueprintAssignable)
+    FOnWidgetInteractionDisabled OnWidgetInteractionDisabled;
+
+    UFUNCTION()
+    void HandleOnWidgetInteractionDisabled();
+
+    UFUNCTION()
+    void HandleSearchWordCompleted(const FWordSearchResult& Result);
+
+    FString ThisWidgetName;
 };
