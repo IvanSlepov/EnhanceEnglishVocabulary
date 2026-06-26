@@ -99,8 +99,6 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     case EEVInputValidationResult::Valid:
         // WordSearchResult = EVGameInstance->SearchWordFake(NormalizedWord); - leave this for debugging purposes
         EVGameInstance->SearchWordOnline(NormalizedWord);
-        // EVGameInstance->SearchTranslationOnline(NormalizedWord, "uk"); // UK - stands for Ukrainian instead of UA
-        // EVGameInstance->SearchTranslationOnline(NormalizedWord, "ru");
         break;
     case EEVInputValidationResult::EmptyInput:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
@@ -117,27 +115,6 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     default:
         break;
     }
-
-    /*if (WordSearchResult.bSuccess)
-    {
-        Button_Search->SetIsEnabled(false);
-        Button_Clear->SetIsEnabled(false);
-        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Visible);
-
-        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(
-            FText::FromString(WordSearchResult.Definition));
-        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::FromString(WordSearchResult.Usage));
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(
-            FText::FromString(WordSearchResult.TranslationRu));
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(
-            FText::FromString(WordSearchResult.TranslationUa));
-    }
-
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance failed to search for result"));
-        return;
-    }*/
 }
 
 void UEVAddWordWidget::HandleOnClearPressed()
@@ -268,9 +245,11 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
     {
         UE_LOG(LogTemp, Error, TEXT("Word search failed."));
 
-        // Later:
-        // Show an error popup
-        // Keep Search button enabled
-        // Hide SearchResultPanel
+        FEVErrorInfo EVErrorInfo;
+        EVErrorInfo.Source = EEVErrorSource::AddWord;
+        EVErrorInfo.Type = EEVErrorType::SearchError;
+        EVErrorInfo.Message = FText::FromString(TEXT(
+            "We couldn't find that word. Please check the spelling or change your dictionary provider in settings."));
+        OnError.Broadcast(EVErrorInfo);
     }
 }
