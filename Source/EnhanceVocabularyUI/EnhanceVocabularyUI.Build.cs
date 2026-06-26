@@ -12,7 +12,8 @@ public class EnhanceVocabularyUI: ModuleRules
             "EnhanceVocabularyStorage",
             "EnhanceVocabulary",
             "EnhanceVocabularyCore",
-            "EnhanceVocabularyStorage"
+            "EnhanceVocabularyStorage",
+            "EnhanceVocabularyWeb"
         });
 
         PublicDependencyModuleNames.AddRange(new string[] {
@@ -25,7 +26,8 @@ public class EnhanceVocabularyUI: ModuleRules
             "EnhanceVocabularyStorage",
             "EnhanceVocabulary",
             "EnhanceVocabularyCore",
-            "EnhanceVocabularyStorage"
+            "EnhanceVocabularyStorage",
+            "EnhanceVocabularyWeb"
         });
     }
 }

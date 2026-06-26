@@ -8,14 +8,20 @@ public class EnhanceVocabularyWeb: ModuleRules
             "Core", 
             "CoreUObject", 
             "Engine",
-            "EnhanceVocabularyCore"
+            "EnhanceVocabularyCore",
+            "HTTP",
+            "Json",
+            "JsonUtilities"
         });
 
         PublicDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",
             "Engine",
-            "EnhanceVocabularyCore"
+            "EnhanceVocabularyCore",
+            "HTTP",
+            "Json",
+            "JsonUtilities"
         });
     }
 }

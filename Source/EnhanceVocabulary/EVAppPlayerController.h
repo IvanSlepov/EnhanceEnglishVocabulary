@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
-#include "EVWidgetErrorProvider.h"
 #include "EVAppPlayerController.generated.h"
 
 /**

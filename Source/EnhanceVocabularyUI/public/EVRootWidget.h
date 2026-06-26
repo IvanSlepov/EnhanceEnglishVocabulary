@@ -9,21 +9,23 @@
 #include "Components/PanelWidget.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/WidgetSwitcherSlot.h"
+#include "Components/Image.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "EVAddWordWidget.h"
 #include "EVMainMenuWidget.h"
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
-#include "EVWidgetErrorProvider.h"
+#include "EVErrorProvider.h"
+#include "EVErrorTypes.h"
+#include "EVConnectionTypesAndEnums.h"
 #include "EVRootWidget.generated.h"
 
 /**
  *
  */
 
-// DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetError, const FEVErrorInfo&, ErrorInfo);
-
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVWidgetErrorProvider
+class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVErrorProvider
 {
     GENERATED_BODY()
 
@@ -33,10 +35,13 @@ public:
     class UButton* Button_Menu;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UImage> Image_ConnectionState;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UWidgetSwitcher> WidgetSwitcher_Main;
 
-    // The EV app WBPs added to the WidgetSwitcher_Main
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    /*The EV app WBPs added to the WidgetSwitcher_Main*/
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "Online Dependant")
     TObjectPtr<UEVAddWordWidget> AddWord;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
@@ -48,8 +53,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVReviewWordsWidget> ReviewWords;
 
-    // Events
-    virtual FOnEVWidgetError& GetOnWidgetErrorEvent() override
+    class UEVGameInstance* EVGameInstance;
+
+    /*Events*/
+
+    // Interface derrived event declaration
+    virtual FOnEVError& GetOnErrorEvent() override
     {
         return OnRootWidgetError;
     }
@@ -60,6 +69,10 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
+    void SetupConnectionErrorInfo(FEVErrorInfo& ConnectionErrorInfo);
+    bool HandleWidgetControlsState(IEVWidgetControllable* Widget, bool bIsConnectionStatusOnline);
+    void HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, bool bIsConnectionStatusOnline);
+
     UFUNCTION()
     void ButtonMenuPressed();
 
@@ -76,11 +89,40 @@ private:
     void HandleQuitButtonPressed();
 
     UFUNCTION()
-    void HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo);
+    void HandleOnAnyWidgetErrorDetected(const FEVErrorInfo& WidgetErrorInfo);
+
+    // We use this handler to invoke the ErrorWidget
+    // if any connection issues are detected
+    // Interface derrived event
+    UPROPERTY(BlueprintAssignable)
+    FOnEVError OnRootWidgetError;
+
+    UFUNCTION()
+    void HandleOnConnectionErrorDetected();
+
+    // Use this to handle an event fired back from any appropriate widget
+    // signaling that the controls have been disabled and further generate the appropriate error widget
+    UFUNCTION()
+    void HandleOnAnyWidgetControlsDisabled(bool bAreControlsEnabled, const FString& WidgetName);
+
+    UFUNCTION()
+    void HandleOnConnectionStateChanged(EEVConnectionState State);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;
+    bool bIsAppOnline = false;
 
-    UPROPERTY(BlueprintAssignable)
-    FOnEVWidgetError OnRootWidgetError;
+    FEVErrorInfo EVConnectionErrorInfo;
+
+    EEVConnectionState EVConnectionState;
+
+    // Connection state color
+    static const FName SphereColorParam;
+    static const FName OpacityParam;
+
+    UPROPERTY()
+    TObjectPtr<UMaterialInstanceDynamic> ConnectionMID = nullptr;
+
+    void HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
+                                    EEVConnectionState ConnectionState);
 };

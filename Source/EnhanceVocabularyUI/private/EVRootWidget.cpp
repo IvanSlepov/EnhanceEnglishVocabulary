@@ -1,12 +1,37 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "EVRootWidget.h"
+#include "EnhanceVocabulary/EVGameInstance.h"
 
 #include "Kismet/KismetSystemLibrary.h"
+
+// Defining consts fpr the Color dynamic material instance params
+const FName UEVRootWidget::SphereColorParam(TEXT("SphereColor"));
+const FName UEVRootWidget::OpacityParam(TEXT("Opacity"));
 
 void UEVRootWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
+    SetupConnectionErrorInfo(EVConnectionErrorInfo);
+
+    EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+
+    if (Image_ConnectionState)
+    {
+        ConnectionMID = Image_ConnectionState->GetDynamicMaterial();
+        ConnectionMID->SetScalarParameterValue(OpacityParam, 1.0f);
+    }
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnConnectionStateChanged.AddDynamic(this, &ThisClass::HandleOnConnectionStateChanged);
+        HandleOnConnectionStateChanged(EVGameInstance->GetConnectionState());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVRootWidget.cpp is nullptr"));
+    }
 
     bIsAddWordActivated_internal = false;
     bIsReviewWordsActivated_internal = false;
@@ -15,7 +40,12 @@ void UEVRootWidget::NativeOnInitialized()
 
     if (AddWord)
     {
-        AddWord->OnError.AddDynamic(this, &ThisClass::HandleOnAnyWidgedErrorDetected);
+        AddWord->OnError.AddDynamic(this, &ThisClass::HandleOnAnyWidgetErrorDetected);
+        if (IEVWidgetCommonEvents* WidgetCommonEvents = Cast<IEVWidgetCommonEvents>(AddWord))
+        {
+            WidgetCommonEvents->GetWidgetInteractionDisabledEvent().AddDynamic(
+                this, &ThisClass::HandleOnAnyWidgetControlsDisabled);
+        }
     }
 
     if (Button_Menu)
@@ -65,7 +95,8 @@ void UEVRootWidget::ButtonMenuPressed()
         {
             if (bIsAddWordActivated_internal)
             {
-                WidgetSwitcher_Main->SetActiveWidget(AddWord);
+                HandleOnlineDependantWidgetsActivation(AddWord, bIsAppOnline);
+                HandleWidgetControlsState(AddWord, bIsAppOnline);
                 MenuSwitcherCount = 0;
             }
 
@@ -96,7 +127,8 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
     if (bIsAddWordActivated)
     {
-        WidgetSwitcher_Main->SetActiveWidget(AddWord);
+        HandleOnlineDependantWidgetsActivation(AddWord, bIsAppOnline);
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
         MenuSwitcherCount = 0;
     }
 
@@ -116,12 +148,154 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
     }
 }
 
+void UEVRootWidget::SetupConnectionErrorInfo(FEVErrorInfo& ConnectionErrorInfo)
+{
+    ConnectionErrorInfo.Source = EEVErrorSource::ConnectionModule;
+    ConnectionErrorInfo.Type = EEVErrorType::ConnectionError;
+    ConnectionErrorInfo.Message = FText::FromString(
+        TEXT("Failed to connect to the WEB. You are Offline and some functionality may not be available"));
+}
+
+bool UEVRootWidget::HandleWidgetControlsState(IEVWidgetControllable* Widget, bool bIsConnectionStatusOnline)
+{
+    if (Widget)
+    {
+        if (bIsConnectionStatusOnline == true && Widget->GetControlsEnabled() == true)
+        {
+            return true;
+        }
+        else if (bIsConnectionStatusOnline == false && Widget->GetControlsEnabled() == true)
+        {
+            Widget->SetControlsEnabled(false);
+            return false;
+        }
+        else if (bIsConnectionStatusOnline == true && Widget->GetControlsEnabled() == false)
+        {
+            Widget->SetControlsEnabled(true);
+            return true;
+        }
+
+        return false;
+    }
+
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get instance of IEVWidgetControllable"));
+        return false;
+    }
+}
+
+void UEVRootWidget::HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, bool bIsConnectionStatusOnline)
+{
+    if (Widget)
+    {
+        if (bIsConnectionStatusOnline)
+        {
+            WidgetSwitcher_Main->SetActiveWidget(Widget);
+        }
+        else
+        {
+            HandleOnConnectionErrorDetected();
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get instance of UUserWidget"));
+    }
+}
+
 void UEVRootWidget::HandleQuitButtonPressed()
 {
     UKismetSystemLibrary::QuitGame(GetWorld(), GetOwningPlayer(), EQuitPreference::Quit, false);
 }
 
-void UEVRootWidget::HandleOnAnyWidgedErrorDetected(const FEVErrorInfo& WidgetErrorInfo)
+void UEVRootWidget::HandleOnAnyWidgetErrorDetected(const FEVErrorInfo& WidgetErrorInfo)
 {
     OnRootWidgetError.Broadcast(WidgetErrorInfo);
+}
+
+void UEVRootWidget::HandleOnConnectionErrorDetected()
+{
+    OnRootWidgetError.Broadcast(EVConnectionErrorInfo);
+}
+
+void UEVRootWidget::HandleOnAnyWidgetControlsDisabled(bool bAreControlsEnabled, const FString& WidgetName)
+{
+    if (!bAreControlsEnabled)
+    {
+        if (EVConnectionState != EEVConnectionState::Online)
+        {
+            HandleOnConnectionErrorDetected();
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("The %s widget controls disabled but we are Online"), *WidgetName);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("The %s widget controls were not disabled"), *WidgetName);
+    }
+}
+
+void UEVRootWidget::HandleOnConnectionStateChanged(EEVConnectionState State)
+{
+    switch (State)
+    {
+    case EEVConnectionState::Offline:
+        UE_LOG(LogTemp, Warning, TEXT("We are Offline"));
+        bIsAppOnline = false;
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
+        HandleOnConnectionErrorDetected();
+        HandleConnectionImageColor(ConnectionMID, State);
+        break;
+    case EEVConnectionState::Connecting:
+        bIsAppOnline = false;
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
+        HandleOnConnectionErrorDetected();
+        HandleConnectionImageColor(ConnectionMID, State);
+        UE_LOG(LogTemp, Warning, TEXT("We are Connecting"));
+        break;
+    case EEVConnectionState::Online:
+        bIsAppOnline = true;
+        HandleWidgetControlsState(AddWord, bIsAppOnline);
+        HandleConnectionImageColor(ConnectionMID, State);
+        UE_LOG(LogTemp, Warning, TEXT("We are Online"));
+        break;
+    default:
+        HandleConnectionImageColor(ConnectionMID, State);
+        break;
+    }
+}
+
+void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
+                                               EEVConnectionState ConnectionState)
+{
+    if (MaterialInstanceDynamic)
+    {
+        switch (ConnectionState)
+        {
+        case EEVConnectionState::Online:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0x00, 0xBC, 0x00, 0xFF)));
+            break;
+        case EEVConnectionState::Connecting:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0xE7, 0xE7, 0x00, 0xFF)));
+            break;
+        case EEVConnectionState::Offline:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0xDA, 0x00, 0x00, 0xFF)));
+            break;
+        default:
+            MaterialInstanceDynamic->SetVectorParameterValue(SphereColorParam,
+                                                             FLinearColor(FColor(0xDA, 0x00, 0x00, 0xFF)));
+            break;
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error,
+               TEXT("TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic is nullptr in WBP_RootWidget"));
+    }
 }

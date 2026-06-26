@@ -4,6 +4,7 @@
 
 #include "EVVocabularyStorageService.h"
 #include "EVWordSearchService.h"
+#include "EVConnectivityService.h"
 
 void UEVGameInstance::Init()
 {
@@ -11,6 +12,40 @@ void UEVGameInstance::Init()
 
     VocabularyStorageService = NewObject<UEVVocabularyStorageService>(this);
     WordSearchService = NewObject<UEVWordSearchService>(this);
+
+    if (WordSearchService)
+    {
+        // Creating and HttpService instance within
+        WordSearchService->Initialize();
+        WordSearchService->OnEVWordSearchCompleted.AddDynamic(
+            this, &ThisClass::HandleEVWordSearchCompletedFromEVGameInstance);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("WordSearchService is null"));
+    }
+
+    ConnectivityService = NewObject<UEVConnectivityService>(this);
+
+    if (ConnectivityService)
+    {
+        ConnectivityService->Initialize();
+        ConnectivityService->RefreshConnection();
+        ConnectivityService->OnConnectionStateChanged.AddDynamic(this, &UEVGameInstance::HandleConnectionStateChanged);
+
+        if (UWorld* World = GetWorld())
+        {
+            ConnectivityService->StartConnectionPolling(World);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("World is null; connection polling not started"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ConnectivityService is null"));
+    }
 
     if (VocabularyStorageService)
     {
@@ -27,6 +62,20 @@ void UEVGameInstance::Shutdown()
     if (VocabularyStorageService)
     {
         VocabularyStorageService->ShutdownStorage();
+    }
+
+    if (ConnectivityService)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            ConnectivityService->StopConnectionPolling(World);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("World is null; connection polling not stopped"));
+        }
+
+        ConnectivityService->Shutdown();
     }
 
     Super::Shutdown();
@@ -101,9 +150,52 @@ FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
     {
         FWordSearchResult Result;
         Result.bSuccess = false;
-        Result.ErrorMessage = TEXT("WordSearchService is null");
+        Result.ErrorMessage = TEXT("WordSearchService/Fake search is null");
         return Result;
     }
 
     return WordSearchService->SearchWordFake(Word);
+}
+
+void UEVGameInstance::SearchWordOnline(const FString& Word)
+{
+    if (!WordSearchService)
+    {
+        FWordSearchResult Result;
+        Result.bSuccess = false;
+        Result.ErrorMessage = TEXT("WordSearchService/Real Online Search is null");
+        // return Result;
+    }
+
+    WordSearchService->SearchWordOnline(Word);
+}
+
+EEVConnectionState UEVGameInstance::GetConnectionState() const
+{
+    if (ConnectivityService)
+    {
+        return ConnectivityService->GetConnectionState();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ConnectivityService is null in UEVGameInstance::GetConnectionState()"));
+        return EEVConnectionState::Offline;
+    }
+}
+
+void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
+{
+    if (EVConnectionState == NewState)
+    {
+        return;
+    }
+
+    EVConnectionState = NewState;
+    OnConnectionStateChanged.Broadcast(NewState);
+}
+
+void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
+    const FWordSearchResult& SearchWordResultPassedByGameInstance)
+{
+    OnEVWordSearchCompletedFromEVGameInstance.Broadcast(SearchWordResultPassedByGameInstance);
 }

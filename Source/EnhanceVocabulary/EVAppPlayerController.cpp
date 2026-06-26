@@ -2,7 +2,8 @@
 
 #include "EVAppPlayerController.h"
 
-#include "EVWidgetErrorProvider.h"
+#include "EVErrorProvider.h"
+#include "EVGameInstance.h"
 #include "EVErrorDisplayWidget.h"
 
 AEVAppPlayerController::AEVAppPlayerController()
@@ -37,14 +38,13 @@ void AEVAppPlayerController::InitEVAppPlayerController()
         {
             RootWidgetInstance->AddToViewport();
 
-            if (IEVWidgetErrorProvider* ErrorProvider = Cast<IEVWidgetErrorProvider>(RootWidgetInstance))
+            if (IEVErrorProvider* ErrorProvider = Cast<IEVErrorProvider>(RootWidgetInstance))
             {
-                ErrorProvider->GetOnWidgetErrorEvent().AddDynamic(this, &ThisClass::HandleWidgetErrors);
+                ErrorProvider->GetOnErrorEvent().AddDynamic(this, &ThisClass::HandleWidgetErrors);
             }
             else
             {
-                UE_LOG(LogTemp, Error,
-                       TEXT("Failed to create instance of IEVWidgetErrorProvider in EVAppPlayerController"));
+                UE_LOG(LogTemp, Error, TEXT("Failed to create instance of IEVErrorProvider in EVAppPlayerController"));
             }
         }
         else
