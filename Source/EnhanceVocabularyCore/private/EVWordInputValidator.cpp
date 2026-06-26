@@ -16,11 +16,45 @@ FString FEVWordInputValidator::NormalizeWordInput(const FString& RawInput)
 
 bool FEVWordInputValidator::ContainsOnlyLettersAndSpaces(const FString& Input)
 {
-    for (const TCHAR Char : Input)
+    if (Input.IsEmpty())
     {
-        if (!FChar::IsAlpha(Char) && !FChar::IsWhitespace(Char))
+        return false;
+    }
+
+    for (int32 Index = 0; Index < Input.Len(); ++Index)
+    {
+        const TCHAR Char = Input[Index];
+
+        const bool bIsLetter = FChar::IsAlpha(Char);
+        const bool bIsSpace = FChar::IsWhitespace(Char);
+        const bool bIsHyphen = Char == TEXT('-');
+
+        if (!bIsLetter && !bIsSpace && !bIsHyphen)
         {
             return false;
+        }
+
+        const bool bIsSeparator = bIsSpace || bIsHyphen;
+
+        if (bIsSeparator)
+        {
+            const bool bIsAtEdge = Index == 0 || Index == Input.Len() - 1;
+            if (bIsAtEdge)
+            {
+                return false;
+            }
+
+            const TCHAR PreviousChar = Input[Index - 1];
+            const TCHAR NextChar = Input[Index + 1];
+
+            const bool bPreviousIsSeparator = FChar::IsWhitespace(PreviousChar) || PreviousChar == TEXT('-');
+
+            const bool bNextIsSeparator = FChar::IsWhitespace(NextChar) || NextChar == TEXT('-');
+
+            if (bPreviousIsSeparator || bNextIsSeparator)
+            {
+                return false;
+            }
         }
     }
 
