@@ -37,15 +37,48 @@ void UEVRootWidget::NativeOnInitialized()
     bIsReviewWordsActivated_internal = false;
     bIsPopupSettingsActivated_internal = false;
     bIsImportExportActivated_internal = false;
+    bIsAppSettingsActivated_internal = false;
 
     if (AddWord)
     {
         AddWord->OnError.AddDynamic(this, &ThisClass::HandleOnAnyWidgetErrorDetected);
         if (IEVWidgetCommonEvents* WidgetCommonEvents = Cast<IEVWidgetCommonEvents>(AddWord))
         {
-            WidgetCommonEvents->GetWidgetInteractionDisabledEvent().AddDynamic(
-                this, &ThisClass::HandleOnAnyWidgetControlsDisabled);
+            if (FOnWidgetInteractionDisabled* WidgetInputsDisabledEvent =
+                    WidgetCommonEvents->GetWidgetInteractionDisabledEvent())
+            {
+                WidgetInputsDisabledEvent->AddDynamic(this, &ThisClass::HandleOnAnyWidgetControlsDisabled);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("FOnWidgetInteractionDisabled in EVRootWidget.cpp is nullptr"));
+            }
+
+            if (FOnLoadingDataTriggerred* LoadingDataTriggerredEvent = WidgetCommonEvents->GetLoadingSpinnerEvent())
+            {
+                LoadingDataTriggerredEvent->AddDynamic(this, &ThisClass::HandleLoadingSpinner);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("FOnLoadingDataTriggerred in EVRootWidget.cpp is nullptr"));
+            }
+
+            if (FOnActionRequested* ActionRequested = WidgetCommonEvents->GetRequestedActionInfo())
+            {
+                ActionRequested->AddDynamic(this, &ThisClass::HandleOnActionRequested);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("FOnActionRequested in EVRootWidget.cpp is nullptr"));
+            }
         }
+    }
+
+    if (Settings_SelectWebProviders)
+    {
+        // Binding the EVGameInstance handler to catch and pass the EVWebProviders to the Storage functions
+        Settings_SelectWebProviders->OnWebProvidersSelectionChangedSettingsWidget.AddDynamic(
+            AddWord, &UEVAddWordWidget::HandleWebProvidersChanged);
     }
 
     if (Button_Menu)
@@ -105,6 +138,12 @@ void UEVRootWidget::ButtonMenuPressed()
                 WidgetSwitcher_Main->SetActiveWidget(ReviewWords);
                 MenuSwitcherCount = 0;
             }
+
+            else if (bIsAppSettingsActivated_internal)
+            {
+                WidgetSwitcher_Main->SetActiveWidget(Settings_SelectWebProviders);
+                MenuSwitcherCount = 0;
+            }
         }
 
         else
@@ -116,12 +155,14 @@ void UEVRootWidget::ButtonMenuPressed()
 }
 
 void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsReviewWordsActivated,
-                                             bool bIsPopupSettingsActivated, bool bIsImportExportActivated)
+                                             bool bIsPopupSettingsActivated, bool bIsImportExportActivated,
+                                             bool bIsAppSettingsActivated)
 {
     bIsAddWordActivated_internal = bIsAddWordActivated;
     bIsReviewWordsActivated_internal = bIsReviewWordsActivated;
     bIsPopupSettingsActivated_internal = bIsPopupSettingsActivated;
     bIsImportExportActivated_internal = bIsImportExportActivated;
+    bIsAppSettingsActivated_internal = bIsAppSettingsActivated;
 
     bIsAnyMenuActivated = true;
 
@@ -141,6 +182,12 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
     else if (bIsPopupSettingsActivated)
     {
+    }
+
+    else if (bIsAppSettingsActivated)
+    {
+        WidgetSwitcher_Main->SetActiveWidget(Settings_SelectWebProviders);
+        MenuSwitcherCount = 0;
     }
 
     else if (bIsImportExportActivated)
@@ -266,6 +313,16 @@ void UEVRootWidget::HandleOnConnectionStateChanged(EEVConnectionState State)
         HandleConnectionImageColor(ConnectionMID, State);
         break;
     }
+}
+
+void UEVRootWidget::HandleLoadingSpinner(bool bRenderLoadingSpinner)
+{
+    OnLoadingDataTriggerred.Broadcast(bRenderLoadingSpinner);
+}
+
+void UEVRootWidget::HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo)
+{
+    OnActionRequested.Broadcast(RequestedActionInfo);
 }
 
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,

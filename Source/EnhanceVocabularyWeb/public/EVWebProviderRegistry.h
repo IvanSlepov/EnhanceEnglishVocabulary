@@ -8,4 +8,5 @@ class ENHANCEVOCABULARYWEB_API FEVWebProviderRegistry
 
 public:
     static FEVWebProviderInfo GetProviderInfo(EEVWebProvider Provider);
+    static TArray<FEVWebProviderInfo> GetAvailableProviders();
 };

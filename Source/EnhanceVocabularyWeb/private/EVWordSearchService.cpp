@@ -4,7 +4,7 @@
 
 #include "EVHttpService.h"
 #include "EVResponseParser.h"
-#include "EVWebProviders.h"
+#include "EVWebProviderUrlBuilder.h"
 
 void UEVWordSearchService::Initialize()
 {
@@ -25,7 +25,8 @@ FWordSearchResult UEVWordSearchService::SearchWordFake(const FString& Word)
     return Result;
 }
 
-void UEVWordSearchService::SearchWordOnline(const FString& Word)
+void UEVWordSearchService::SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
+                                            EEVWebProvider TranslationProvider)
 {
     if (!HttpService)
     {
@@ -41,14 +42,25 @@ void UEVWordSearchService::SearchWordOnline(const FString& Word)
 
     ResetPendingSearch(Word);
 
-    SendDictionaryRequest(Word);
-    SendTranslationRequest(Word, TEXT("ru"));
-    SendTranslationRequest(Word, TEXT("uk"));
+    SendDictionaryRequest(Word, DefinitionUsageProvider);
+    SendTranslationRequest(Word, TEXT("ru"), TranslationProvider);
+    SendTranslationRequest(Word, TEXT("uk"), TranslationProvider);
 }
 
-void UEVWordSearchService::SendDictionaryRequest(const FString& Word)
+void UEVWordSearchService::SendDictionaryRequest(const FString& Word, EEVWebProvider DefinitionUsageProvider)
 {
-    const FString Url = FString(EVWebProviders::FreeDictionary) + Word;
+    FEVWebProviderUrlBuildContext Context;
+    Context.Word = Word;
+
+    FString Url;
+
+    if (!FEVWebProviderUrlBuilder::BuildRequestUrl(DefinitionUsageProvider, Context, Url))
+    {
+        PendingResult.bSuccess = false;
+        bDictionaryCompleted = true;
+        TryCompleteSearch();
+        return;
+    }
 
     HttpService->SendGetRequest(
         Url, FEVHttpResponseDelegate::CreateUObject(this, &UEVWordSearchService::HandleDictionaryResponse));
@@ -56,16 +68,39 @@ void UEVWordSearchService::SendDictionaryRequest(const FString& Word)
     UE_LOG(LogTemp, Warning, TEXT("Dictionary request sent: %s"), *Url);
 }
 
-void UEVWordSearchService::SendTranslationRequest(const FString& Word, const FString& TranslateTo)
+void UEVWordSearchService::SendTranslationRequest(const FString& Word, const FString& TranslateTo,
+                                                  EEVWebProvider TranslationProvider)
 {
-    const FString Url = FString(EVWebProviders::MyMemory) + TEXT("?q=") + Word + TEXT("&langpair=en|") + TranslateTo;
+    FEVWebProviderUrlBuildContext Context;
+    Context.Word = Word;
+    Context.SourceLanguage = TEXT("en");
+    Context.TargetLanguage = TranslateTo;
+
+    FString Url;
+
+    if (!FEVWebProviderUrlBuilder::BuildRequestUrl(TranslationProvider, Context, Url))
+    {
+        PendingResult.bSuccess = false;
+
+        if (TranslateTo.Equals(TEXT("ru")))
+        {
+            bTranslationRuCompleted = true;
+        }
+        else if (TranslateTo.Equals(TEXT("uk")))
+        {
+            bTranslationUkCompleted = true;
+        }
+
+        TryCompleteSearch();
+        return;
+    }
 
     if (TranslateTo.Equals(TEXT("ru")))
     {
         HttpService->SendGetRequest(
             Url, FEVHttpResponseDelegate::CreateUObject(this, &UEVWordSearchService::HandleTranslationRuResponse));
     }
-    else
+    else if (TranslateTo.Equals(TEXT("uk")))
     {
         HttpService->SendGetRequest(
             Url, FEVHttpResponseDelegate::CreateUObject(this, &UEVWordSearchService::HandleTranslationUkResponse));
