@@ -12,6 +12,7 @@
 #include "EnhanceVocabularyCore/public/EVVocabularyTypes.h"
 #include "EVWidgetControllable.h"
 #include "EVWidgetCommonEvents.h"
+#include "EVWebProviderTypes.h"
 #include "EVAddWordWidget.generated.h"
 
 /**
@@ -55,10 +56,24 @@ public:
     FOnError OnError;
 
     // Common event for the web dependant widgets
-    virtual FOnWidgetInteractionDisabled& GetWidgetInteractionDisabledEvent() override
+    virtual FOnWidgetInteractionDisabled* GetWidgetInteractionDisabledEvent() override
     {
-        return OnWidgetInteractionDisabled;
+        return &OnWidgetInteractionDisabled;
     }
+
+    virtual FOnLoadingDataTriggerred* GetLoadingSpinnerEvent() override
+    {
+        return &OnLoadingDataTriggerred;
+    }
+
+    virtual FOnActionRequested* GetRequestedActionInfo() override
+    {
+        return &OnActionRequested;
+    }
+
+    // Putting this to public as it's being bound in the EVRootWidget.cpp
+    UFUNCTION()
+    void HandleWebProvidersChanged(EEVWebProvider DefinitionUsageProvider, EEVWebProvider TranslationProvider);
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -67,39 +82,55 @@ protected:
 
 private:
     void Init();
+
     void ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult);
 
-    // Handle events from WBP_SearchResulsPanel
-    UFUNCTION()
-    void HandleOnSaveSearchResultPressed();
-
-    UFUNCTION()
-    void HandleOnDiscardSearchResultPressed();
-
-    // Handle internal Button_Search and Button_Clear events
+    /*Internal elements handlers*/
     UFUNCTION()
     void HandleOnSearchPressed();
 
     UFUNCTION()
     void HandleOnClearPressed();
 
-    // Handle change of text in the EditableText_WordInput
     UFUNCTION()
     void HandleEditableTextBoxTextChanged(const FText& NewText);
 
     FWordSearchResult WordSearchResult;
+    FString ThisWidgetName;
 
     bool bAreInteractionElementsEnabled = true;
 
-    // Common Interface derrived event
+    /* Handle events from WBP_SearchResulsPanel*/
+    UFUNCTION()
+    void HandleOnSaveSearchResultPressed();
+
+    UFUNCTION()
+    void HandleSearchWordCompleted(const FWordSearchResult& Result);
+
+    UFUNCTION()
+    void HandleOnDiscardSearchResultPressed();
+
+    /* IEVWidgetCommonEvents derrived events*/
     UPROPERTY(BlueprintAssignable)
     FOnWidgetInteractionDisabled OnWidgetInteractionDisabled;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnLoadingDataTriggerred OnLoadingDataTriggerred;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnActionRequested OnActionRequested;
 
     UFUNCTION()
     void HandleOnWidgetInteractionDisabled();
 
     UFUNCTION()
-    void HandleSearchWordCompleted(const FWordSearchResult& Result);
+    void HandleOnLoadingDataTriggerred(bool ShowLoadingSpinner);
 
-    FString ThisWidgetName;
+    UFUNCTION()
+    void HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo);
+
+    // Assigning default values to the local WebProviders
+    // and pass them later to the  WordSearchService->SearchWordOnline(Word, DefinitionProvider, TranslationProvider);
+    EEVWebProvider ActiveDefinitionUsageProvider = EEVWebProvider::FreeDictionary;
+    EEVWebProvider ActiveTranslationProvider = EEVWebProvider::MyMemory;
 };

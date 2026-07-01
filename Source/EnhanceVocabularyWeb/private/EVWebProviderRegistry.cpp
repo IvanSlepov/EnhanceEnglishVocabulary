@@ -34,3 +34,9 @@ FEVWebProviderInfo FEVWebProviderRegistry::GetProviderInfo(EEVWebProvider Provid
 
     return Info;
 }
+
+TArray<FEVWebProviderInfo> FEVWebProviderRegistry::GetAvailableProviders()
+{
+    return {GetProviderInfo(EEVWebProvider::FreeDictionary), GetProviderInfo(EEVWebProvider::MyMemory),
+            GetProviderInfo(EEVWebProvider::Datamuse)};
+}

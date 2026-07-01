@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "EVConnectionTypesAndEnums.h"
+#include "EVWebProviderTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -57,7 +58,8 @@ public:
     FWordSearchResult SearchWordFake(const FString& Word);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Online Search")
-    void SearchWordOnline(const FString& Word);
+    void SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
+                          EEVWebProvider TranslationProvider);
 
     // Connection functions
     EEVConnectionState GetConnectionState() const;

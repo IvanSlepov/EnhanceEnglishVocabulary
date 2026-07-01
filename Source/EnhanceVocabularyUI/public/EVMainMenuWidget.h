@@ -11,9 +11,9 @@
  *
  */
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnMenuButtonsPressed, bool, IsAddWordActivated, bool,
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnMenuButtonsPressed, bool, IsAddWordActivated, bool,
                                               IsReviewWordsActivated, bool, IsPopupSettingsActivated, bool,
-                                              IsImportExportActivated);
+                                              IsImportExportActivated, bool, IsAppSettingsActivated);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnQuitButtonPressed);
 
@@ -38,6 +38,9 @@ public:
     class UButton* Button_ImportExport;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_AppSettings;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UButton* Button_Quit;
 
     // Events
@@ -57,6 +60,7 @@ private:
     bool bIsReviewWordsActivated;
     bool bIsPopupSettingsActivated;
     bool bIsImportExportActivated;
+    bool bIsAppSettingsActivated;
 
     UFUNCTION()
     void HandleAddWordButtonPressed();
@@ -69,6 +73,9 @@ private:
 
     UFUNCTION()
     void HandleImportExportButtonPressed();
+
+    UFUNCTION()
+    void HandleAppSettingsButtonPressed();
 
     UFUNCTION()
     void HandleQuitButtonPressed();

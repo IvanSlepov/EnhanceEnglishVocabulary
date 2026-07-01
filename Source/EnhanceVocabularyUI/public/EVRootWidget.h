@@ -15,9 +15,12 @@
 #include "EVMainMenuWidget.h"
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
+#include "EVAppSettingsWidget.h"
 #include "EVErrorProvider.h"
 #include "EVErrorTypes.h"
+#include "EVRequestedActionTypes.h"
 #include "EVConnectionTypesAndEnums.h"
+#include "EVWidgetCommonEvents.h"
 #include "EVRootWidget.generated.h"
 
 /**
@@ -25,7 +28,7 @@
  */
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVErrorProvider
+class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVErrorProvider, public IEVWidgetCommonEvents
 {
     GENERATED_BODY()
 
@@ -53,6 +56,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVReviewWordsWidget> ReviewWords;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UEVAppSettingsWidget> Settings_SelectWebProviders;
+
     class UEVGameInstance* EVGameInstance;
 
     /*Events*/
@@ -61,6 +67,16 @@ public:
     virtual FOnEVError& GetOnErrorEvent() override
     {
         return OnRootWidgetError;
+    }
+
+    virtual FOnLoadingDataTriggerred* GetLoadingSpinnerEvent() override
+    {
+        return &OnLoadingDataTriggerred;
+    }
+
+    virtual FOnActionRequested* GetRequestedActionInfo() override
+    {
+        return &OnActionRequested;
     }
 
 protected:
@@ -78,12 +94,14 @@ private:
 
     UFUNCTION()
     void HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsReviewWordsActivated,
-                                  bool bIsPopupSettingsActivated, bool bIsImportExportActivated);
+                                  bool bIsPopupSettingsActivated, bool bIsImportExportActivated,
+                                  bool bIsAppSettingsActivated);
 
     bool bIsAddWordActivated_internal;
     bool bIsReviewWordsActivated_internal;
     bool bIsPopupSettingsActivated_internal;
     bool bIsImportExportActivated_internal;
+    bool bIsAppSettingsActivated_internal;
 
     UFUNCTION()
     void HandleQuitButtonPressed();
@@ -97,6 +115,12 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnEVError OnRootWidgetError;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnLoadingDataTriggerred OnLoadingDataTriggerred;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnActionRequested OnActionRequested;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -107,6 +131,12 @@ private:
 
     UFUNCTION()
     void HandleOnConnectionStateChanged(EEVConnectionState State);
+
+    UFUNCTION()
+    void HandleLoadingSpinner(bool bRenderLoadingSpinner);
+
+    UFUNCTION()
+    void HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;

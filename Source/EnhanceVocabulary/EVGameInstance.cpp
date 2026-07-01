@@ -157,7 +157,8 @@ FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
     return WordSearchService->SearchWordFake(Word);
 }
 
-void UEVGameInstance::SearchWordOnline(const FString& Word)
+void UEVGameInstance::SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
+                                       EEVWebProvider TranslationProvider)
 {
     if (!WordSearchService)
     {
@@ -167,7 +168,7 @@ void UEVGameInstance::SearchWordOnline(const FString& Word)
         // return Result;
     }
 
-    WordSearchService->SearchWordOnline(Word);
+    WordSearchService->SearchWordOnline(Word, DefinitionUsageProvider, TranslationProvider);
 }
 
 EEVConnectionState UEVGameInstance::GetConnectionState() const

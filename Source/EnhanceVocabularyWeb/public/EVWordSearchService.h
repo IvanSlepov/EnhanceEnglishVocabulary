@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "EVVocabularyTypes.h"
+#include "EVWebProviderTypes.h"
 #include "EVWordSearchService.generated.h"
 
 class UEVHttpService;
@@ -21,14 +22,15 @@ public:
     FWordSearchResult SearchWordFake(const FString& Word);
 
     UFUNCTION(BlueprintCallable, Category = "Word Search")
-    void SearchWordOnline(const FString& Word);
+    void SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
+                          EEVWebProvider TranslationProvider);
 
     UPROPERTY(BlueprintAssignable)
     FEVWordSearchCompleted OnEVWordSearchCompleted;
 
 private:
-    void SendDictionaryRequest(const FString& Word);
-    void SendTranslationRequest(const FString& Word, const FString& TranslateTo);
+    void SendDictionaryRequest(const FString& Word, EEVWebProvider DefinitionUsageProvider);
+    void SendTranslationRequest(const FString& Word, const FString& TranslateTo, EEVWebProvider TranslationProvider);
 
     void HandleDictionaryResponse(bool bSuccess, int32 ResponseCode, const FString& ResponseBody);
     void HandleTranslationRuResponse(bool bSuccess, int32 ResponseCode, const FString& ResponseBody);

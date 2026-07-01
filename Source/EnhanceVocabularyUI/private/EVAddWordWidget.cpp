@@ -6,6 +6,7 @@
 #include "EnhanceVocabularyStorage/public/EVEntryItem.h"
 #include "EVWordInputValidator.h"
 #include "EVErrorTypes.h"
+#include "EVRequestedActionTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 void UEVAddWordWidget::NativeOnInitialized()
@@ -66,6 +67,16 @@ void UEVAddWordWidget::Init()
     Button_Clear->SetIsEnabled(false);
 }
 
+void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
+{
+    bAreInteractionElementsEnabled = bEnabled;
+}
+
+bool UEVAddWordWidget::GetControlsEnabled()
+{
+    return bAreInteractionElementsEnabled;
+}
+
 void UEVAddWordWidget::ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult)
 {
     CachedWordSearchResult = FWordSearchResult{};
@@ -98,7 +109,8 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     {
     case EEVInputValidationResult::Valid:
         // WordSearchResult = EVGameInstance->SearchWordFake(NormalizedWord); - leave this for debugging purposes
-        EVGameInstance->SearchWordOnline(NormalizedWord);
+        HandleOnLoadingDataTriggerred(true);
+        EVGameInstance->SearchWordOnline(NormalizedWord, ActiveDefinitionUsageProvider, ActiveTranslationProvider);
         break;
     case EEVInputValidationResult::EmptyInput:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
@@ -117,111 +129,10 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     }
 }
 
-void UEVAddWordWidget::HandleOnClearPressed()
-{
-    // Call the event in case local interaction has been disabled
-    if (!bAreInteractionElementsEnabled)
-    {
-        HandleOnWidgetInteractionDisabled();
-        return;
-    }
-
-    Button_Search->SetIsEnabled(false);
-    Button_Clear->SetIsEnabled(false);
-    EditableText_WordInput->SetText(FText::GetEmpty());
-}
-
-void UEVAddWordWidget::HandleEditableTextBoxTextChanged(const FText& NewText)
-{
-    // Call the event in case local interaction has been disabled
-    if (!bAreInteractionElementsEnabled)
-    {
-        HandleOnWidgetInteractionDisabled();
-        return;
-    }
-
-    Button_Search->SetIsEnabled(true);
-    Button_Clear->SetIsEnabled(true);
-}
-
-void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
-{
-    // Call the event in case local interaction has been disabled
-    if (!bAreInteractionElementsEnabled)
-    {
-        HandleOnWidgetInteractionDisabled();
-        return;
-    }
-
-    if (!EVGameInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
-    }
-
-    FEVErrorInfo EVErrorInfo;
-    FText OutErrorMessage;
-
-    if (EVGameInstance->DoesWordExist(WordSearchResult.Word, OutErrorMessage) ==
-        EEVVocabularyStorageServiceResult::WordExists)
-    {
-
-        EVErrorInfo.Source = EEVErrorSource::Database;
-        EVErrorInfo.Type = EEVErrorType::DuplicateWord;
-        EVErrorInfo.Message = OutErrorMessage;
-
-        EditableText_WordInput->SetText(FText::GetEmpty());
-        OnError.Broadcast(EVErrorInfo);
-    }
-
-    if (EVGameInstance->SaveVocabularyEntry(WordSearchResult))
-    {
-        Button_Search->SetIsEnabled(false);
-        Button_Clear->SetIsEnabled(false);
-        EditableText_WordInput->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
-    }
-
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Can not save the entry in WBP_AddWord!!!"));
-    }
-}
-
-void UEVAddWordWidget::HandleOnDiscardSearchResultPressed()
-{
-    // Call the event in case local interaction has been disabled
-    if (!bAreInteractionElementsEnabled)
-    {
-        HandleOnWidgetInteractionDisabled();
-        return;
-    }
-
-    Button_Search->SetIsEnabled(true);
-    Button_Clear->SetIsEnabled(true);
-    WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
-}
-
-void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
-{
-    bAreInteractionElementsEnabled = bEnabled;
-}
-
-bool UEVAddWordWidget::GetControlsEnabled()
-{
-    return bAreInteractionElementsEnabled;
-}
-
-void UEVAddWordWidget::HandleOnWidgetInteractionDisabled()
-{
-    OnWidgetInteractionDisabled.Broadcast(bAreInteractionElementsEnabled, ThisWidgetName);
-}
-
 void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result)
 {
+    HandleOnLoadingDataTriggerred(false);
+
     if (Result.bSuccess)
     {
         WordSearchResult = Result;
@@ -252,4 +163,135 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
             "We couldn't find that word. Please check the spelling or change your dictionary provider in settings."));
         OnError.Broadcast(EVErrorInfo);
     }
+}
+
+void UEVAddWordWidget::HandleOnClearPressed()
+{
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
+    Button_Search->SetIsEnabled(false);
+    Button_Clear->SetIsEnabled(false);
+    EditableText_WordInput->SetText(FText::GetEmpty());
+}
+
+void UEVAddWordWidget::HandleEditableTextBoxTextChanged(const FText& NewText)
+{
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
+    Button_Search->SetIsEnabled(true);
+    Button_Clear->SetIsEnabled(true);
+}
+
+void UEVAddWordWidget::HandleOnWidgetInteractionDisabled()
+{
+    OnWidgetInteractionDisabled.Broadcast(bAreInteractionElementsEnabled, ThisWidgetName);
+}
+
+void UEVAddWordWidget::HandleOnLoadingDataTriggerred(bool ShowLoadingSpinner)
+{
+    OnLoadingDataTriggerred.Broadcast(ShowLoadingSpinner);
+}
+
+void UEVAddWordWidget::HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo)
+{
+    OnActionRequested.Broadcast(RequestedActionInfo);
+}
+
+void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
+{
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
+    }
+
+    // Add the LoadingDataSpinner to the Viewport while the results are being saved.
+    // So far, it looks redundant because the DB is small and the saving process
+    // happens immediately so we'll leave this and the following related handlers commented
+    // untill saving time becomes more noticeable
+
+    /*HandleOnLoadingDataTriggerred(true);*/
+    FEVRequestedActionInfo EVRequestedActionInfo;
+    FEVErrorInfo EVErrorInfo;
+    FText OutErrorMessage;
+
+    if (EVGameInstance->DoesWordExist(WordSearchResult.Word, OutErrorMessage) ==
+        EEVVocabularyStorageServiceResult::WordExists)
+    {
+        /*HandleOnLoadingDataTriggerred(false);*/
+
+        EVErrorInfo.Source = EEVErrorSource::Database;
+        EVErrorInfo.Type = EEVErrorType::DuplicateWord;
+        EVErrorInfo.Message = OutErrorMessage;
+
+        EditableText_WordInput->SetText(FText::GetEmpty());
+        OnError.Broadcast(EVErrorInfo);
+    }
+
+    if (EVGameInstance->SaveVocabularyEntry(WordSearchResult))
+    {
+        /*HandleOnLoadingDataTriggerred(false);*/
+
+        EVRequestedActionInfo.Source = EEVRequestedActionSource::AddWord;
+        EVRequestedActionInfo.Type = EEVRequestedActionType::SaveWord;
+        EVRequestedActionInfo.Status = EEVRequestedActionStatus::Saved;
+        EVRequestedActionInfo.GenerateMessage();
+        EVRequestedActionInfo.GenerateColor();
+
+        // Sending the FEVRequestedActionInfo to be fetched by the EVAppPC
+        // and further passed to the EVRequestedActionStatusWidget
+        HandleOnActionRequested(EVRequestedActionInfo);
+
+        Button_Search->SetIsEnabled(false);
+        Button_Clear->SetIsEnabled(false);
+        EditableText_WordInput->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+    }
+
+    else
+    {
+        /*HandleOnLoadingDataTriggerred(false);*/
+        UE_LOG(LogTemp, Error, TEXT("Can not save the entry in WBP_AddWord!!!"));
+    }
+}
+
+void UEVAddWordWidget::HandleOnDiscardSearchResultPressed()
+{
+    // Call the event in case local interaction has been disabled
+    if (!bAreInteractionElementsEnabled)
+    {
+        HandleOnWidgetInteractionDisabled();
+        return;
+    }
+
+    Button_Search->SetIsEnabled(true);
+    Button_Clear->SetIsEnabled(true);
+    WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+}
+
+void UEVAddWordWidget::HandleWebProvidersChanged(EEVWebProvider DefinitionUsageProvider,
+                                                 EEVWebProvider TranslationProvider)
+{
+    ActiveDefinitionUsageProvider = DefinitionUsageProvider;
+    ActiveTranslationProvider = TranslationProvider;
 }

@@ -5,28 +5,23 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/TextBlock.h"
-#include "Components/Button.h"
-#include "EVErrorDisplayWidget.h"
 #include "Engine/TimerHandle.h"
-#include "EVErrorWidget.generated.h"
+#include "EVDisplayStatusProvider.h"
+#include "EVRequestedActionStatusWidget.generated.h"
 
 /**
  *
  */
-
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVErrorWidget : public UUserWidget, public IEVErrorDisplayWidget
+class ENHANCEVOCABULARYUI_API UEVRequestedActionStatusWidget : public UUserWidget, public IEVDisplayStatusProvider
 {
     GENERATED_BODY()
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Error;
+    class UTextBlock* TextBlock_RequestedActionStatus;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_Close;
-
-    virtual void ShowError(const FText& ErrorText) override;
+    virtual void ShowStatus(const FEVRequestedActionInfo& RequestedActionInfo) override;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -39,5 +34,5 @@ private:
 
     FTimerHandle AutoCloseTimerHandler;
 
-    float CloseThisIntervalSeconds = 3.f;
+    float CloseThisIntervalSeconds = 1.f;
 };
