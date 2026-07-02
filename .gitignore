@@ -86,5 +86,8 @@ Plugins/
 # Cache files for the editor to use
 DerivedDataCache/*
 
+# Database files
+*/VocabularyDB/*
+
 # Third party platforms
 */Platforms/*

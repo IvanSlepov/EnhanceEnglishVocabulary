@@ -67,6 +67,24 @@ void UEVAddWordWidget::Init()
     Button_Clear->SetIsEnabled(false);
 }
 
+void UEVAddWordWidget::EnableEditableTextBox(bool bIsEditableTextFieldEnabled)
+{
+    if (bIsEditableTextFieldEnabled)
+    {
+        if (!EditableText_WordInput->GetIsEnabled())
+        {
+            EditableText_WordInput->SetIsEnabled(bIsEditableTextFieldEnabled);
+        }
+    }
+    else
+    {
+        if (EditableText_WordInput->GetIsEnabled())
+        {
+            EditableText_WordInput->SetIsEnabled(bIsEditableTextFieldEnabled);
+        }
+    }
+}
+
 void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
 {
     bAreInteractionElementsEnabled = bEnabled;
@@ -94,6 +112,7 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     // We need to clear the local WordSearchResult struct to avoid setting
     // WBP_SearchResultPanel Visible in case of the bad input/existing word
     ClearStoredSearchResultVariable(WordSearchResult);
+    EnableEditableTextBox(false);
 
     if (!EVGameInstance)
     {
@@ -161,6 +180,7 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
         EVErrorInfo.Type = EEVErrorType::SearchError;
         EVErrorInfo.Message = FText::FromString(TEXT(
             "We couldn't find that word. Please check the spelling or change your dictionary provider in settings."));
+        EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
     }
 }
@@ -240,11 +260,20 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         EVErrorInfo.Type = EEVErrorType::DuplicateWord;
         EVErrorInfo.Message = OutErrorMessage;
 
-        EditableText_WordInput->SetText(FText::GetEmpty());
+        Button_Search->SetIsEnabled(true);
+        Button_Clear->SetIsEnabled(true);
+        EnableEditableTextBox(true);
+
+        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+
         OnError.Broadcast(EVErrorInfo);
     }
 
-    if (EVGameInstance->SaveVocabularyEntry(WordSearchResult))
+    else if (EVGameInstance->SaveVocabularyEntry(WordSearchResult))
     {
         /*HandleOnLoadingDataTriggerred(false);*/
 
@@ -260,6 +289,7 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
 
         Button_Search->SetIsEnabled(false);
         Button_Clear->SetIsEnabled(false);
+        EnableEditableTextBox(true);
         EditableText_WordInput->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
@@ -284,6 +314,7 @@ void UEVAddWordWidget::HandleOnDiscardSearchResultPressed()
         return;
     }
 
+    EnableEditableTextBox(true);
     Button_Search->SetIsEnabled(true);
     Button_Clear->SetIsEnabled(true);
     WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
