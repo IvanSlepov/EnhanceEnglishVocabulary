@@ -84,6 +84,7 @@ private:
     void Init();
 
     void ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult);
+    void EnableEditableTextBox(bool bIsEnabled);
 
     /*Internal elements handlers*/
     UFUNCTION()

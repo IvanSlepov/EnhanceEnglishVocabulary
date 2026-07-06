@@ -21,6 +21,7 @@
 #include "EVRequestedActionTypes.h"
 #include "EVConnectionTypesAndEnums.h"
 #include "EVWidgetCommonEvents.h"
+#include "EVWordEntryActionTypes.h"
 #include "EVRootWidget.generated.h"
 
 /**
@@ -79,6 +80,11 @@ public:
         return &OnActionRequested;
     }
 
+    virtual FOnWordEntryWidgetControlsActivated* GetCurrentWordEntryWidgetActionInfo() override
+    {
+        return &OnWordEntryWidgetControlsActivated;
+    }
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
@@ -121,6 +127,9 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnActionRequested OnActionRequested;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnWordEntryWidgetControlsActivated OnWordEntryWidgetControlsActivated;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -137,6 +146,9 @@ private:
 
     UFUNCTION()
     void HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo);
+
+    UFUNCTION()
+    void HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;

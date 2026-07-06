@@ -7,6 +7,9 @@
 #include "Blueprint/UserWidget.h"
 #include "EVRequestedActionTypes.h"
 #include "EVErrorTypes.h"
+#include "EVWordEntryActionTypes.h"
+#include "EVConfirmationDialogActionTypes.h"
+#include "EVConfirmationDialogWidgetProvider.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -47,6 +50,18 @@ public:
     UPROPERTY()
     TObjectPtr<UUserWidget> RequestedActionStatusWidgetInstance;
 
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> DetailedWordEntryWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UUserWidget> DetailedWordEntryWidgetInstance;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> ConfirmationDialogWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UUserWidget> ConfirmationDialogWidgetInstance;
+
     // Events
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
     FOnWidgetsError OnWidgetsError;
@@ -64,4 +79,17 @@ private:
 
     UFUNCTION()
     void HandleActionStatusWidget(const FEVRequestedActionInfo& RequestedActionInfo);
+
+    UFUNCTION()
+    void HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo);
+
+    // Handlers for the "EVWordEntryWidgetDetailed.h" buttons
+    UFUNCTION()
+    void HandleDetailedViewButtonPressed();
+
+    UFUNCTION()
+    void HandleCreateConfirmationDialog();
+
+    UFUNCTION()
+    void HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed);
 };

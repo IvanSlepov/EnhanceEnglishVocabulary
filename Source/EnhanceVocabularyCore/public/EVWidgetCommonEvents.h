@@ -6,6 +6,7 @@
 #include "UObject/Interface.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
+#include "EVWordEntryActionTypes.h"
 
 #include "EVWidgetCommonEvents.generated.h"
 
@@ -15,6 +16,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWidgetInteractionDisabled, bool,
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLoadingDataTriggerred, bool, bIsDataLoading);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionRequested, const FEVRequestedActionInfo&, RequestedActionInfo);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryWidgetControlsActivated, const FEVWordEntryActionInfo&,
+                                            WordEntryActionInfo);
 
 UINTERFACE(BlueprintType)
 class ENHANCEVOCABULARYCORE_API UEVWidgetCommonEvents : public UInterface
@@ -58,6 +62,11 @@ public:
     }
 
     virtual FOnActionRequested* GetRequestedActionInfo()
+    {
+        return nullptr;
+    }
+
+    virtual FOnWordEntryWidgetControlsActivated* GetCurrentWordEntryWidgetActionInfo()
     {
         return nullptr;
     }
