@@ -74,6 +74,12 @@ void UEVRootWidget::NativeOnInitialized()
         }
     }
 
+    if (ReviewWords)
+    {
+        ReviewWords->OnWordEntryWidgetControlsButtonPressed.AddDynamic(
+            this, &ThisClass::HandleOnWordEntryWidgetControlsActivated);
+    }
+
     if (Settings_SelectWebProviders)
     {
         // Binding the EVGameInstance handler to catch and pass the EVWebProviders to the Storage functions
@@ -323,6 +329,11 @@ void UEVRootWidget::HandleLoadingSpinner(bool bRenderLoadingSpinner)
 void UEVRootWidget::HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo)
 {
     OnActionRequested.Broadcast(RequestedActionInfo);
+}
+
+void UEVRootWidget::HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo)
+{
+    OnWordEntryWidgetControlsActivated.Broadcast(WordEntryActionInfo);
 }
 
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,

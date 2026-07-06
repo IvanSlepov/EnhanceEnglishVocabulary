@@ -7,6 +7,7 @@
 #include "Blueprint/UserWidget.h"
 #include "EVRequestedActionTypes.h"
 #include "EVErrorTypes.h"
+#include "EVWordEntryActionTypes.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -47,6 +48,12 @@ public:
     UPROPERTY()
     TObjectPtr<UUserWidget> RequestedActionStatusWidgetInstance;
 
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> WordEntryWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UUserWidget> WordEntryWidgetInstance;
+
     // Events
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
     FOnWidgetsError OnWidgetsError;
@@ -64,4 +71,7 @@ private:
 
     UFUNCTION()
     void HandleActionStatusWidget(const FEVRequestedActionInfo& RequestedActionInfo);
+
+    UFUNCTION()
+    void HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo);
 };

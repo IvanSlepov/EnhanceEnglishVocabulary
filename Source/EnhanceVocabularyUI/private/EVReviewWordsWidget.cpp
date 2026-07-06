@@ -4,8 +4,8 @@
 
 #include "EnhanceVocabulary/EVGameInstance.h"
 #include "EnhanceVocabularyCore/public/EVVocabularyTypes.h"
-#include "EnhanceVocabularyStorage/public/EVEntryItem.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "EVWordEntryWidget.h"
 
 void UEVReviewWordsWidget::NativeOnInitialized()
 {
@@ -15,6 +15,12 @@ void UEVReviewWordsWidget::NativeOnInitialized()
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to cast to EVGameInstance"));
+    }
+
+    if (ListView_ReviewWords)
+    {
+        ListView_ReviewWords->OnEntryWidgetGenerated().AddUObject(
+            this, &UEVReviewWordsWidget::HandleListEntryWidgetGenerated);
     }
 }
 
@@ -57,11 +63,51 @@ void UEVReviewWordsWidget::DisplayWords()
         if (EVEntryItem)
         {
             EVEntryItem->EntryItem = Entry;
+
             ListView_ReviewWords->AddItem(EVEntryItem);
         }
         else
         {
             UE_LOG(LogTemp, Error, TEXT("Failed to create the EVEntryItem object"));
         }
+    }
+}
+
+void UEVReviewWordsWidget::HandleListEntryWidgetGenerated(UUserWidget& Widget)
+{
+    UEVWordEntryWidget* WordEntryWidget = Cast<UEVWordEntryWidget>(&Widget);
+
+    if (!WordEntryWidget)
+    {
+        return;
+    }
+
+    WordEntryWidget->OnWordEntryButtonPressed.AddDynamic(this,
+                                                         &UEVReviewWordsWidget::HandleWordEntryControlsButtonPressed);
+}
+
+void UEVReviewWordsWidget::HandleWordEntryControlsButtonPressed(UEVWordEntryWidget* WordEntryWidget, bool bViewPressed,
+                                                                bool bEditPressed, bool bDeletePressed, bool bOkPressed)
+{
+    if (!WordEntryWidget)
+    {
+        return;
+    }
+
+    if (bViewPressed)
+    {
+        EVWordEntryActionInfo.ActionType = EEVWordEntryActionType::ViewEntry;
+        EVWordEntryActionInfo.EntryInfo = WordEntryWidget->GetCurrentWidgetVocabularyEnryItemInfo();
+
+        OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
+    }
+    else if (bEditPressed)
+    {
+    }
+    else if (bDeletePressed)
+    {
+    }
+    else
+    {
     }
 }

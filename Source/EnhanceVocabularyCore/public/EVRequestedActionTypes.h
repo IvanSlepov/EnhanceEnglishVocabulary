@@ -19,7 +19,9 @@ UENUM(BlueprintType)
 enum class EEVRequestedActionType : uint8
 {
     Unknown,
-    SaveWord
+    SaveWord,
+    EditWord,
+    DeleteWord
 };
 
 UENUM(BlueprintType)

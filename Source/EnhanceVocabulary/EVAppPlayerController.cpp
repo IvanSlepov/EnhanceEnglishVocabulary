@@ -7,6 +7,7 @@
 #include "EVErrorDisplayWidget.h"
 #include "EVDisplayStatusProvider.h"
 #include "EVWidgetCommonEvents.h"
+#include "EVWordEntryDisplayWidgetProvider.h"
 
 AEVAppPlayerController::AEVAppPlayerController()
 {
@@ -67,6 +68,17 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                 else
                 {
                     UE_LOG(LogTemp, Error, TEXT("FOnActionRequested in EVAppPlayerController.cpp is nullptr"));
+                }
+
+                if (FOnWordEntryWidgetControlsActivated* WordEntryWidgetControlsActivated =
+                        WidgetCommonEvents->GetCurrentWordEntryWidgetActionInfo())
+                {
+                    WordEntryWidgetControlsActivated->AddDynamic(this, &ThisClass::HandleWordEntryWidget);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnWordEntryWidgetControlsActivated in EVAppPlayerController.cpp is nullptr"));
                 }
             }
             else
@@ -176,5 +188,34 @@ void AEVAppPlayerController::HandleActionStatusWidget(const FEVRequestedActionIn
     else
     {
         UE_LOG(LogTemp, Error, TEXT("The RequestedActionStatusWidgetClass was not provided to EVAppPlayerController"));
+    }
+}
+
+void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo)
+{
+    if (WordEntryWidgetClass)
+    {
+        WordEntryWidgetInstance = CreateWidget<UUserWidget>(this, WordEntryWidgetClass);
+
+        if (WordEntryWidgetInstance)
+        {
+            WordEntryWidgetInstance->AddToViewport(9999);
+
+            if (IEVWordEntryDisplayWidgetProvider* WordEntryDisplay =
+                    Cast<IEVWordEntryDisplayWidgetProvider>(WordEntryWidgetInstance))
+            {
+                WordEntryDisplay->ShowWordEntry(CurrentWordEntryWidgetInfo.EntryInfo);
+                WordEntryDisplay->SetHorizontalBoxSizeFill();
+                WordEntryDisplay->ViewButtonPressedFromPlayerController();
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of WordEntryWidgetClass in EVAppPlayerController"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("The WordEntryWidgetClass was not provided to EVAppPlayerController"));
     }
 }
