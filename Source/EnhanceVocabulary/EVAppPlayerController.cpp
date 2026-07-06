@@ -193,20 +193,20 @@ void AEVAppPlayerController::HandleActionStatusWidget(const FEVRequestedActionIn
 
 void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo)
 {
-    if (WordEntryWidgetClass)
+    if (DetailedWordEntryWidgetClass)
     {
-        WordEntryWidgetInstance = CreateWidget<UUserWidget>(this, WordEntryWidgetClass);
+        DetailedWordEntryWidgetInstance = CreateWidget<UUserWidget>(this, DetailedWordEntryWidgetClass);
 
-        if (WordEntryWidgetInstance)
+        if (DetailedWordEntryWidgetInstance)
         {
-            WordEntryWidgetInstance->AddToViewport(9999);
+            DetailedWordEntryWidgetInstance->AddToViewport(9999);
 
             if (IEVWordEntryDisplayWidgetProvider* WordEntryDisplay =
-                    Cast<IEVWordEntryDisplayWidgetProvider>(WordEntryWidgetInstance))
+                    Cast<IEVWordEntryDisplayWidgetProvider>(DetailedWordEntryWidgetInstance))
             {
                 WordEntryDisplay->ShowWordEntry(CurrentWordEntryWidgetInfo.EntryInfo);
-                WordEntryDisplay->SetHorizontalBoxSizeFill();
-                WordEntryDisplay->ViewButtonPressedFromPlayerController();
+                WordEntryDisplay->GetViewPressedDelegate().AddUObject(this,
+                                                                      &ThisClass::HandleDetailedViewButtonPressed);
             }
         }
         else
@@ -217,5 +217,69 @@ void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo&
     else
     {
         UE_LOG(LogTemp, Error, TEXT("The WordEntryWidgetClass was not provided to EVAppPlayerController"));
+    }
+}
+
+void AEVAppPlayerController::HandleDetailedViewButtonPressed()
+{
+    if (DetailedWordEntryWidgetInstance)
+    {
+        HandleCreateConfirmationDialog();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryWidgetInstance is nullptr in PC"));
+    }
+}
+
+void AEVAppPlayerController::HandleCreateConfirmationDialog()
+{
+    if (ConfirmationDialogWidgetClass)
+    {
+        ConfirmationDialogWidgetInstance = CreateWidget<UUserWidget>(this, ConfirmationDialogWidgetClass);
+
+        if (ConfirmationDialogWidgetInstance)
+        {
+            ConfirmationDialogWidgetInstance->AddToViewport(9999);
+
+            if (IEVConfirmationDialogWidgetProvider* ConfirmationDialogWidget =
+                    Cast<IEVConfirmationDialogWidgetProvider>(ConfirmationDialogWidgetInstance))
+            {
+                FEVConfirmationDialogInfo ConfirmationDialogInfo;
+                ConfirmationDialogInfo.DialogType = EEVConfirmationDialogType::ExitViewWord;
+                ConfirmationDialogInfo.Generate();
+
+                ConfirmationDialogWidget->SetConfirmationDialogInfo(ConfirmationDialogInfo);
+
+                ConfirmationDialogWidget->GetDialogButtonPressedDelegate().AddUObject(
+                    this, &ThisClass::HandleConfirmationDialog_ButtonPressed);
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of WordEntryWidgetClass in EVAppPlayerController"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("The WordEntryWidgetClass was not provided to EVAppPlayerController"));
+    }
+}
+
+void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed)
+{
+    if (ConfirmationDialogWidgetInstance)
+    {
+        ConfirmationDialogWidgetInstance->RemoveFromParent();
+        ConfirmationDialogWidgetInstance = nullptr;
+    }
+
+    if (bIsOperationConfirmed)
+    {
+        if (DetailedWordEntryWidgetInstance)
+        {
+            DetailedWordEntryWidgetInstance->RemoveFromParent();
+            DetailedWordEntryWidgetInstance = nullptr;
+        }
     }
 }

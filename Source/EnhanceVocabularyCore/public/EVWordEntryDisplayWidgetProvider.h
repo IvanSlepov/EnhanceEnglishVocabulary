@@ -17,6 +17,9 @@ class ENHANCEVOCABULARYCORE_API IEVWordEntryDisplayWidgetProvider
 
 public:
     virtual void ShowWordEntry(const FVocabularyEntry& Entry) = 0;
-    virtual void SetHorizontalBoxSizeFill() = 0;
-    virtual void ViewButtonPressedFromPlayerController() = 0;
+    virtual void SetEditableFieldsReadOnly(bool bSetEnabled) = 0;
+
+    virtual FSimpleMulticastDelegate& GetViewPressedDelegate() = 0;
+    virtual FSimpleMulticastDelegate& GetEditPressedDelegate() = 0;
+    virtual FSimpleMulticastDelegate& GetDeletePressedDelegate() = 0;
 };

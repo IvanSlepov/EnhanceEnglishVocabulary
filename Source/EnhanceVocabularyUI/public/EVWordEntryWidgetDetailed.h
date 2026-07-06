@@ -4,20 +4,18 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Blueprint/IUserObjectListEntry.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "EVEntryItem.h"
-#include "EVWordEntryWidget.generated.h"
+#include "EVWordEntryDisplayWidgetProvider.h"
+#include "Components/MultiLineEditableTextBox.h"
+#include "EVWordEntryWidgetDetailed.generated.h"
 
 /**
  *
  */
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryViewButtonPressed, UEVWordEntryWidget*, WordEntryWidget);
-
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVWordEntryWidget : public UUserWidget, public IUserObjectListEntry
+class ENHANCEVOCABULARYUI_API UEVWordEntryWidgetDetailed : public UUserWidget, public IEVWordEntryDisplayWidgetProvider
 {
     GENERATED_BODY()
 
@@ -35,43 +33,62 @@ public:
     class UTextBlock* TextBlock_Definition_Key;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Definition_Value;
+    class UMultiLineEditableTextBox* MultiLineEditableTextBox_Definition_Value;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* TextBlock_Usage_Key;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Usage_Value;
+    class UMultiLineEditableTextBox* MultiLineEditableTextBox_Usage_Value;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* TextBlock_TranslationUA_Key;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationUA_Value;
+    class UMultiLineEditableTextBox* MultiLineEditableTextBox_TranslationUA_Value;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* TextBlock_TranslationRU_Key;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationRU_Value;
+    class UMultiLineEditableTextBox* MultiLineEditableTextBox_TranslationRU_Value;
 
-    UPROPERTY(BlueprintAssignable)
-    FOnWordEntryViewButtonPressed OnWordEntryViewButtonPressed;
+    virtual void ShowWordEntry(const FVocabularyEntry& Entry) override;
+    void SetEditableFieldsReadOnly(bool bSetEnabled);
 
-    FVocabularyEntry GetCurrentWidgetVocabularyEnryItemInfo();
+    /*Events*/
+
+    // The following events are used to allow PC
+    // to bind to this widget button events
+    FSimpleMulticastDelegate OnViewRequested;
+    FSimpleMulticastDelegate OnEditRequested;
+    FSimpleMulticastDelegate OnDeleteRequested;
+
+    virtual FSimpleMulticastDelegate& GetViewPressedDelegate() override
+    {
+        return OnViewRequested;
+    }
+    virtual FSimpleMulticastDelegate& GetEditPressedDelegate() override
+    {
+        return OnEditRequested;
+    }
+    virtual FSimpleMulticastDelegate& GetDeletePressedDelegate() override
+    {
+        return OnDeleteRequested;
+    }
 
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeConstruct() override;
-
-    // Triggerred by the ListItemObject, automatically
-    virtual void NativeOnListItemObjectSet(UObject* ListItemObject) override;
-
-    FVocabularyEntry CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry;
+    virtual void NativePreConstruct() override;
 
 private:
-    bool bAreTextFieldsCreated;
+    UFUNCTION()
+    void HandleViewClicked();
 
     UFUNCTION()
-    void HandleOnWordEntry_ViewButtonPressed();
+    void HandleEditClicked();
+
+    UFUNCTION()
+    void HandleDeleteClicked();
 };

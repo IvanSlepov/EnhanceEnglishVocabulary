@@ -55,8 +55,6 @@ void UEVReviewWordsWidget::DisplayWords()
         UE_LOG(LogTemp, Error, TEXT("Vocabulary is empty!!!"));
     }
 
-    ListView_ReviewWords->ClearListItems();
-
     for (auto Entry : VocabularyEntries)
     {
         UEVEntryItem* EVEntryItem = NewObject<UEVEntryItem>(this, UEVEntryItem::StaticClass());
@@ -81,33 +79,45 @@ void UEVReviewWordsWidget::HandleListEntryWidgetGenerated(UUserWidget& Widget)
     {
         return;
     }
+    /*Why use AddUniqueDynamic?*/
+    /*ListView virtualizes its items. Instead of creating a new widget for every row forever, it reuses existing entry
+       widgets as you scroll or refresh the list.
 
-    WordEntryWidget->OnWordEntryButtonPressed.AddDynamic(this,
-                                                         &UEVReviewWordsWidget::HandleWordEntryControlsButtonPressed);
+        Every time a widget is (re)assigned to a list item, OnEntryWidgetGenerated is called again. Previously the code
+       did:
+
+        WordEntryWidget->OnWordEntryViewButtonPressed.AddDynamic(...);
+
+        each time,
+        so the same handler was being added to the same delegate repeatedly.
+
+            Dynamic multicast delegates in Unreal do not allow the exact same object /
+            function pair to be bound more than once,
+
+        so Unreal raised an ensure to warn about the duplicate binding.
+
+        AddUniqueDynamic first checks whether that binding already exists :
+
+        If it doesn't, it adds it. If it does,
+        it does nothing.
+
+        So each UEVWordEntryWidget ends up with exactly one binding,
+        even though the ListView generates or recycles it multiple times*/
+
+    WordEntryWidget->OnWordEntryViewButtonPressed.AddUniqueDynamic(this, &ThisClass::HandleWordEntryViewButtonPressed);
 }
 
-void UEVReviewWordsWidget::HandleWordEntryControlsButtonPressed(UEVWordEntryWidget* WordEntryWidget, bool bViewPressed,
-                                                                bool bEditPressed, bool bDeletePressed, bool bOkPressed)
+void UEVReviewWordsWidget::HandleWordEntryViewButtonPressed(UEVWordEntryWidget* CurrentWordEntryWidget)
 {
-    if (!WordEntryWidget)
+    if (!CurrentWordEntryWidget)
     {
+        UE_LOG(LogTemp, Error,
+               TEXT("The UEVWordEntryWidget CurrentWordEntryWidget is nullptr in EVReviewWordsWidget.cpp"));
         return;
     }
 
-    if (bViewPressed)
-    {
-        EVWordEntryActionInfo.ActionType = EEVWordEntryActionType::ViewEntry;
-        EVWordEntryActionInfo.EntryInfo = WordEntryWidget->GetCurrentWidgetVocabularyEnryItemInfo();
+    EVWordEntryActionInfo.ActionType = EEVWordEntryActionType::ViewEntry;
+    EVWordEntryActionInfo.EntryInfo = CurrentWordEntryWidget->GetCurrentWidgetVocabularyEnryItemInfo();
 
-        OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
-    }
-    else if (bEditPressed)
-    {
-    }
-    else if (bDeletePressed)
-    {
-    }
-    else
-    {
-    }
+    OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
 }

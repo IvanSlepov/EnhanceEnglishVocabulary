@@ -52,6 +52,5 @@ private:
     FEVWordEntryActionInfo EVWordEntryActionInfo;
 
     UFUNCTION()
-    void HandleWordEntryControlsButtonPressed(UEVWordEntryWidget* WordEntryWidget, bool bViewPressed, bool bEditPressed,
-                                              bool bDeletePressed, bool bOkPressed);
+    void HandleWordEntryViewButtonPressed(UEVWordEntryWidget* CurrentWordEntryWidget);
 };
