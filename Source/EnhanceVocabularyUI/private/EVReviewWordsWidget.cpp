@@ -121,3 +121,64 @@ void UEVReviewWordsWidget::HandleWordEntryViewButtonPressed(UEVWordEntryWidget* 
 
     OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
 }
+
+void UEVReviewWordsWidget::UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry)
+{
+    if (!ListView_ReviewWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Missing ListView_ReviewWords"));
+        return;
+    }
+
+    const TArray<UObject*> ListItems = ListView_ReviewWords->GetListItems();
+
+    for (UObject* ItemObject : ListItems)
+    {
+        UEVEntryItem* EntryItem = Cast<UEVEntryItem>(ItemObject);
+
+        if (!EntryItem)
+        {
+            continue;
+        }
+
+        if (EntryItem->EntryItem.Word == UpdatedEntry.Word)
+        {
+            EntryItem->EntryItem = UpdatedEntry;
+            ListView_ReviewWords->RequestRefresh();
+            ListView_ReviewWords->RegenerateAllEntries();
+            return;
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Failed to update displayed word entry: %s"), *UpdatedEntry.Word);
+}
+
+void UEVReviewWordsWidget::RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry)
+{
+    if (!ListView_ReviewWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Missing ListView_ReviewWords"));
+        return;
+    }
+
+    const TArray<UObject*> ListItems = ListView_ReviewWords->GetListItems();
+
+    for (UObject* ItemObject : ListItems)
+    {
+        UEVEntryItem* EntryItem = Cast<UEVEntryItem>(ItemObject);
+
+        if (!EntryItem)
+        {
+            continue;
+        }
+
+        if (EntryItem->EntryItem.Word == DeletedEntry.Word)
+        {
+            ListView_ReviewWords->RemoveItem(ItemObject);
+            ListView_ReviewWords->RequestRefresh();
+            return;
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Failed to remove displayed word entry: %s"), *DeletedEntry.Word);
+}

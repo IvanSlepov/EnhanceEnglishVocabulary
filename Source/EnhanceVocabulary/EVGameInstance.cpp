@@ -132,6 +132,42 @@ bool UEVGameInstance::SaveVocabularyEntry(const FWordSearchResult& WordSearchRes
     return false;
 }
 
+bool UEVGameInstance::UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVocabularyEntry& OutEntry)
+{
+    OutEntry = FVocabularyEntry();
+
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+        return false;
+    }
+
+    if (!VocabularyStorageService->UpdateVocabularyEntry(Entry))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to update vocabulary entry: %s"), *Entry.Word);
+        return false;
+    }
+
+    return VocabularyStorageService->GetVocabularyEntryByWord(Entry.Word, OutEntry);
+}
+
+bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
+{
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+        return false;
+    }
+
+    if (!VocabularyStorageService->DeleteVocabularyEntry(Entry))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to delete vocabulary entry: %s"), *Entry.Word);
+        return false;
+    }
+
+    return true;
+}
+
 bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber)
 {
     if (VocabularyStorageService)

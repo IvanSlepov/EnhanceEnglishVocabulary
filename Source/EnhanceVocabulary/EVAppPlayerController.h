@@ -10,6 +10,9 @@
 #include "EVWordEntryActionTypes.h"
 #include "EVConfirmationDialogActionTypes.h"
 #include "EVConfirmationDialogWidgetProvider.h"
+#include "EVWordEntryDisplayWidgetProvider.h"
+#include "EVGameInstance.h"
+#include "EVWidgetCommonEvents.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -31,6 +34,8 @@ public:
 
     UPROPERTY()
     TObjectPtr<UUserWidget> RootWidgetInstance;
+
+    IEVWidgetCommonEvents* WidgetCommonEvents = nullptr;
 
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UUserWidget> ErrorWidgetClass;
@@ -56,11 +61,17 @@ public:
     UPROPERTY()
     TObjectPtr<UUserWidget> DetailedWordEntryWidgetInstance;
 
+    IEVWordEntryDisplayWidgetProvider* DetailedWordEntryDisplay = nullptr;
+
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UUserWidget> ConfirmationDialogWidgetClass;
 
     UPROPERTY()
     TObjectPtr<UUserWidget> ConfirmationDialogWidgetInstance;
+
+    IEVConfirmationDialogWidgetProvider* ConfirmationDialogWidget = nullptr;
+
+    class UEVGameInstance* EVGameInstance;
 
     // Events
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
@@ -71,6 +82,15 @@ protected:
     void InitEVAppPlayerController();
 
 private:
+    // Cache the data we receive from the the WordEntry
+    // we decided to review
+    FEVWordEntryActionInfo CachedWordEntryWidgetInfo;
+
+    // Cache the result we want to display AFTER
+    // the word has been edited. If we discard changes
+    // we'll retreat to displaying FEVWordEntryActionInfo CachedWordEntryWidgetInfo
+    FVocabularyEntry CachedConfirmedWordEntry;
+
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
 
@@ -88,8 +108,29 @@ private:
     void HandleDetailedViewButtonPressed();
 
     UFUNCTION()
-    void HandleCreateConfirmationDialog();
+    void HandleDetailedEditButtonPressed();
+
+    UFUNCTION()
+    void HandleDetailedDeleteButtonPressed();
+
+    UFUNCTION()
+    void HandleDetailedSaveChangesButtonPressed(const FVocabularyEntry& NewVocabularyEntry);
+
+    // Handlers for the "EVConfirmationDialogWidget.h"
+    UFUNCTION()
+    void HandleCreateConfirmationDialog(EEVConfirmationDialogType DialogType, EEVWordEntryActionType PendingActionType);
 
     UFUNCTION()
     void HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed);
+
+    // Handle Edit word entry
+    UFUNCTION()
+    void ProcessConfirmedWordUpdate();
+
+    // Handle Delete word entry
+    UFUNCTION()
+    void ProcessConfirmedWordDelete();
+
+    // Handle widget destruction
+    void DestroyWidget(TObjectPtr<UUserWidget>& Widget);
 };

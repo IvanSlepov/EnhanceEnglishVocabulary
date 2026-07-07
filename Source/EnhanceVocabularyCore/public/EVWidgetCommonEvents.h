@@ -70,4 +70,6 @@ public:
     {
         return nullptr;
     }
+
+    virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) {}
 };

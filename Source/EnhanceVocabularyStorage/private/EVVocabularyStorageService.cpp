@@ -97,6 +97,110 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
     return true;
 }
 
+bool UEVVocabularyStorageService::UpdateVocabularyEntry(const FVocabularyEntry& Entry)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot update entry: database is invalid"));
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::EditVocabularyEntry,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create UPDATE statement"));
+        return false;
+    }
+
+    // 1-based
+    Statement.SetBindingValueByIndex(1, Entry.Definition);
+    Statement.SetBindingValueByIndex(2, Entry.Usage);
+    Statement.SetBindingValueByIndex(3, Entry.TranslationRu);
+    Statement.SetBindingValueByIndex(4, Entry.TranslationUa);
+    Statement.SetBindingValueByIndex(5, Entry.Word);
+
+    if (!Statement.Execute())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to update vocabulary entry: %s"), *Entry.Word);
+        return false;
+    }
+
+    return true;
+}
+
+bool UEVVocabularyStorageService::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot delete entry: database is invalid"));
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::DeleteVocabularyEntry,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create DELETE statement"));
+        return false;
+    }
+
+    // 1-based
+    Statement.SetBindingValueByIndex(1, Entry.Word);
+
+    if (!Statement.Execute())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to delete vocabulary entry: %s"), *Entry.Word);
+        return false;
+    }
+
+    return true;
+}
+
+bool UEVVocabularyStorageService::GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot retrieve entry: database is invalid"));
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::GetVocabularyEntryByWord,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create SELECT statement"));
+        return false;
+    }
+
+    // 1-based
+    Statement.SetBindingValueByIndex(1, Word);
+
+    if (!Statement.Execute())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to execute SELECT statement for word: %s"), *Word);
+        return false;
+    }
+
+    const ESQLitePreparedStatementStepResult StepResult = Statement.Step();
+
+    if (StepResult != ESQLitePreparedStatementStepResult::Row)
+    {
+        return false;
+    }
+
+    Statement.GetColumnValueByIndex(0, OutEntry.Word);
+    Statement.GetColumnValueByIndex(1, OutEntry.Definition);
+    Statement.GetColumnValueByIndex(2, OutEntry.Usage);
+    Statement.GetColumnValueByIndex(3, OutEntry.TranslationRu);
+    Statement.GetColumnValueByIndex(4, OutEntry.TranslationUa);
+
+    return true;
+}
+
 TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32 EntryNumber)
 {
     TArray<FVocabularyEntry> Entries;

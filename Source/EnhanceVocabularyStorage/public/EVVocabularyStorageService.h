@@ -29,6 +29,10 @@ class ENHANCEVOCABULARYSTORAGE_API UEVVocabularyStorageService : public UObject
 public:
     bool InitializeStorage();
     bool SaveVocabularyEntry(const FVocabularyEntry& Entry);
+    bool UpdateVocabularyEntry(const FVocabularyEntry& Entry);
+    bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
+
+    bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry);
     TArray<FVocabularyEntry> GetVocabularyEntries(int32 EntryNumber = 5);
     void ShutdownStorage();
     EEVWordLookupResult DoesWordExist(const FString& Word, FText& OutErrorMessage);

@@ -32,6 +32,9 @@ public:
 
     void DisplayWords();
 
+    void UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry);
+    void RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     int32 NumberOfWordsToDisplay = 1000;
 
