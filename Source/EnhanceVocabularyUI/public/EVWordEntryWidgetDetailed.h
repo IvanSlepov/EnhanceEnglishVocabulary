@@ -24,6 +24,16 @@ public:
     class UButton* Button_ViewWord;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_EditWordEntry;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_DeleteWordEntry;
+
+    // Becomes Visible only when the Button_EditWord has been pressed
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_SaveChanges;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* TextBlock_Word_Key;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
@@ -54,7 +64,11 @@ public:
     class UMultiLineEditableTextBox* MultiLineEditableTextBox_TranslationRU_Value;
 
     virtual void ShowWordEntry(const FVocabularyEntry& Entry) override;
-    void SetEditableFieldsReadOnly(bool bSetEnabled);
+
+    virtual void SetButtonsDisabled(bool bIsViewButtonDisabled, bool bIsEditButtonDisabled,
+                                    bool bIsDeleteButtonDisabled, bool bIsSaveChangesButtonHidden) override;
+
+    virtual void SetEditableFieldsReadOnly(bool bSetEnabled) override;
 
     /*Events*/
 
@@ -62,16 +76,24 @@ public:
     // to bind to this widget button events
     FSimpleMulticastDelegate OnViewRequested;
     FSimpleMulticastDelegate OnEditRequested;
+    FOnWordEntryChangesSubmitted OnWordEntryChangesSubmitted;
     FSimpleMulticastDelegate OnDeleteRequested;
 
     virtual FSimpleMulticastDelegate& GetViewPressedDelegate() override
     {
         return OnViewRequested;
     }
+
     virtual FSimpleMulticastDelegate& GetEditPressedDelegate() override
     {
         return OnEditRequested;
     }
+
+    virtual FOnWordEntryChangesSubmitted& GetSaveChangesSubmittedDelegate() override
+    {
+        return OnWordEntryChangesSubmitted;
+    }
+
     virtual FSimpleMulticastDelegate& GetDeletePressedDelegate() override
     {
         return OnDeleteRequested;
@@ -84,11 +106,14 @@ protected:
 
 private:
     UFUNCTION()
-    void HandleViewClicked();
+    void HandleViewPressed();
 
     UFUNCTION()
-    void HandleEditClicked();
+    void HandleEditPressed();
 
     UFUNCTION()
-    void HandleDeleteClicked();
+    void HandleSaveChangesPressed();
+
+    UFUNCTION()
+    void HandleDeletePressed();
 };

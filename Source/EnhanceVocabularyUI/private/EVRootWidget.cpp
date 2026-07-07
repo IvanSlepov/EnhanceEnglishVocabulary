@@ -367,3 +367,25 @@ void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynam
                TEXT("TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic is nullptr in WBP_RootWidget"));
     }
 }
+
+void UEVRootWidget::HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo)
+{
+    if (!ReviewWords)
+    {
+        return;
+    }
+
+    switch (WordEntryActionInfo.ActionType)
+    {
+    case EEVWordEntryActionType::SaveEditedEntry:
+        ReviewWords->UpdateDisplayedWordEntry(WordEntryActionInfo.EntryInfo);
+        break;
+
+    case EEVWordEntryActionType::DeleteEntry:
+        ReviewWords->RemoveDisplayedWordEntry(WordEntryActionInfo.EntryInfo);
+        break;
+
+    default:
+        break;
+    }
+}

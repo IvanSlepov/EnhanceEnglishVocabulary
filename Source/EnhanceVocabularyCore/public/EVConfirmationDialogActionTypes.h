@@ -8,6 +8,7 @@ enum class EEVConfirmationDialogType : uint8
 {
     Unknown UMETA(DisplayName = "Unknown"),
     ExitViewWord UMETA(DisplayName = "Exit the Detailed View mode?"),
+    EditWord UMETA(DisplayName = "Overwrite the existing word's fields?"),
     DeleteWord UMETA(DisplayName = "Are you sure you want to delete this word?")
 };
 
@@ -46,21 +47,28 @@ struct FEVConfirmationDialogInfo
 private:
     void GenerateText()
     {
-        DialogText = GetEnumDisplayName(DialogType);
-
         switch (DialogType)
         {
         case EEVConfirmationDialogType::DeleteWord:
+            DialogText = FText::FromString(TEXT("Are you sure you want to delete this word?"));
             ConfirmButtonText = FText::FromString(TEXT("DELETE"));
             DiscardButtonText = FText::FromString(TEXT("CANCEL"));
             break;
 
         case EEVConfirmationDialogType::ExitViewWord:
+            DialogText = FText::FromString(TEXT("Exit the Detailed View mode?"));
             ConfirmButtonText = FText::FromString(TEXT("EXIT"));
             DiscardButtonText = FText::FromString(TEXT("STAY"));
             break;
 
+        case EEVConfirmationDialogType::EditWord:
+            DialogText = FText::FromString(TEXT("Overwrite the existing word's fields?"));
+            ConfirmButtonText = FText::FromString(TEXT("OVERWRITE"));
+            DiscardButtonText = FText::FromString(TEXT("RETAIN"));
+            break;
+
         default:
+            DialogText = FText::FromString(TEXT("Unknown"));
             ConfirmButtonText = FText::FromString(TEXT("CONFIRM"));
             DiscardButtonText = FText::FromString(TEXT("DISCARD"));
             break;
@@ -83,10 +91,16 @@ private:
             DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
             break;
 
+        case EEVConfirmationDialogType::EditWord:
+            DialogTextColor = FLinearColor(0.85f, 0.15f, 0.15f);
+            ConfirmButtonColor = FLinearColor(0.85f, 0.15f, 0.15f);
+            DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
+            break;
+
         default:
-            DialogTextColor = FLinearColor::White;
-            ConfirmButtonColor = FLinearColor::White;
-            DiscardButtonColor = FLinearColor::White;
+            DialogTextColor = FLinearColor::Black;
+            ConfirmButtonColor = FLinearColor::Black;
+            DiscardButtonColor = FLinearColor::Black;
             break;
         }
     }

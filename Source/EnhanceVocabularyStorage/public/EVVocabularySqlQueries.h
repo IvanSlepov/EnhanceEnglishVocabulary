@@ -22,6 +22,21 @@ public:
              "VALUES (?, ?, ?, ?, ?) "
              "ON CONFLICT(Word) DO NOTHING;");
 
+    static constexpr const TCHAR* EditVocabularyEntry = TEXT("UPDATE VocabularyEntries "
+                                                             "SET Definition = ?, "
+                                                             "    Usage = ?, "
+                                                             "    TranslationRu = ?, "
+                                                             "    TranslationUa = ? "
+                                                             "WHERE Word = ?");
+
+    static constexpr const TCHAR* DeleteVocabularyEntry = TEXT("DELETE FROM VocabularyEntries "
+                                                               "WHERE Word = ?;");
+
+    static constexpr const TCHAR* GetVocabularyEntryByWord =
+        TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
+             "FROM VocabularyEntries "
+             "WHERE Word = ?;");
+
     static constexpr const TCHAR* SelectVocabularyEntries =
         TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
              "FROM VocabularyEntries "

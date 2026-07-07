@@ -85,6 +85,8 @@ public:
         return &OnWordEntryWidgetControlsActivated;
     }
 
+    virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;

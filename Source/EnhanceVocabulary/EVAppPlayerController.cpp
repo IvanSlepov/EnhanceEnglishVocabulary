@@ -6,8 +6,6 @@
 #include "EVGameInstance.h"
 #include "EVErrorDisplayWidget.h"
 #include "EVDisplayStatusProvider.h"
-#include "EVWidgetCommonEvents.h"
-#include "EVWordEntryDisplayWidgetProvider.h"
 
 AEVAppPlayerController::AEVAppPlayerController()
 {
@@ -23,6 +21,7 @@ void AEVAppPlayerController::BeginPlay()
     Super::BeginPlay();
 
     InitEVAppPlayerController();
+    EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
 }
 
 void AEVAppPlayerController::InitEVAppPlayerController()
@@ -50,7 +49,9 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                 UE_LOG(LogTemp, Error, TEXT("Failed to create instance of IEVErrorProvider in EVAppPlayerController"));
             }
 
-            if (IEVWidgetCommonEvents* WidgetCommonEvents = Cast<IEVWidgetCommonEvents>(RootWidgetInstance))
+            WidgetCommonEvents = Cast<IEVWidgetCommonEvents>(RootWidgetInstance);
+
+            if (WidgetCommonEvents)
             {
                 if (FOnLoadingDataTriggerred* LoadingDataTriggerredEvent = WidgetCommonEvents->GetLoadingSpinnerEvent())
                 {
@@ -193,6 +194,12 @@ void AEVAppPlayerController::HandleActionStatusWidget(const FEVRequestedActionIn
 
 void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo)
 {
+    // Caching the FEVWordEntryActionInfo received from a particular WordEntry
+    CachedWordEntryWidgetInfo = CurrentWordEntryWidgetInfo;
+
+    // ASsigning another cached var to update the entry once we confirm EDIT operation
+    CachedConfirmedWordEntry = CurrentWordEntryWidgetInfo.EntryInfo;
+
     if (DetailedWordEntryWidgetClass)
     {
         DetailedWordEntryWidgetInstance = CreateWidget<UUserWidget>(this, DetailedWordEntryWidgetClass);
@@ -200,23 +207,30 @@ void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo&
         if (DetailedWordEntryWidgetInstance)
         {
             DetailedWordEntryWidgetInstance->AddToViewport(9999);
+            DetailedWordEntryDisplay = Cast<IEVWordEntryDisplayWidgetProvider>(DetailedWordEntryWidgetInstance);
 
-            if (IEVWordEntryDisplayWidgetProvider* WordEntryDisplay =
-                    Cast<IEVWordEntryDisplayWidgetProvider>(DetailedWordEntryWidgetInstance))
+            if (DetailedWordEntryDisplay)
             {
-                WordEntryDisplay->ShowWordEntry(CurrentWordEntryWidgetInfo.EntryInfo);
-                WordEntryDisplay->GetViewPressedDelegate().AddUObject(this,
-                                                                      &ThisClass::HandleDetailedViewButtonPressed);
+                DetailedWordEntryDisplay->ShowWordEntry(CurrentWordEntryWidgetInfo.EntryInfo);
+                DetailedWordEntryDisplay->GetViewPressedDelegate().AddUObject(
+                    this, &ThisClass::HandleDetailedViewButtonPressed);
+                DetailedWordEntryDisplay->GetEditPressedDelegate().AddUObject(
+                    this, &ThisClass::HandleDetailedEditButtonPressed);
+                DetailedWordEntryDisplay->GetDeletePressedDelegate().AddUObject(
+                    this, &ThisClass::HandleDetailedDeleteButtonPressed);
+                DetailedWordEntryDisplay->GetSaveChangesSubmittedDelegate().AddUObject(
+                    this, &ThisClass::HandleDetailedSaveChangesButtonPressed);
             }
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of WordEntryWidgetClass in EVAppPlayerController"));
+            UE_LOG(LogTemp, Error,
+                   TEXT("Failed to create instance of DetailedWordEntryWidgetClass in EVAppPlayerController"));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("The WordEntryWidgetClass was not provided to EVAppPlayerController"));
+        UE_LOG(LogTemp, Error, TEXT("The DetailedWordEntryWidgetClass was not provided to EVAppPlayerController"));
     }
 }
 
@@ -224,7 +238,7 @@ void AEVAppPlayerController::HandleDetailedViewButtonPressed()
 {
     if (DetailedWordEntryWidgetInstance)
     {
-        HandleCreateConfirmationDialog();
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::ExitViewWord, EEVWordEntryActionType::CloseEntry);
     }
     else
     {
@@ -232,38 +246,75 @@ void AEVAppPlayerController::HandleDetailedViewButtonPressed()
     }
 }
 
-void AEVAppPlayerController::HandleCreateConfirmationDialog()
+void AEVAppPlayerController::HandleDetailedEditButtonPressed()
 {
-    if (ConfirmationDialogWidgetClass)
+    if (DetailedWordEntryDisplay)
     {
-        ConfirmationDialogWidgetInstance = CreateWidget<UUserWidget>(this, ConfirmationDialogWidgetClass);
-
-        if (ConfirmationDialogWidgetInstance)
-        {
-            ConfirmationDialogWidgetInstance->AddToViewport(9999);
-
-            if (IEVConfirmationDialogWidgetProvider* ConfirmationDialogWidget =
-                    Cast<IEVConfirmationDialogWidgetProvider>(ConfirmationDialogWidgetInstance))
-            {
-                FEVConfirmationDialogInfo ConfirmationDialogInfo;
-                ConfirmationDialogInfo.DialogType = EEVConfirmationDialogType::ExitViewWord;
-                ConfirmationDialogInfo.Generate();
-
-                ConfirmationDialogWidget->SetConfirmationDialogInfo(ConfirmationDialogInfo);
-
-                ConfirmationDialogWidget->GetDialogButtonPressedDelegate().AddUObject(
-                    this, &ThisClass::HandleConfirmationDialog_ButtonPressed);
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create instance of WordEntryWidgetClass in EVAppPlayerController"));
-        }
+        DetailedWordEntryDisplay->SetButtonsDisabled(true, true, true, false);
+        DetailedWordEntryDisplay->SetEditableFieldsReadOnly(false);
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("The WordEntryWidgetClass was not provided to EVAppPlayerController"));
+        UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryDisplay is nullptr in PC"));
     }
+}
+
+void AEVAppPlayerController::HandleDetailedSaveChangesButtonPressed(const FVocabularyEntry& NewVocabularyEntry)
+{
+    CachedWordEntryWidgetInfo.EntryInfo = NewVocabularyEntry;
+
+    HandleCreateConfirmationDialog(EEVConfirmationDialogType::EditWord, EEVWordEntryActionType::SaveEditedEntry);
+}
+
+void AEVAppPlayerController::HandleDetailedDeleteButtonPressed()
+{
+    HandleCreateConfirmationDialog(EEVConfirmationDialogType::DeleteWord, EEVWordEntryActionType::DeleteEntry);
+}
+
+void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialogType DialogType,
+                                                            EEVWordEntryActionType PendingActionType)
+{
+    CachedWordEntryWidgetInfo.ActionType = PendingActionType;
+
+    if (!ConfirmationDialogWidgetClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("The ConfirmationDialogWidgetClass was not provided to EVAppPlayerController"));
+        return;
+    }
+
+    if (ConfirmationDialogWidgetInstance)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Confirmation dialog is already open"));
+        return;
+    }
+
+    ConfirmationDialogWidgetInstance = CreateWidget<UUserWidget>(this, ConfirmationDialogWidgetClass);
+
+    if (!ConfirmationDialogWidgetInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create instance of ConfirmationDialogWidgetClass"));
+        return;
+    }
+
+    ConfirmationDialogWidgetInstance->AddToViewport(9999);
+
+    ConfirmationDialogWidget = Cast<IEVConfirmationDialogWidgetProvider>(ConfirmationDialogWidgetInstance);
+
+    if (!ConfirmationDialogWidget)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ConfirmationDialogWidget does not implement provider interface"));
+        return;
+    }
+
+    FEVConfirmationDialogInfo ConfirmationDialogInfo;
+    ConfirmationDialogInfo.DialogType = DialogType;
+    ConfirmationDialogInfo.Generate();
+
+    ConfirmationDialogWidget->SetConfirmationDialogInfo(ConfirmationDialogInfo);
+
+    ConfirmationDialogWidget->GetDialogButtonPressedDelegate().RemoveAll(this);
+    ConfirmationDialogWidget->GetDialogButtonPressedDelegate().AddUObject(
+        this, &ThisClass::HandleConfirmationDialog_ButtonPressed);
 }
 
 void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed)
@@ -272,14 +323,140 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
     {
         ConfirmationDialogWidgetInstance->RemoveFromParent();
         ConfirmationDialogWidgetInstance = nullptr;
+        ConfirmationDialogWidget = nullptr;
     }
 
-    if (bIsOperationConfirmed)
+    if (!bIsOperationConfirmed)
     {
+        if (CachedWordEntryWidgetInfo.ActionType == EEVWordEntryActionType::SaveEditedEntry)
+        {
+            CachedWordEntryWidgetInfo.EntryInfo = CachedConfirmedWordEntry;
+
+            if (DetailedWordEntryDisplay)
+            {
+                DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedWordEntry);
+                DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
+                DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
+            }
+        }
+
+        return;
+    }
+
+    switch (CachedWordEntryWidgetInfo.ActionType)
+    {
+    case EEVWordEntryActionType::CloseEntry:
         if (DetailedWordEntryWidgetInstance)
         {
             DetailedWordEntryWidgetInstance->RemoveFromParent();
             DetailedWordEntryWidgetInstance = nullptr;
+            DetailedWordEntryDisplay = nullptr;
         }
+        break;
+
+    case EEVWordEntryActionType::SaveEditedEntry:
+        // Save CachedWordEntryWidgetInfo.EntryInfo here.
+        // Keep DetailedWordEntryWidgetInstance alive.
+        ProcessConfirmedWordUpdate();
+        break;
+
+    case EEVWordEntryActionType::DeleteEntry:
+        ProcessConfirmedWordDelete();
+        break;
+
+    default:
+        break;
+    }
+}
+
+void AEVAppPlayerController::ProcessConfirmedWordUpdate()
+{
+
+    HandleLoadingSpinner(true);
+
+    FVocabularyEntry UpdatedEntry;
+
+    const bool bUpdated =
+        EVGameInstance && EVGameInstance->UpdateVocabularyEntry(CachedWordEntryWidgetInfo.EntryInfo, UpdatedEntry);
+
+    HandleLoadingSpinner(false);
+
+    FEVRequestedActionInfo StatusInfo;
+    StatusInfo.Source = EEVRequestedActionSource::ReviewWords;
+    StatusInfo.Type = EEVRequestedActionType::EditWord;
+    StatusInfo.Status = bUpdated ? EEVRequestedActionStatus::Saved : EEVRequestedActionStatus::Failed;
+    StatusInfo.GenerateMessage();
+    StatusInfo.GenerateColor();
+
+    HandleActionStatusWidget(StatusInfo);
+
+    if (bUpdated)
+    {
+        CachedConfirmedWordEntry = UpdatedEntry;
+
+        CachedWordEntryWidgetInfo.ActionType = EEVWordEntryActionType::SaveEditedEntry;
+        CachedWordEntryWidgetInfo.EntryInfo = UpdatedEntry;
+
+        if (DetailedWordEntryDisplay)
+        {
+            DetailedWordEntryDisplay->ShowWordEntry(UpdatedEntry);
+            DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
+            DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryDisplay is false in ProcessConfirmedWordUpdate"));
+        }
+
+        if (WidgetCommonEvents)
+        {
+            WidgetCommonEvents->HandleWordEntryChanged(CachedWordEntryWidgetInfo);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("bUpdated is false in ProcessConfirmedWordUpdate"));
+    }
+}
+
+void AEVAppPlayerController::ProcessConfirmedWordDelete()
+{
+    HandleLoadingSpinner(true);
+
+    const bool bDeleted = EVGameInstance && EVGameInstance->DeleteVocabularyEntry(CachedWordEntryWidgetInfo.EntryInfo);
+
+    HandleLoadingSpinner(false);
+
+    FEVRequestedActionInfo StatusInfo;
+    StatusInfo.Source = EEVRequestedActionSource::ReviewWords;
+    StatusInfo.Type = EEVRequestedActionType::DeleteWord;
+    StatusInfo.Status = bDeleted ? EEVRequestedActionStatus::Done : EEVRequestedActionStatus::Failed;
+    StatusInfo.GenerateMessage();
+    StatusInfo.GenerateColor();
+
+    HandleActionStatusWidget(StatusInfo);
+
+    if (!bDeleted)
+    {
+        return;
+    }
+
+    CachedWordEntryWidgetInfo.ActionType = EEVWordEntryActionType::DeleteEntry;
+
+    if (WidgetCommonEvents)
+    {
+        WidgetCommonEvents->HandleWordEntryChanged(CachedWordEntryWidgetInfo);
+    }
+
+    DestroyWidget(DetailedWordEntryWidgetInstance);
+    DetailedWordEntryDisplay = nullptr;
+}
+
+void AEVAppPlayerController::DestroyWidget(TObjectPtr<UUserWidget>& Widget)
+{
+    if (Widget)
+    {
+        Widget->RemoveFromParent();
+        Widget = nullptr;
     }
 }

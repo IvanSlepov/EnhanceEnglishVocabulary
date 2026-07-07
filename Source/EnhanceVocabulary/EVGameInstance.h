@@ -52,6 +52,12 @@ public:
     bool SaveVocabularyEntry(const FWordSearchResult& WordSearchResult);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVocabularyEntry& OutEntry);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber = 5);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Fake/Debugging Search")
