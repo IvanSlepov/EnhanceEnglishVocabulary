@@ -16,6 +16,7 @@
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
 #include "EVAppSettingsWidget.h"
+#include "EVImportExportDBWidget.h"
 #include "EVErrorProvider.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
@@ -59,6 +60,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVAppSettingsWidget> Settings_SelectWebProviders;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UEVImportExportDBWidget> ImportExportDB;
 
     class UEVGameInstance* EVGameInstance;
 

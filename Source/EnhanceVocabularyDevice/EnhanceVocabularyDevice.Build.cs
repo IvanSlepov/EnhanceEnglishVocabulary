@@ -4,6 +4,18 @@ public class EnhanceVocabularyDevice: ModuleRules
 {
     public EnhanceVocabularyDevice(ReadOnlyTargetRules Target) : base(Target)
     {
-        PrivateDependencyModuleNames.AddRange(new string[] {"Core", "CoreUObject", "Engine"});
+        PublicDependencyModuleNames.AddRange(new string[] {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "EnhanceVocabularyCore"
+        });
+
+        PrivateDependencyModuleNames.AddRange(new string[] {
+            "Core", 
+            "CoreUObject", 
+            "Engine", 
+            "EnhanceVocabularyCore"
+        });
     }
 }
