@@ -7,6 +7,7 @@
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "EVWordEntryActionTypes.h"
+#include "EVFileExchangeTypes.h"
 
 #include "EVWidgetCommonEvents.generated.h"
 
@@ -19,6 +20,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionRequested, const FEVRequest
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryWidgetControlsActivated, const FEVWordEntryActionInfo&,
                                             WordEntryActionInfo);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnImportExportDownloadDBOperationIssued, const FEVFileOperationInfo&,
+                                            FileOperationInfo);
 
 UINTERFACE(BlueprintType)
 class ENHANCEVOCABULARYCORE_API UEVWidgetCommonEvents : public UInterface
@@ -67,6 +71,11 @@ public:
     }
 
     virtual FOnWordEntryWidgetControlsActivated* GetCurrentWordEntryWidgetActionInfo()
+    {
+        return nullptr;
+    }
+
+    virtual FOnImportExportDownloadDBOperationIssued* GetIssuedFileOperationInfo()
     {
         return nullptr;
     }

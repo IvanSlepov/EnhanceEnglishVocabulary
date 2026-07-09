@@ -7,7 +7,6 @@ UENUM(BlueprintType)
 enum class EEVFileOperationType : uint8
 {
     Unknown,
-
     ImportDBOverwrite UMETA(DisplayName = "Import DB - Overwrite"),
     ImportDBAppend UMETA(DisplayName = "Import DB - Append"),
     ExportDB UMETA(DisplayName = "Export DB"),
@@ -18,9 +17,11 @@ UENUM(BlueprintType)
 enum class EEVFileExtensionType : uint8
 {
     Unknown,
-    Csv UMETA(DisplayName = ".csv"),
-    Db UMETA(DisplayName = ".db"),
-    Txt UMETA(DisplayName = ".txt")
+    Csv UMETA(DisplayName = ".csv")
+
+    // Uncomment when the .csv is confirmed!!!
+    /*Db UMETA(DisplayName = ".db"),
+    Txt UMETA(DisplayName = ".txt")*/
 };
 
 UENUM(BlueprintType)
@@ -49,7 +50,45 @@ struct FEVFileOperationInfo
     EEVFileOperationType OperationType = EEVFileOperationType::Unknown;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly)
-    EEVFileExtensionType FileExtensionType = EEVFileExtensionType::Unknown;
+    EEVFileExtensionType FileExtensionType;
+
+    static TArray<EEVFileExtensionType> GetAllAvailableFileExtensions()
+    {
+        TArray<EEVFileExtensionType> Result;
+
+        const UEnum* Enum = StaticEnum<EEVFileExtensionType>();
+        if (!Enum)
+        {
+            return Result;
+        }
+
+        // NumEnums() includes the hidden _MAX entry if one exists.
+        const int32 NumEnums = Enum->NumEnums();
+        for (int32 Index = 0; Index < NumEnums; ++Index)
+        {
+            if (Enum->HasMetaData(TEXT("Hidden"), Index))
+            {
+                continue;
+            }
+
+            const auto Value = static_cast<EEVFileExtensionType>(Enum->GetValueByIndex(Index));
+
+            if (Value == EEVFileExtensionType::Unknown)
+            {
+                continue;
+            }
+
+            const FString Name = Enum->GetNameStringByIndex(Index);
+            if (Name.EndsWith(TEXT("_MAX")))
+            {
+                continue;
+            }
+
+            Result.Add(static_cast<EEVFileExtensionType>(Enum->GetValueByIndex(Index)));
+        }
+
+        return Result;
+    }
 };
 
 USTRUCT(BlueprintType)

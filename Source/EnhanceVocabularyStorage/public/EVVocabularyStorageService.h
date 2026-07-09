@@ -6,6 +6,7 @@
 #include "UObject/Object.h"
 #include "EVVocabularyTypes.h"
 #include "SQLiteDatabase.h"
+#include "EVFileExchangeTypes.h"
 #include "EVVocabularyStorageService.generated.h"
 
 /**
@@ -36,6 +37,9 @@ public:
     TArray<FVocabularyEntry> GetVocabularyEntries(int32 EntryNumber = 5);
     void ShutdownStorage();
     EEVWordLookupResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
+
+    FEVFileExchangeResultInfo GenerateDatabaseExportTemplate(EEVFileExtensionType FileExtensionType,
+                                                             TArray<uint8>& OutBytes);
 
 private:
     FSQLiteDatabase Database;

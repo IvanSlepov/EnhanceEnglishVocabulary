@@ -5,6 +5,7 @@
 #include "EVVocabularyStorageService.h"
 #include "EVWordSearchService.h"
 #include "EVConnectivityService.h"
+#include "EVDeviceService.h"
 
 void UEVGameInstance::Init()
 {
@@ -12,6 +13,8 @@ void UEVGameInstance::Init()
 
     VocabularyStorageService = NewObject<UEVVocabularyStorageService>(this);
     WordSearchService = NewObject<UEVWordSearchService>(this);
+    ConnectivityService = NewObject<UEVConnectivityService>(this);
+    DeviceService = NewObject<UEVDeviceService>(this);
 
     if (WordSearchService)
     {
@@ -24,8 +27,6 @@ void UEVGameInstance::Init()
     {
         UE_LOG(LogTemp, Error, TEXT("WordSearchService is null"));
     }
-
-    ConnectivityService = NewObject<UEVConnectivityService>(this);
 
     if (ConnectivityService)
     {
@@ -54,6 +55,18 @@ void UEVGameInstance::Init()
     else
     {
         UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+    }
+
+    if (DeviceService)
+    {
+        DeviceService->InitializeDeviceService();
+        DeviceService->OnFileSaved().AddUObject(this, &ThisClass::HandleFileSaved);
+
+        DeviceService->OnImportFilePicked().AddUObject(this, &ThisClass::HandleImportFilePicked);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("DeviceService is null"));
     }
 }
 
@@ -207,6 +220,25 @@ void UEVGameInstance::SearchWordOnline(const FString& Word, EEVWebProvider Defin
     WordSearchService->SearchWordOnline(Word, DefinitionUsageProvider, TranslationProvider);
 }
 
+FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo)
+{
+    switch (FileOperationInfo.OperationType)
+    {
+    case EEVFileOperationType::DownloadTemplate:
+        return HandleDownloadTemplateRequested(FileOperationInfo);
+
+    default:
+    {
+        FEVRequestedActionInfo ActionInfo;
+        ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Unsupported file operation."));
+        ActionInfo.GenerateColor();
+        return ActionInfo;
+    }
+    }
+}
+
 EEVConnectionState UEVGameInstance::GetConnectionState() const
 {
     if (ConnectivityService)
@@ -235,4 +267,90 @@ void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
     const FWordSearchResult& SearchWordResultPassedByGameInstance)
 {
     OnEVWordSearchCompletedFromEVGameInstance.Broadcast(SearchWordResultPassedByGameInstance);
+}
+
+void UEVGameInstance::HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo)
+{
+    UE_LOG(LogTemp, Log, TEXT("File saved result: %d | File: %s | Bytes: %lld | Message: %s | Debug: %s"),
+           static_cast<uint8>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, *ResultInfo.UserMessage,
+           *ResultInfo.DebugMessage);
+
+    const FEVRequestedActionInfo ActionInfo = ConvertFileExchangeResultToRequestedAction(ResultInfo);
+
+    FileOperationCompletedDelegate.Broadcast(ActionInfo);
+}
+
+void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes)
+{
+    UE_LOG(LogTemp, Log,
+           TEXT("Import file picked result: %d | File: %s | Bytes: %lld | ReceivedBytes: %d | Message: %s | Debug: %s"),
+           static_cast<uint8>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, Bytes.Num(),
+           *ResultInfo.UserMessage, *ResultInfo.DebugMessage);
+
+    // Import logic comes later:
+    // Result success -> pass Bytes to Storage
+    // Storage validates CSV/data
+    // Append/Overwrite based on pending operation.
+}
+
+FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo)
+{
+    FEVRequestedActionInfo ActionInfo;
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+
+    if (!VocabularyStorageService)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Vocabulary storage service is not available."));
+        ActionInfo.GenerateColor();
+        return ActionInfo;
+    }
+
+    if (!DeviceService)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Device service is not available."));
+        ActionInfo.GenerateColor();
+        return ActionInfo;
+    }
+
+    TArray<uint8> TemplateBytes;
+
+    const FEVFileExchangeResultInfo TemplateGenerationResult =
+        VocabularyStorageService->GenerateDatabaseExportTemplate(FileOperationInfo.FileExtensionType, TemplateBytes);
+
+    if (!TemplateGenerationResult.IsSuccess())
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TemplateGenerationResult.UserMessage);
+        ActionInfo.GenerateColor();
+        return ActionInfo;
+    }
+
+    DeviceService->SaveBytesToUserSelectedLocation(FileOperationInfo.FileExtensionType,
+                                                   TEXT("VocabularyDB_Template.csv"), TemplateBytes);
+
+    ActionInfo.Status = EEVRequestedActionStatus::InProgress;
+    ActionInfo.Message = FText::FromString(TEXT("Preparing template download..."));
+    ActionInfo.GenerateColor();
+
+    return ActionInfo;
+}
+
+FEVFileOperationCompletedFromGameInstance& UEVGameInstance::OnFileOperationCompleted()
+{
+    return FileOperationCompletedDelegate;
+}
+
+FEVRequestedActionInfo
+UEVGameInstance::ConvertFileExchangeResultToRequestedAction(const FEVFileExchangeResultInfo& ResultInfo) const
+{
+    FEVRequestedActionInfo ActionInfo;
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+    ActionInfo.Status = ResultInfo.IsSuccess() ? EEVRequestedActionStatus::Completed : EEVRequestedActionStatus::Failed;
+
+    ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
+    ActionInfo.GenerateColor();
+
+    return ActionInfo;
 }

@@ -87,6 +87,12 @@ void UEVRootWidget::NativeOnInitialized()
             AddWord, &UEVAddWordWidget::HandleWebProvidersChanged);
     }
 
+    if (ImportExportDB)
+    {
+        ImportExportDB->OnImportExportDownloadDBIssued.AddDynamic(
+            this, &ThisClass::HandleOnImportExportDownloadDBOperationIssued);
+    }
+
     if (Button_Menu)
     {
         Button_Menu->OnPressed.AddDynamic(this, &ThisClass::ButtonMenuPressed);
@@ -150,6 +156,12 @@ void UEVRootWidget::ButtonMenuPressed()
                 WidgetSwitcher_Main->SetActiveWidget(Settings_SelectWebProviders);
                 MenuSwitcherCount = 0;
             }
+
+            else if (bIsImportExportActivated_internal)
+            {
+                WidgetSwitcher_Main->SetActiveWidget(ImportExportDB);
+                MenuSwitcherCount = 0;
+            }
         }
 
         else
@@ -198,6 +210,8 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
     else if (bIsImportExportActivated)
     {
+        WidgetSwitcher_Main->SetActiveWidget(ImportExportDB);
+        MenuSwitcherCount = 0;
     }
 }
 
@@ -334,6 +348,12 @@ void UEVRootWidget::HandleOnActionRequested(const FEVRequestedActionInfo& Reques
 void UEVRootWidget::HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo)
 {
     OnWordEntryWidgetControlsActivated.Broadcast(WordEntryActionInfo);
+}
+
+void UEVRootWidget::HandleOnImportExportDownloadDBOperationIssued(
+    const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget)
+{
+    OnImportExportDownloadDBOperationIssued.Broadcast(FileOperationInfoFromSelectorWidget);
 }
 
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,

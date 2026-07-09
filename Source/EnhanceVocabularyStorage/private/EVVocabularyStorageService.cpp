@@ -4,6 +4,7 @@
 #include "SQLitePreparedStatement.h"
 #include "EVVocabularySqlQueries.h"
 #include "EVHelpers.h"
+#include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 
 bool UEVVocabularyStorageService::InitializeStorage()
@@ -282,5 +283,40 @@ void UEVVocabularyStorageService::ShutdownStorage()
     {
         Database.Close();
         UE_LOG(LogTemp, Warning, TEXT("Database closed"));
+    }
+}
+
+FEVFileExchangeResultInfo
+UEVVocabularyStorageService::GenerateDatabaseExportTemplate(EEVFileExtensionType FileExtensionType,
+                                                            TArray<uint8>& OutBytes)
+{
+    FEVFileExchangeResultInfo ResultInfo;
+
+    OutBytes.Reset();
+
+    switch (FileExtensionType)
+    {
+    case EEVFileExtensionType::Csv:
+    {
+        constexpr UTF8CHAR CsvTemplate[] = u8"Word,Definition,Usage,TranslationRu,TranslationUa\r\n";
+
+        const int32 ByteCount = UE_ARRAY_COUNT(CsvTemplate) - 1;
+
+        OutBytes.Append(reinterpret_cast<const uint8*>(CsvTemplate), ByteCount);
+
+        ResultInfo.Result = EEVFileExchangeResult::Success;
+        ResultInfo.ByteSize = OutBytes.Num();
+        ResultInfo.UserMessage = TEXT("Database template generated successfully.");
+        ResultInfo.DebugMessage = TEXT("CSV template generated.");
+
+        return ResultInfo;
+    }
+
+    default:
+        ResultInfo.Result = EEVFileExchangeResult::InvalidExtension;
+        ResultInfo.UserMessage = TEXT("Unsupported export template format.");
+        ResultInfo.DebugMessage = TEXT("GenerateDatabaseExportTemplate received unsupported file extension.");
+
+        return ResultInfo;
     }
 }

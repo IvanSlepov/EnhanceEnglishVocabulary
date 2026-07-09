@@ -22,6 +22,10 @@ void AEVAppPlayerController::BeginPlay()
 
     InitEVAppPlayerController();
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnFileOperationCompleted().AddUObject(this, &ThisClass::HandleFileOperationCompleted);
+    }
 }
 
 void AEVAppPlayerController::InitEVAppPlayerController()
@@ -80,6 +84,17 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                 {
                     UE_LOG(LogTemp, Error,
                            TEXT("FOnWordEntryWidgetControlsActivated in EVAppPlayerController.cpp is nullptr"));
+                }
+
+                if (FOnImportExportDownloadDBOperationIssued* ImportExportDownloadDBOperationIssued =
+                        WidgetCommonEvents->GetIssuedFileOperationInfo())
+                {
+                    ImportExportDownloadDBOperationIssued->AddDynamic(this, &ThisClass::HandleIssuedFileOperation);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnImportExportDownloadDBOperationIssued in EVAppPlayerController.cpp is nullptr"));
                 }
             }
             else
@@ -232,6 +247,35 @@ void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo&
     {
         UE_LOG(LogTemp, Error, TEXT("The DetailedWordEntryWidgetClass was not provided to EVAppPlayerController"));
     }
+}
+
+// Will try to control the action that came from widget (ImportExportDB in this case)
+// from the PC rather than on the widget's side. If this approach proves to be cleaner than
+// what we have now we'll try to refactor other parts of the app to implement it.
+void AEVAppPlayerController::HandleIssuedFileOperation(const FEVFileOperationInfo& IssuedFileOperation)
+{
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in EVAppPlayerController"));
+        return;
+    }
+
+    HandleLoadingSpinner(true);
+
+    const FEVRequestedActionInfo RequestedActionInfo =
+        EVGameInstance->HandleFileOperationRequested(IssuedFileOperation);
+
+    if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
+    {
+        HandleLoadingSpinner(false);
+        HandleActionStatusWidget(RequestedActionInfo);
+    }
+}
+
+void AEVAppPlayerController::HandleFileOperationCompleted(const FEVRequestedActionInfo& RequestedActionInfo)
+{
+    HandleLoadingSpinner(false);
+    HandleActionStatusWidget(RequestedActionInfo);
 }
 
 void AEVAppPlayerController::HandleDetailedViewButtonPressed()

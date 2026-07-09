@@ -10,7 +10,7 @@
 #include "EVFileExchangeTypes.h"
 #include "EVSelectImpExpDBOptionsWidget.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFileOperationSelected, FEVFileOperationInfo, FileOperationInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFileOperationSelected, const FEVFileOperationInfo&, FileOperationInfo);
 
 /**
  *
@@ -34,13 +34,13 @@ public:
     class UComboBoxString* ComboBoxString_ImportDB_Options;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_ConfirmDBImportFileExtension;
+    class UButton* Button_StartDBImport;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UComboBoxString* ComboBoxString_ExportDB_Options;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_ConfirmDBExportFileExtension;
+    class UButton* Button_StartDBExport;
 
     UPROPERTY(BlueprintAssignable)
     FOnFileOperationSelected OnFileOperationSelected;
@@ -56,4 +56,11 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
+    void PopulateFileExtensionOptionsComboBoxes();
+
+    FString FileExtensionNameEnumToString(EEVFileExtensionType FileExtensionType) const;
+    EEVFileExtensionType FileExtensionNameStringToEnum(const FString& FileExtensionName) const;
+
+    UFUNCTION()
+    void HandleDownloadDBTemplate();
 };

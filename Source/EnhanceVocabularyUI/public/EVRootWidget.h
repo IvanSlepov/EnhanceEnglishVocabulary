@@ -23,6 +23,7 @@
 #include "EVConnectionTypesAndEnums.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVWordEntryActionTypes.h"
+#include "EVFileExchangeTypes.h"
 #include "EVRootWidget.generated.h"
 
 /**
@@ -89,6 +90,11 @@ public:
         return &OnWordEntryWidgetControlsActivated;
     }
 
+    virtual FOnImportExportDownloadDBOperationIssued* GetIssuedFileOperationInfo() override
+    {
+        return &OnImportExportDownloadDBOperationIssued;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
 protected:
@@ -136,6 +142,9 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnWordEntryWidgetControlsActivated OnWordEntryWidgetControlsActivated;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnImportExportDownloadDBOperationIssued OnImportExportDownloadDBOperationIssued;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -155,6 +164,9 @@ private:
 
     UFUNCTION()
     void HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo);
+
+    UFUNCTION()
+    void HandleOnImportExportDownloadDBOperationIssued(const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;

@@ -6,12 +6,15 @@
 #include "Engine/GameInstance.h"
 #include "EVConnectionTypesAndEnums.h"
 #include "EVWebProviderTypes.h"
+#include "EVFileExchangeTypes.h"
+#include "EVRequestedActionTypes.h"
 
 #include "EVGameInstance.generated.h"
 
 class UEVVocabularyStorageService;
 class UEVWordSearchService;
 class UEVConnectivityService;
+class UEVDeviceService;
 
 /**
  *
@@ -19,6 +22,7 @@ class UEVConnectivityService;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnectionState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -45,6 +49,9 @@ public:
     UPROPERTY()
     TObjectPtr<UEVConnectivityService> ConnectivityService;
 
+    UPROPERTY()
+    TObjectPtr<UEVDeviceService> DeviceService;
+
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     EEVVocabularyStorageServiceResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
@@ -67,6 +74,9 @@ public:
     void SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
                           EEVWebProvider TranslationProvider);
 
+    UFUNCTION(BlueprintCallable, Category = "File Exchange")
+    FEVRequestedActionInfo HandleFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo);
+
     // Connection functions
     EEVConnectionState GetConnectionState() const;
 
@@ -76,6 +86,8 @@ public:
 
     UPROPERTY(BlueprintAssignable)
     FEVWordSearchCompletedFromEVGameInstance OnEVWordSearchCompletedFromEVGameInstance;
+
+    FEVFileOperationCompletedFromGameInstance& OnFileOperationCompleted();
 
 protected:
     virtual void Init() override;
@@ -95,4 +107,15 @@ private:
     // the connectivity var being set to Offline and that makes the check in the corresponding Handler to return
     // immediately
     EEVConnectionState EVConnectionState = EEVConnectionState::Connecting;
+
+    void HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
+
+    void HandleImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes);
+
+    FEVRequestedActionInfo HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo);
+
+    FEVRequestedActionInfo
+    ConvertFileExchangeResultToRequestedAction(const FEVFileExchangeResultInfo& ResultInfo) const;
+
+    FEVFileOperationCompletedFromGameInstance FileOperationCompletedDelegate;
 };
