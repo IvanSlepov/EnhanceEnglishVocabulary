@@ -38,6 +38,7 @@ enum class EEVFileExchangeResult : uint8
     UnsupportedPlatform,
     StorageValidationFailed,
     DatabaseTransactionFailed,
+    DatabaseQueryFailed,
     UnknownError
 };
 
@@ -66,11 +67,6 @@ struct FEVFileOperationInfo
         const int32 NumEnums = Enum->NumEnums();
         for (int32 Index = 0; Index < NumEnums; ++Index)
         {
-            if (Enum->HasMetaData(TEXT("Hidden"), Index))
-            {
-                continue;
-            }
-
             const auto Value = static_cast<EEVFileExtensionType>(Enum->GetValueByIndex(Index));
 
             if (Value == EEVFileExtensionType::Unknown)

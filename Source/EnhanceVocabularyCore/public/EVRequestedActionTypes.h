@@ -21,7 +21,11 @@ enum class EEVRequestedActionType : uint8
     Unknown,
     SaveWord,
     EditWord,
-    DeleteWord
+    DeleteWord,
+    DownloadDBTemplate,
+    ImportDBOverwrite,
+    ImportDBAppend,
+    ExportDB
 };
 
 UENUM(BlueprintType)

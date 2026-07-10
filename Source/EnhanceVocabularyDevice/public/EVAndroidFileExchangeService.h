@@ -25,24 +25,12 @@ public:
 
     virtual FEVOnFileSaved& OnFileSaved() override;
 
-public:
-    void HandleAndroidImportCompleted(bool bSuccess, const FString& FileName, const TArray<uint8>& Bytes,
-                                      const FString& ErrorMessage);
-
-    void HandleAndroidSaveCompleted(bool bSuccess, const FString& FileName, const FString& ErrorMessage);
-
-private:
-    FString GetMimeTypeForExtension(EEVFileExtensionType FileExtensionType) const;
-
-    FString GetExtensionString(EEVFileExtensionType FileExtensionType) const;
+    void HandleAndroidFileSaveCompleted(bool bSuccess, bool bCancelled, const FString& FileName,
+                                        const FString& ErrorMessage);
 
 private:
     FEVOnImportFilePicked ImportFilePickedDelegate;
     FEVOnFileSaved FileSavedDelegate;
 
-    EEVFileExtensionType PendingSaveExtensionType = EEVFileExtensionType::Unknown;
-
-    FString PendingSuggestedFileName;
-
-    TArray<uint8> PendingSaveBytes;
+    int64 PendingSaveByteSize = 0;
 };

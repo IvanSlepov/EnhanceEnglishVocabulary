@@ -22,6 +22,11 @@ enum class EEVWordLookupResult : uint8
     Empty
 };
 
+struct FEVDatabaseExportRow
+{
+    TArray<FString> Values;
+};
+
 UCLASS()
 class ENHANCEVOCABULARYSTORAGE_API UEVVocabularyStorageService : public UObject
 {
@@ -40,6 +45,10 @@ public:
 
     FEVFileExchangeResultInfo GenerateDatabaseExportTemplate(EEVFileExtensionType FileExtensionType,
                                                              TArray<uint8>& OutBytes);
+
+    bool GetImportExportRows(TArray<FString>& OutColumnNames, TArray<FEVDatabaseExportRow>& OutRows);
+
+    FEVFileExchangeResultInfo GenerateDatabaseExport(EEVFileExtensionType FileExtensionType, TArray<uint8>& OutBytes);
 
 private:
     FSQLiteDatabase Database;

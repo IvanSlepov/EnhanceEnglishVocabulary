@@ -5,6 +5,7 @@
 void UEVSelectImpExpDBOptionsWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
+
     if (Button_DownloadDBTemplate)
     {
         Button_DownloadDBTemplate->OnPressed.AddDynamic(this, &ThisClass::HandleDownloadDBTemplate);
@@ -12,6 +13,15 @@ void UEVSelectImpExpDBOptionsWidget::NativeOnInitialized()
     else
     {
         UE_LOG(LogTemp, Error, TEXT("Button_DownloadDBTemplate is nullptr in EVSelectImpExpDBOptionsWidget.cpp"));
+    }
+
+    if (Button_StartDBExport)
+    {
+        Button_StartDBExport->OnPressed.AddDynamic(this, &ThisClass::HandleExportDB);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Button_StartDBExport is nullptr in EVSelectImpExpDBOptionsWidget.cpp"));
     }
 }
 
@@ -97,6 +107,11 @@ void UEVSelectImpExpDBOptionsWidget::HandleDownloadDBTemplate()
     OnFileOperationSelected.Broadcast(GetDownloadDBTemplateExtensionType());
 }
 
+void UEVSelectImpExpDBOptionsWidget::HandleExportDB()
+{
+    OnFileOperationSelected.Broadcast(GetExportDBExtensionType());
+}
+
 FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetImportDBExtensionType()
 {
     return FEVFileOperationInfo();
@@ -104,7 +119,20 @@ FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetImportDBExtensionType()
 
 FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetExportDBExtensionType()
 {
-    return FEVFileOperationInfo();
+    if (ComboBoxString_ExportDB_Options)
+    {
+        FEVFileOperationInfo EVFileOperationInfo;
+        EVFileOperationInfo.OperationType = EEVFileOperationType::ExportDB;
+        EVFileOperationInfo.FileExtensionType =
+            FileExtensionNameStringToEnum(ComboBoxString_ExportDB_Options->GetSelectedOption());
+
+        return EVFileOperationInfo;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_ExportDB_Options is nullptr EVSelectImpExpDBOptionsWidget.cpp"));
+        return FEVFileOperationInfo();
+    }
 }
 
 FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetDownloadDBTemplateExtensionType()

@@ -226,6 +226,8 @@ FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFi
     {
     case EEVFileOperationType::DownloadTemplate:
         return HandleDownloadTemplateRequested(FileOperationInfo);
+    case EEVFileOperationType::ExportDB:
+        return HandleExportDBRequested(FileOperationInfo);
 
     default:
     {
@@ -296,13 +298,18 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
 FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo)
 {
     FEVRequestedActionInfo ActionInfo;
+
     ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+    ActionInfo.Type = EEVRequestedActionType::DownloadDBTemplate;
 
     if (!VocabularyStorageService)
     {
         ActionInfo.Status = EEVRequestedActionStatus::Failed;
         ActionInfo.Message = FText::FromString(TEXT("Vocabulary storage service is not available."));
         ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleDownloadTemplateRequested: VocabularyStorageService is null."));
+
         return ActionInfo;
     }
 
@@ -311,6 +318,9 @@ FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FE
         ActionInfo.Status = EEVRequestedActionStatus::Failed;
         ActionInfo.Message = FText::FromString(TEXT("Device service is not available."));
         ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleDownloadTemplateRequested: DeviceService is null."));
+
         return ActionInfo;
     }
 
@@ -324,14 +334,97 @@ FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FE
         ActionInfo.Status = EEVRequestedActionStatus::Failed;
         ActionInfo.Message = FText::FromString(TemplateGenerationResult.UserMessage);
         ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("Failed to generate database template: %s"),
+               *TemplateGenerationResult.DebugMessage);
+
         return ActionInfo;
     }
 
-    DeviceService->SaveBytesToUserSelectedLocation(FileOperationInfo.FileExtensionType,
-                                                   TEXT("VocabularyDB_Template.csv"), TemplateBytes);
+    if (TemplateBytes.IsEmpty())
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("The generated database template is empty."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("GenerateDatabaseExportTemplate succeeded but returned an empty buffer."));
+
+        return ActionInfo;
+    }
+
+    DeviceService->SaveBytesToUserSelectedLocation(
+        FileOperationInfo.FileExtensionType,
+        FEVFileExchangeDefaults::GetTemplateFileName(FileOperationInfo.FileExtensionType), TemplateBytes);
 
     ActionInfo.Status = EEVRequestedActionStatus::InProgress;
     ActionInfo.Message = FText::FromString(TEXT("Preparing template download..."));
+    ActionInfo.GenerateColor();
+
+    return ActionInfo;
+}
+
+FEVRequestedActionInfo UEVGameInstance::HandleExportDBRequested(const FEVFileOperationInfo& FileOperationInfo)
+{
+    FEVRequestedActionInfo ActionInfo;
+
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+    ActionInfo.Type = EEVRequestedActionType::ExportDB;
+
+    if (!VocabularyStorageService)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Vocabulary storage service is not available."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleExportDBRequested: VocabularyStorageService is null."));
+
+        return ActionInfo;
+    }
+
+    if (!DeviceService)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Device service is not available."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleExportDBRequested: DeviceService is null."));
+
+        return ActionInfo;
+    }
+
+    TArray<uint8> ExportBytes;
+
+    const FEVFileExchangeResultInfo ExportGenerationResult =
+        VocabularyStorageService->GenerateDatabaseExport(FileOperationInfo.FileExtensionType, ExportBytes);
+
+    if (!ExportGenerationResult.IsSuccess())
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(ExportGenerationResult.UserMessage);
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("Failed to generate database export: %s"), *ExportGenerationResult.DebugMessage);
+
+        return ActionInfo;
+    }
+
+    if (ExportBytes.IsEmpty())
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("The generated database export is empty."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("GenerateDatabaseExport succeeded but returned an empty buffer."));
+
+        return ActionInfo;
+    }
+
+    DeviceService->SaveBytesToUserSelectedLocation(
+        FileOperationInfo.FileExtensionType,
+        FEVFileExchangeDefaults::GetDatabaseExportFileName(FileOperationInfo.FileExtensionType), ExportBytes);
+
+    ActionInfo.Status = EEVRequestedActionStatus::InProgress;
+    ActionInfo.Message = FText::FromString(TEXT("Preparing database export..."));
     ActionInfo.GenerateColor();
 
     return ActionInfo;

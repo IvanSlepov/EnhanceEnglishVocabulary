@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <gameActivityImportAdditions>
+
+    <insert>
+      import android.app.Activity;
+      import android.content.Intent;
+      import android.net.Uri;
+      import android.provider.DocumentsContract;
+      import android.content.ContentResolver;
+      import android.os.ParcelFileDescriptor;
+      import java.io.InputStream;
+      import java.io.OutputStream;
+      import java.io.FileInputStream;
+      import java.io.FileOutputStream;
+    </insert>
+
+  </gameActivityImportAdditions>
+
+  <gameActivityClassAdditions>
+
+    <insert>
+
+      // =========================================================================
+      // EnhanceVocabulary - File Exchange
+      // =========================================================================
+
+      private static final int EV_REQUEST_OPEN_DOCUMENT = 7351;
+      private static final int EV_REQUEST_CREATE_DOCUMENT = 7352;
+
+      private byte[] EVFileExchangePendingSaveBytes = null;
+      private String EVFileExchangePendingSaveFileName = "";
+      private String EVFileExchangePendingSaveMimeType = "";
+
+      public void AndroidThunkJava_EV_SaveBytesToUserSelectedLocation(
+      String suggestedFileName,
+      String mimeType,
+      byte[] bytes)
+      {
+      EVFileExchangePendingSaveFileName = suggestedFileName;
+      EVFileExchangePendingSaveMimeType = mimeType;
+      EVFileExchangePendingSaveBytes = bytes;
+
+      Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+      intent.addCategory(Intent.CATEGORY_OPENABLE);
+      intent.setType(mimeType);
+      intent.putExtra(Intent.EXTRA_TITLE, suggestedFileName);
+
+      startActivityForResult(intent, EV_REQUEST_CREATE_DOCUMENT);
+      }
+
+      public native void nativeEVFileSaveCompleted(
+      boolean bSuccess,
+      boolean bCancelled,
+      String fileName,
+      String errorMessage);
+
+    </insert>
+
+  </gameActivityClassAdditions>
+  <gameActivityOnActivityResultAdditions>
+
+    <insert>
+      <![CDATA[
+
+          if (requestCode == EV_REQUEST_CREATE_DOCUMENT)
+          {
+              boolean bEVFileSavedSuccessfully = false;
+              boolean bEVFileSaveCancelled = resultCode != Activity.RESULT_OK;
+              String EVFileSaveErrorMessage = "";
+              
+              String completedFileName = EVFileExchangePendingSaveFileName;
+              
+              try
+              {
+                  if (!bEVFileSaveCancelled &&
+                      data != null &&
+                      data.getData() != null &&
+                      EVFileExchangePendingSaveBytes != null &&
+                      EVFileExchangePendingSaveBytes.length > 0)
+                  {
+                      Uri targetUri = data.getData();
+
+                      try (OutputStream outputStream =
+                               getContentResolver().openOutputStream(targetUri))
+                      {
+                          if (outputStream != null)
+                          {
+                              outputStream.write(EVFileExchangePendingSaveBytes);
+                              outputStream.flush();
+
+                              bEVFileSavedSuccessfully = true;
+                          }
+                          else
+                          {
+                              EVFileSaveErrorMessage =
+                                  "ContentResolver returned a null OutputStream.";
+                          }
+                      }
+                  }
+                  else if (!bEVFileSaveCancelled)
+                  {
+                      EVFileSaveErrorMessage =
+                          "Missing target URI or pending file data.";
+                  }
+              }
+              catch (Exception exception)
+              {
+                  EVFileSaveErrorMessage =
+                      exception.getClass().getSimpleName() + ": " + exception.getMessage();
+
+                  exception.printStackTrace();
+              }
+              finally
+              {
+                  EVFileExchangePendingSaveBytes = null;
+                  EVFileExchangePendingSaveFileName = "";
+                  EVFileExchangePendingSaveMimeType = "";
+              }
+              
+              nativeEVFileSaveCompleted(
+              bEVFileSavedSuccessfully,
+              bEVFileSaveCancelled,
+              completedFileName,
+              EVFileSaveErrorMessage);
+
+              return;
+          }
+
+      ]]>
+    </insert>
+
+  </gameActivityOnActivityResultAdditions>
+
+</root>

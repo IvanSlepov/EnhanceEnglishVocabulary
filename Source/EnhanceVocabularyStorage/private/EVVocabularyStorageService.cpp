@@ -1,8 +1,10 @@
 #include "EVVocabularyStorageService.h"
 
+#include "EVVocabularyDatabaseSchema.h"
+#include "EVVocabularySqlQueries.h"
+
 #include "Misc/Paths.h"
 #include "SQLitePreparedStatement.h"
-#include "EVVocabularySqlQueries.h"
 #include "EVHelpers.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
@@ -52,9 +54,12 @@ bool UEVVocabularyStorageService::InitializeStorage()
 
 bool UEVVocabularyStorageService::CreateVocabularyTable()
 {
-    if (!Database.Execute(FEVVocabularySqlQueries::CreateVocabularyTable))
+    const FString CreateTableQuery = FEVVocabularySqlQueries::GetCreateVocabularyTableQuery();
+
+    if (!Database.Execute(*CreateTableQuery))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create VocabularyEntries table"));
+
         return false;
     }
 
@@ -298,16 +303,29 @@ UEVVocabularyStorageService::GenerateDatabaseExportTemplate(EEVFileExtensionType
     {
     case EEVFileExtensionType::Csv:
     {
-        constexpr UTF8CHAR CsvTemplate[] = u8"Word,Definition,Usage,TranslationRu,TranslationUa\r\n";
+        const TArray<FString> ColumnNames = FEVVocabularyDatabaseSchema::GetImportExportColumnNames();
 
-        const int32 ByteCount = UE_ARRAY_COUNT(CsvTemplate) - 1;
+        if (ColumnNames.IsEmpty())
+        {
+            ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
+            ResultInfo.UserMessage = TEXT("No import/export columns are configured.");
+            ResultInfo.DebugMessage = TEXT("The vocabulary schema contains no ImportExport columns.");
 
-        OutBytes.Append(reinterpret_cast<const uint8*>(CsvTemplate), ByteCount);
+            return ResultInfo;
+        }
+
+        FString CsvTemplate = FString::Join(ColumnNames, TEXT(","));
+
+        CsvTemplate += TEXT("\r\n");
+
+        const FTCHARToUTF8 Utf8Converter(*CsvTemplate);
+
+        OutBytes.Append(reinterpret_cast<const uint8*>(Utf8Converter.Get()), Utf8Converter.Length());
 
         ResultInfo.Result = EEVFileExchangeResult::Success;
         ResultInfo.ByteSize = OutBytes.Num();
         ResultInfo.UserMessage = TEXT("Database template generated successfully.");
-        ResultInfo.DebugMessage = TEXT("CSV template generated.");
+        ResultInfo.DebugMessage = TEXT("CSV template generated from the database schema.");
 
         return ResultInfo;
     }
@@ -316,6 +334,161 @@ UEVVocabularyStorageService::GenerateDatabaseExportTemplate(EEVFileExtensionType
         ResultInfo.Result = EEVFileExchangeResult::InvalidExtension;
         ResultInfo.UserMessage = TEXT("Unsupported export template format.");
         ResultInfo.DebugMessage = TEXT("GenerateDatabaseExportTemplate received unsupported file extension.");
+
+        return ResultInfo;
+    }
+}
+
+bool UEVVocabularyStorageService::GetImportExportRows(TArray<FString>& OutColumnNames,
+                                                      TArray<FEVDatabaseExportRow>& OutRows)
+{
+    OutColumnNames.Reset();
+    OutRows.Reset();
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot read import/export rows: database is invalid"));
+
+        return false;
+    }
+
+    OutColumnNames = FEVVocabularyDatabaseSchema::GetImportExportColumnNames();
+
+    if (OutColumnNames.IsEmpty())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot read import/export rows: no import/export columns are configured"));
+
+        return false;
+    }
+
+    const FString SelectQuery = FEVVocabularySqlQueries::GetSelectImportExportColumnsQuery();
+
+    if (SelectQuery.IsEmpty())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot read import/export rows: SELECT query is empty"));
+
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, *SelectQuery, ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create import/export SELECT statement"));
+
+        return false;
+    }
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FEVDatabaseExportRow Row;
+        Row.Values.Reserve(OutColumnNames.Num());
+
+        for (int32 ColumnIndex = 0; ColumnIndex < OutColumnNames.Num(); ++ColumnIndex)
+        {
+            FString Value;
+
+            if (!Statement.GetColumnValueByIndex(ColumnIndex, Value))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to read import/export column at index %d"), ColumnIndex);
+
+                OutRows.Reset();
+                return false;
+            }
+
+            Row.Values.Add(MoveTemp(Value));
+        }
+
+        OutRows.Add(MoveTemp(Row));
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Loaded %d import/export rows with %d columns"), OutRows.Num(), OutColumnNames.Num());
+
+    return true;
+}
+
+FEVFileExchangeResultInfo UEVVocabularyStorageService::GenerateDatabaseExport(EEVFileExtensionType FileExtensionType,
+                                                                              TArray<uint8>& OutBytes)
+{
+    FEVFileExchangeResultInfo ResultInfo;
+
+    OutBytes.Reset();
+
+    switch (FileExtensionType)
+    {
+    case EEVFileExtensionType::Csv:
+    {
+        TArray<FString> ColumnNames;
+        TArray<FEVDatabaseExportRow> Rows;
+
+        if (!GetImportExportRows(ColumnNames, Rows))
+        {
+            ResultInfo.Result = EEVFileExchangeResult::DatabaseQueryFailed;
+            ResultInfo.UserMessage = TEXT("Failed to read database data for export.");
+            ResultInfo.DebugMessage = TEXT("GetImportExportRows returned false.");
+
+            return ResultInfo;
+        }
+
+        auto EscapeCsvField = [](const FString& Value) -> FString
+        {
+            FString EscapedValue = Value;
+
+            EscapedValue.ReplaceInline(TEXT("\""), TEXT("\"\""));
+
+            return FString::Printf(TEXT("\"%s\""), *EscapedValue);
+        };
+
+        FString CsvContent;
+
+        CsvContent += FString::Join(ColumnNames, TEXT(","));
+
+        CsvContent += TEXT("\r\n");
+
+        for (const FEVDatabaseExportRow& Row : Rows)
+        {
+            if (Row.Values.Num() != ColumnNames.Num())
+            {
+                ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
+                ResultInfo.UserMessage = TEXT("Database export data is inconsistent.");
+                ResultInfo.DebugMessage =
+                    FString::Printf(TEXT("Export row contains %d values, but %d columns were expected."),
+                                    Row.Values.Num(), ColumnNames.Num());
+
+                OutBytes.Reset();
+                return ResultInfo;
+            }
+
+            TArray<FString> EscapedValues;
+            EscapedValues.Reserve(Row.Values.Num());
+
+            for (const FString& Value : Row.Values)
+            {
+                EscapedValues.Add(EscapeCsvField(Value));
+            }
+
+            CsvContent += FString::Join(EscapedValues, TEXT(","));
+
+            CsvContent += TEXT("\r\n");
+        }
+
+        const FTCHARToUTF8 Utf8Converter(*CsvContent);
+
+        OutBytes.Append(reinterpret_cast<const uint8*>(Utf8Converter.Get()), Utf8Converter.Length());
+
+        ResultInfo.Result = EEVFileExchangeResult::Success;
+        ResultInfo.ByteSize = OutBytes.Num();
+        ResultInfo.UserMessage = TEXT("Database export generated successfully.");
+        ResultInfo.DebugMessage =
+            FString::Printf(TEXT("CSV export generated with %d rows and %d columns."), Rows.Num(), ColumnNames.Num());
+
+        return ResultInfo;
+    }
+
+    default:
+        ResultInfo.Result = EEVFileExchangeResult::InvalidExtension;
+        ResultInfo.UserMessage = TEXT("Unsupported database export format.");
+        ResultInfo.DebugMessage = TEXT("GenerateDatabaseExport received an unsupported file extension.");
 
         return ResultInfo;
     }

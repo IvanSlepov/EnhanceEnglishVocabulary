@@ -8,6 +8,7 @@
 #include "EVWebProviderTypes.h"
 #include "EVFileExchangeTypes.h"
 #include "EVRequestedActionTypes.h"
+#include "EVFileExchangeDefaults.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -113,6 +114,8 @@ private:
     void HandleImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes);
 
     FEVRequestedActionInfo HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo);
+
+    FEVRequestedActionInfo HandleExportDBRequested(const FEVFileOperationInfo& FileOperationInfo);
 
     FEVRequestedActionInfo
     ConvertFileExchangeResultToRequestedAction(const FEVFileExchangeResultInfo& ResultInfo) const;

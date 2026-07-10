@@ -63,4 +63,7 @@ private:
 
     UFUNCTION()
     void HandleDownloadDBTemplate();
+
+    UFUNCTION()
+    void HandleExportDB();
 };

@@ -17,5 +17,15 @@ public class EnhanceVocabularyDevice: ModuleRules
             "Engine", 
             "EnhanceVocabularyCore"
         });
+
+        if (Target.Platform == UnrealTargetPlatform.Android)
+        {
+            PrivateDependencyModuleNames.Add("Launch");
+
+            AdditionalPropertiesForReceipt.Add(
+                "AndroidPlugin",
+                System.IO.Path.Combine(ModuleDirectory, "EVDevice_Android_UPL.xml")
+            );
+        }
     }
 }
