@@ -31,10 +31,16 @@ public:
     class UButton* Button_DownloadDBTemplate;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UComboBoxString* ComboBoxString_ImportDB_Options;
+    class UComboBoxString* ComboBoxString_ImportDB_OVERWRITE_Options;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_StartDBImport;
+    class UButton* Button_StartDBImport_OVERWRITE;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UComboBoxString* ComboBoxString_ImportDB_APPEND_Options;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_StartDBImport_APPEND;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UComboBoxString* ComboBoxString_ExportDB_Options;
@@ -46,7 +52,8 @@ public:
     FOnFileOperationSelected OnFileOperationSelected;
 
 public:
-    FEVFileOperationInfo GetImportDBExtensionType();
+    FEVFileOperationInfo GetImportDB_Overwrite_ExtensionType();
+    FEVFileOperationInfo GetImportDB_Append_ExtensionType();
     FEVFileOperationInfo GetExportDBExtensionType();
     FEVFileOperationInfo GetDownloadDBTemplateExtensionType();
 
@@ -66,4 +73,10 @@ private:
 
     UFUNCTION()
     void HandleExportDB();
+
+    UFUNCTION()
+    void HandleImport_OverwriteDB();
+
+    UFUNCTION()
+    void HandleImport_AppendDB();
 };

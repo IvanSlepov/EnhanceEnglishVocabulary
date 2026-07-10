@@ -23,6 +23,24 @@ void UEVSelectImpExpDBOptionsWidget::NativeOnInitialized()
     {
         UE_LOG(LogTemp, Error, TEXT("Button_StartDBExport is nullptr in EVSelectImpExpDBOptionsWidget.cpp"));
     }
+
+    if (Button_StartDBImport_OVERWRITE)
+    {
+        Button_StartDBImport_OVERWRITE->OnPressed.AddDynamic(this, &ThisClass::HandleImport_OverwriteDB);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Button_StartDBImport_OVERWRITE is nullptr in EVSelectImpExpDBOptionsWidget.cpp"));
+    }
+
+    if (Button_StartDBImport_APPEND)
+    {
+        Button_StartDBImport_APPEND->OnPressed.AddDynamic(this, &ThisClass::HandleImport_AppendDB);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Button_StartDBImport_APPEND is nullptr in EVSelectImpExpDBOptionsWidget.cpp"));
+    }
 }
 
 void UEVSelectImpExpDBOptionsWidget::NativePreConstruct()
@@ -38,15 +56,16 @@ void UEVSelectImpExpDBOptionsWidget::NativeConstruct()
 
 void UEVSelectImpExpDBOptionsWidget::PopulateFileExtensionOptionsComboBoxes()
 {
-    if (!ComboBoxString_DownloadDBTemplate_Options || !ComboBoxString_ImportDB_Options ||
-        !ComboBoxString_ExportDB_Options)
+    if (!ComboBoxString_DownloadDBTemplate_Options || !ComboBoxString_ImportDB_OVERWRITE_Options ||
+        !ComboBoxString_ImportDB_APPEND_Options || !ComboBoxString_ExportDB_Options)
     {
         UE_LOG(LogTemp, Error, TEXT("File extensions combo boxes are not bound in WBP_SelectImpExpDBOptionsWidget"));
         return;
     }
 
     ComboBoxString_DownloadDBTemplate_Options->ClearOptions();
-    ComboBoxString_ImportDB_Options->ClearOptions();
+    ComboBoxString_ImportDB_OVERWRITE_Options->ClearOptions();
+    ComboBoxString_ImportDB_APPEND_Options->ClearOptions();
     ComboBoxString_ExportDB_Options->ClearOptions();
 
     const TArray<EEVFileExtensionType> AvailableFileExtensions = FEVFileOperationInfo::GetAllAvailableFileExtensions();
@@ -56,13 +75,16 @@ void UEVSelectImpExpDBOptionsWidget::PopulateFileExtensionOptionsComboBoxes()
         const FString ExtensionName = FileExtensionNameEnumToString(FileExtensionType);
 
         ComboBoxString_DownloadDBTemplate_Options->AddOption(ExtensionName);
-        ComboBoxString_ImportDB_Options->AddOption(ExtensionName);
+        ComboBoxString_ImportDB_OVERWRITE_Options->AddOption(ExtensionName);
+        ComboBoxString_ImportDB_APPEND_Options->AddOption(ExtensionName);
         ComboBoxString_ExportDB_Options->AddOption(ExtensionName);
     }
 
     ComboBoxString_DownloadDBTemplate_Options->SetSelectedOption(
         FileExtensionNameEnumToString(EEVFileExtensionType::Csv));
-    ComboBoxString_ImportDB_Options->SetSelectedOption(FileExtensionNameEnumToString(EEVFileExtensionType::Csv));
+    ComboBoxString_ImportDB_OVERWRITE_Options->SetSelectedOption(
+        FileExtensionNameEnumToString(EEVFileExtensionType::Csv));
+    ComboBoxString_ImportDB_APPEND_Options->SetSelectedOption(FileExtensionNameEnumToString(EEVFileExtensionType::Csv));
     ComboBoxString_ExportDB_Options->SetSelectedOption(FileExtensionNameEnumToString(EEVFileExtensionType::Csv));
 }
 
@@ -112,9 +134,52 @@ void UEVSelectImpExpDBOptionsWidget::HandleExportDB()
     OnFileOperationSelected.Broadcast(GetExportDBExtensionType());
 }
 
-FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetImportDBExtensionType()
+void UEVSelectImpExpDBOptionsWidget::HandleImport_OverwriteDB()
 {
-    return FEVFileOperationInfo();
+    OnFileOperationSelected.Broadcast(GetImportDB_Overwrite_ExtensionType());
+}
+
+void UEVSelectImpExpDBOptionsWidget::HandleImport_AppendDB()
+{
+    OnFileOperationSelected.Broadcast(GetImportDB_Append_ExtensionType());
+}
+
+FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetImportDB_Overwrite_ExtensionType()
+{
+    if (ComboBoxString_ImportDB_OVERWRITE_Options)
+    {
+        FEVFileOperationInfo EVFileOperationInfo;
+        EVFileOperationInfo.OperationType = EEVFileOperationType::ImportDBOverwrite;
+        EVFileOperationInfo.FileExtensionType =
+            FileExtensionNameStringToEnum(ComboBoxString_ImportDB_OVERWRITE_Options->GetSelectedOption());
+
+        return EVFileOperationInfo;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error,
+               TEXT("ComboBoxString_ImportDB_OVERWRITE_Options is nullptr EVSelectImpExpDBOptionsWidget.cpp"));
+        return FEVFileOperationInfo();
+    }
+}
+
+FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetImportDB_Append_ExtensionType()
+{
+    if (ComboBoxString_ImportDB_APPEND_Options)
+    {
+        FEVFileOperationInfo EVFileOperationInfo;
+        EVFileOperationInfo.OperationType = EEVFileOperationType::ImportDBAppend;
+        EVFileOperationInfo.FileExtensionType =
+            FileExtensionNameStringToEnum(ComboBoxString_ImportDB_APPEND_Options->GetSelectedOption());
+
+        return EVFileOperationInfo;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error,
+               TEXT("ComboBoxString_ImportDB_APPEND_Options is nullptr EVSelectImpExpDBOptionsWidget.cpp"));
+        return FEVFileOperationInfo();
+    }
 }
 
 FEVFileOperationInfo UEVSelectImpExpDBOptionsWidget::GetExportDBExtensionType()

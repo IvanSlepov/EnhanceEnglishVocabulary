@@ -39,6 +39,8 @@ enum class EEVFileExchangeResult : uint8
     StorageValidationFailed,
     DatabaseTransactionFailed,
     DatabaseQueryFailed,
+    DuplicateWordsInFile,
+    DuplicateWordsInFIleAndDB,
     UnknownError
 };
 

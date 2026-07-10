@@ -94,6 +94,10 @@ private:
     // we'll retreat to displaying FEVWordEntryActionInfo CachedWordEntryWidgetInfo
     FVocabularyEntry CachedConfirmedWordEntry;
 
+    FEVFileOperationInfo PendingFileOperationInfo;
+
+    EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
 

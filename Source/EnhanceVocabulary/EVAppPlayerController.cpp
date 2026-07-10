@@ -257,9 +257,27 @@ void AEVAppPlayerController::HandleIssuedFileOperation(const FEVFileOperationInf
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in EVAppPlayerController"));
+
         return;
     }
 
+    switch (IssuedFileOperation.OperationType)
+    {
+    case EEVFileOperationType::ImportDBOverwrite:
+    {
+        PendingFileOperationInfo = IssuedFileOperation;
+
+        // Do not show the spinner while waiting for confirmation.
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::OverwriteDB, EEVWordEntryActionType::Unknown);
+
+        return;
+    }
+
+    default:
+        break;
+    }
+
+    // Existing Download Template / Export flow.
     HandleLoadingSpinner(true);
 
     const FEVRequestedActionInfo RequestedActionInfo =
@@ -318,7 +336,11 @@ void AEVAppPlayerController::HandleDetailedDeleteButtonPressed()
 void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialogType DialogType,
                                                             EEVWordEntryActionType PendingActionType)
 {
+    PendingConfirmationDialogType = DialogType;
+
     CachedWordEntryWidgetInfo.ActionType = PendingActionType;
+
+    // Existing implementation continues unchanged...
 
     if (!ConfirmationDialogWidgetClass)
     {
@@ -363,6 +385,10 @@ void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialo
 
 void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed)
 {
+    const EEVConfirmationDialogType ConfirmedDialogType = PendingConfirmationDialogType;
+
+    PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+
     if (ConfirmationDialogWidgetInstance)
     {
         ConfirmationDialogWidgetInstance->RemoveFromParent();
@@ -370,6 +396,45 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
         ConfirmationDialogWidget = nullptr;
     }
 
+    /*
+     * Import DB — Overwrite
+     */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::OverwriteDB)
+    {
+        if (!bIsOperationConfirmed)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite cancelled by user."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+
+            return;
+        }
+
+        if (PendingFileOperationInfo.OperationType != EEVFileOperationType::ImportDBOverwrite)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Overwrite confirmation received without a pending overwrite operation."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite confirmed. Extension: %d"),
+               static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
+
+        /*
+         * The Editor file picker will be started here
+         * in the next change.
+         */
+
+        PendingFileOperationInfo = FEVFileOperationInfo();
+
+        return;
+    }
+
+    /*
+     * Existing word-entry confirmation flow
+     */
     if (!bIsOperationConfirmed)
     {
         if (CachedWordEntryWidgetInfo.ActionType == EEVWordEntryActionType::SaveEditedEntry)
@@ -379,7 +444,9 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
             if (DetailedWordEntryDisplay)
             {
                 DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedWordEntry);
+
                 DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
+
                 DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
             }
         }
@@ -393,14 +460,13 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
         if (DetailedWordEntryWidgetInstance)
         {
             DetailedWordEntryWidgetInstance->RemoveFromParent();
+
             DetailedWordEntryWidgetInstance = nullptr;
             DetailedWordEntryDisplay = nullptr;
         }
         break;
 
     case EEVWordEntryActionType::SaveEditedEntry:
-        // Save CachedWordEntryWidgetInfo.EntryInfo here.
-        // Keep DetailedWordEntryWidgetInstance alive.
         ProcessConfirmedWordUpdate();
         break;
 
