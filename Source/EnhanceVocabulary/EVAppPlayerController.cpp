@@ -273,6 +273,14 @@ void AEVAppPlayerController::HandleIssuedFileOperation(const FEVFileOperationInf
 
         return;
     }
+    case EEVFileOperationType::ImportDBAppend:
+    {
+        PendingFileOperationInfo = IssuedFileOperation;
+
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::AppendDB, EEVWordEntryActionType::Unknown);
+
+        return;
+    }
 
     default:
         break;
@@ -498,6 +506,39 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
 
             PendingFileOperationInfo = FEVFileOperationInfo();
         }
+
+        return;
+    }
+
+    /*
+     * Import DB — Append
+     */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::AppendDB)
+    {
+        if (!bIsOperationConfirmed)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Import DB append cancelled by user."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+
+            return;
+        }
+
+        if (PendingFileOperationInfo.OperationType != EEVFileOperationType::ImportDBAppend)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Append confirmation received without a pending append operation."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Import DB append confirmed. Extension: %d"),
+               static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
+
+        /*
+         * File picker wiring comes in the next change.
+         */
 
         return;
     }
