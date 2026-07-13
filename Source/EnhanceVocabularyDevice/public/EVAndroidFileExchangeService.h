@@ -28,6 +28,9 @@ public:
     void HandleAndroidFileSaveCompleted(bool bSuccess, bool bCancelled, const FString& FileName,
                                         const FString& ErrorMessage);
 
+    void HandleAndroidImportFilePicked(bool bSuccess, bool bCancelled, const FString& FileName,
+                                       const TArray<uint8>& Bytes, const FString& ErrorMessage);
+
     virtual void LoadBytesFromUserSelectedLocation(EEVFileExtensionType FileExtensionType) override;
 
 private:

@@ -97,6 +97,8 @@ public:
 
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
+    virtual void HandleReviewWordsRefresh() override;
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;

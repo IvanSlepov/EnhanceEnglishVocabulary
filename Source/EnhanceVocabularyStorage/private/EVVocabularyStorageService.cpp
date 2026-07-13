@@ -498,13 +498,15 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::GenerateDatabaseExport(EE
 
 FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFileExtensionType FileExtensionType,
                                                                           const TArray<uint8>& Bytes,
-                                                                          TArray<uint8>& OutValidationReportBytes)
+                                                                          TArray<uint8>& OutValidationReportBytes,
+                                                                          TArray<FVocabularyEntry>& OutValidatedEntries)
 {
     FEVFileExchangeResultInfo ResultInfo;
 
     ResultInfo.ByteSize = Bytes.Num();
 
     OutValidationReportBytes.Reset();
+    OutValidatedEntries.Reset();
 
     if (FileExtensionType != EEVFileExtensionType::Csv)
     {
@@ -605,6 +607,9 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
     TMap<FString, int32> FirstRowByNormalizedWord;
     TSet<FString> ReportedDuplicateWords;
 
+    TArray<FVocabularyEntry> ValidatedEntries;
+    ValidatedEntries.Reserve(ParsedRows.Num() - 1);
+
     for (int32 RowIndex = 1; RowIndex < ParsedRows.Num(); ++RowIndex)
     {
         const TArray<const TCHAR*>& Row = ParsedRows[RowIndex];
@@ -660,12 +665,37 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
         }
 
         FirstRowByNormalizedWord.Add(NormalizedWord, CsvRowNumber);
+
+        FVocabularyEntry Entry;
+        Entry.Word = NormalizedWord;
+
+        if (Row.Num() > 1)
+        {
+            Entry.Definition = FString(Row[1]);
+        }
+
+        if (Row.Num() > 2)
+        {
+            Entry.Usage = FString(Row[2]);
+        }
+
+        if (Row.Num() > 3)
+        {
+            Entry.TranslationRu = FString(Row[3]);
+        }
+
+        if (Row.Num() > 4)
+        {
+            Entry.TranslationUa = FString(Row[4]);
+        }
+
+        ValidatedEntries.Add(MoveTemp(Entry));
     }
 
     if (!InvalidEntries.IsEmpty())
     {
         const FEVFileExchangeResultInfo ReportResult =
-            GenerateValidationFailureReport(FileExtensionType, InvalidEntries, OutValidationReportBytes);
+            GenerateValidationReport(FileExtensionType, InvalidEntries, OutValidationReportBytes);
 
         if (!ReportResult.IsSuccess())
         {
@@ -698,7 +728,7 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
     if (!DuplicateEntries.IsEmpty())
     {
         const FEVFileExchangeResultInfo ReportResult =
-            GenerateValidationFailureReport(FileExtensionType, DuplicateEntries, OutValidationReportBytes);
+            GenerateValidationReport(FileExtensionType, DuplicateEntries, OutValidationReportBytes);
 
         if (!ReportResult.IsSuccess())
         {
@@ -727,19 +757,126 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
         return ResultInfo;
     }
 
+    OutValidatedEntries = MoveTemp(ValidatedEntries);
+
     ResultInfo.Result = EEVFileExchangeResult::Success;
 
     ResultInfo.UserMessage = TEXT("Import file passed validation.");
 
-    ResultInfo.DebugMessage = FString::Printf(TEXT("CSV validation succeeded for %d data rows."), ParsedRows.Num() - 1);
+    ResultInfo.DebugMessage = FString::Printf(TEXT("CSV validation succeeded and produced %d vocabulary entries."),
+                                              OutValidatedEntries.Num());
+
+    return ResultInfo;
+}
+
+FEVFileExchangeResultInfo UEVVocabularyStorageService::OverwriteDatabase(const TArray<FVocabularyEntry>& Entries)
+{
+    FEVFileExchangeResultInfo ResultInfo;
+
+    if (!Database.IsValid())
+    {
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The database is unavailable.");
+
+        ResultInfo.DebugMessage = TEXT("OverwriteDatabase received an invalid database.");
+
+        return ResultInfo;
+    }
+
+    if (Entries.IsEmpty())
+    {
+        ResultInfo.Result = EEVFileExchangeResult::EmptyFile;
+
+        ResultInfo.UserMessage = TEXT("There are no vocabulary entries to import.");
+
+        ResultInfo.DebugMessage = TEXT("OverwriteDatabase received an empty entry array.");
+
+        return ResultInfo;
+    }
+
+    if (!Database.Execute(TEXT("BEGIN TRANSACTION;")))
+    {
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The database overwrite could not be started.");
+
+        ResultInfo.DebugMessage = TEXT("Failed to begin the overwrite transaction.");
+
+        return ResultInfo;
+    }
+
+    auto RollbackTransaction = [this]()
+    {
+        if (!Database.Execute(TEXT("ROLLBACK;")))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to roll back the database overwrite transaction."));
+        }
+    };
+
+    const FString DeleteAllQuery =
+        FString::Printf(TEXT("DELETE FROM %s;"), *FEVVocabularyDatabaseSchema::GetTableName());
+
+    if (!Database.Execute(*DeleteAllQuery))
+    {
+        RollbackTransaction();
+
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The current database could not be cleared.");
+
+        ResultInfo.DebugMessage = FString::Printf(TEXT("Failed to delete existing rows from table '%s'."),
+                                                  *FEVVocabularyDatabaseSchema::GetTableName());
+
+        return ResultInfo;
+    }
+
+    for (int32 EntryIndex = 0; EntryIndex < Entries.Num(); ++EntryIndex)
+    {
+        const FVocabularyEntry& Entry = Entries[EntryIndex];
+
+        if (!SaveVocabularyEntry(Entry))
+        {
+            RollbackTransaction();
+
+            ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+            ResultInfo.UserMessage = TEXT("The imported entries could not be written to the database.");
+
+            ResultInfo.DebugMessage = FString::Printf(TEXT("Failed to insert imported entry %d of %d. Word: '%s'."),
+                                                      EntryIndex + 1, Entries.Num(), *Entry.Word);
+
+            return ResultInfo;
+        }
+    }
+
+    if (!Database.Execute(TEXT("COMMIT;")))
+    {
+        RollbackTransaction();
+
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The database overwrite could not be completed.");
+
+        ResultInfo.DebugMessage = TEXT("Failed to commit the overwrite transaction.");
+
+        return ResultInfo;
+    }
+
+    ResultInfo.Result = EEVFileExchangeResult::Success;
+
+    ResultInfo.UserMessage = TEXT("The database was overwritten successfully.");
+
+    ResultInfo.DebugMessage =
+        FString::Printf(TEXT("Database overwrite committed successfully with %d entries."), Entries.Num());
 
     return ResultInfo;
 }
 
 FEVFileExchangeResultInfo
-UEVVocabularyStorageService::GenerateValidationFailureReport(EEVFileExtensionType FileExtensionType,
-                                                             const TArray<FEVValidationFailedEntry>& InvalidEntries,
-                                                             TArray<uint8>& OutBytes)
+UEVVocabularyStorageService::GenerateValidationReport(EEVFileExtensionType FileExtensionType,
+                                                      const TArray<FEVValidationFailedEntry>& InvalidEntries,
+                                                      TArray<uint8>& OutBytes)
 {
     FEVFileExchangeResultInfo ResultInfo;
 

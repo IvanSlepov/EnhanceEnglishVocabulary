@@ -15,6 +15,9 @@
       import java.io.OutputStream;
       import java.io.FileInputStream;
       import java.io.FileOutputStream;
+      import java.io.ByteArrayOutputStream;
+      import android.database.Cursor;
+      import android.provider.OpenableColumns;
     </insert>
 
   </gameActivityImportAdditions>
@@ -57,6 +60,24 @@
       String fileName,
       String errorMessage);
 
+      public void AndroidThunkJava_EV_PickImportFile(String mimeType)
+      {
+      Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+      intent.addCategory(Intent.CATEGORY_OPENABLE);
+      intent.setType("*/*");
+
+      startActivityForResult(
+      intent,
+      EV_REQUEST_OPEN_DOCUMENT);
+      }
+
+      public native void nativeEVImportFilePicked(
+      boolean bSuccess,
+      boolean bCancelled,
+      String fileName,
+      byte[] bytes,
+      String errorMessage);
+
     </insert>
 
   </gameActivityClassAdditions>
@@ -64,6 +85,119 @@
 
     <insert>
       <![CDATA[
+          if (requestCode == EV_REQUEST_OPEN_DOCUMENT)
+          {
+              boolean bEVImportSucceeded = false;
+              boolean bEVImportCancelled = resultCode != Activity.RESULT_OK;
+
+              String EVImportFileName = "";
+              String EVImportErrorMessage = "";
+              byte[] EVImportBytes = null;
+
+              try
+              {
+                  if (!bEVImportCancelled &&
+                      data != null &&
+                      data.getData() != null)
+                  {
+                      Uri sourceUri = data.getData();
+
+                      try (Cursor cursor = getContentResolver().query(
+                               sourceUri,
+                               null,
+                               null,
+                               null,
+                               null))
+                      {
+                          if (cursor != null &&
+                              cursor.moveToFirst())
+                          {
+                              int columnIndex =
+                                  cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+
+                              if (columnIndex >= 0)
+                              {
+                                  String displayName =
+                                      cursor.getString(columnIndex);
+
+                                  if (displayName != null)
+                                  {
+                                      EVImportFileName = displayName;
+                                  }
+                              }
+                          }
+                      }
+
+                      if (EVImportFileName.isEmpty())
+                      {
+                          EVImportFileName =
+                              sourceUri.getLastPathSegment();
+                      }
+
+                      try (InputStream inputStream =
+                               getContentResolver().openInputStream(sourceUri))
+                      {
+                          if (inputStream != null)
+                          {
+                              ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+
+                              byte[] buffer = new byte[8192];
+                              int bytesRead;
+
+                              while ((bytesRead = inputStream.read(buffer)) != -1)
+                              {
+                                  byteStream.write(buffer, 0, bytesRead);
+                              }
+
+                              EVImportBytes = byteStream.toByteArray();
+
+                              if (EVImportBytes.length > 0)
+                              {
+                                  bEVImportSucceeded = true;
+                              }
+                              else
+                              {
+                                  EVImportErrorMessage =
+                                      "The selected file is empty.";
+                              }
+                          }
+                          else
+                          {
+                              EVImportErrorMessage =
+                                  "ContentResolver returned a null InputStream.";
+                          }
+                      }
+                  }
+                  else if (!bEVImportCancelled)
+                  {
+                      EVImportErrorMessage =
+                          "Missing source URI.";
+                  }
+              }
+              catch (Exception exception)
+              {
+                  EVImportErrorMessage =
+                      exception.getClass().getSimpleName() +
+                      ": " +
+                      exception.getMessage();
+
+                  exception.printStackTrace();
+              }
+
+              if (EVImportBytes == null)
+              {
+                  EVImportBytes = new byte[0];
+              }
+
+              nativeEVImportFilePicked(
+                  bEVImportSucceeded,
+                  bEVImportCancelled,
+                  EVImportFileName,
+                  EVImportBytes,
+                  EVImportErrorMessage);
+
+              return;
+          }
 
           if (requestCode == EV_REQUEST_CREATE_DOCUMENT)
           {

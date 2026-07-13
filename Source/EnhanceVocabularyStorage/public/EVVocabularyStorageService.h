@@ -57,11 +57,14 @@ public:
     FEVFileExchangeResultInfo GenerateDatabaseExport(EEVFileExtensionType FileExtensionType, TArray<uint8>& OutBytes);
 
     FEVFileExchangeResultInfo ValidateImportFile(EEVFileExtensionType FileExtensionType, const TArray<uint8>& Bytes,
-                                                 TArray<uint8>& OutValidationReportBytes);
+                                                 TArray<uint8>& OutValidationReportBytes,
+                                                 TArray<FVocabularyEntry>& OutValidatedEntries);
 
-    FEVFileExchangeResultInfo GenerateValidationFailureReport(EEVFileExtensionType FileExtensionType,
-                                                              const TArray<FEVValidationFailedEntry>& InvalidEntries,
-                                                              TArray<uint8>& OutBytes);
+    FEVFileExchangeResultInfo OverwriteDatabase(const TArray<FVocabularyEntry>& Entries);
+
+    FEVFileExchangeResultInfo GenerateValidationReport(EEVFileExtensionType FileExtensionType,
+                                                       const TArray<FEVValidationFailedEntry>& InvalidEntries,
+                                                       TArray<uint8>& OutBytes);
 
 private:
     FSQLiteDatabase Database;

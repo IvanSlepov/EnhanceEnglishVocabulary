@@ -324,12 +324,26 @@ void AEVAppPlayerController::HandleImportFilePickCompleted(const FEVFileExchange
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Import file selected successfully: %s"), *ResultInfo.FileName);
+    FEVRequestedActionInfo ActionInfo;
 
-    /*
-     * Keep PendingFileOperationInfo for now.
-     * The actual overwrite import logic will use it next.
-     */
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+
+    ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+
+    ActionInfo.Status = EEVRequestedActionStatus::Completed;
+
+    ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
+
+    ActionInfo.GenerateColor();
+
+    HandleActionStatusWidget(ActionInfo);
+
+    PendingFileOperationInfo = FEVFileOperationInfo();
+
+    if (WidgetCommonEvents)
+    {
+        WidgetCommonEvents->HandleReviewWordsRefresh();
+    }
 }
 
 void AEVAppPlayerController::HandleDetailedViewButtonPressed()

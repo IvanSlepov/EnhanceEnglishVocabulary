@@ -81,4 +81,6 @@ public:
     }
 
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) {}
+
+    virtual void HandleReviewWordsRefresh() {}
 };

@@ -405,9 +405,10 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
     }
 
     TArray<uint8> ValidationReportBytes;
+    TArray<FVocabularyEntry> ValidatedEntries;
 
     FEVFileExchangeResultInfo ValidationResult = VocabularyStorageService->ValidateImportFile(
-        PendingImportFileOperationInfo.FileExtensionType, Bytes, ValidationReportBytes);
+        PendingImportFileOperationInfo.FileExtensionType, Bytes, ValidationReportBytes, ValidatedEntries);
 
     ValidationResult.FileName = ResultInfo.FileName;
 
@@ -466,16 +467,29 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
     /*
      * Validation failed without generating a report.
      */
+    /*
+     * Validation failed without generating a report.
+     */
     if (!ValidationResult.IsSuccess())
     {
         PendingImportFileOperationInfo = FEVFileOperationInfo();
+
+        ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
+
+        return;
     }
 
     /*
-     * At the moment, successful validation stops here.
-     * The actual overwrite transaction will be added later.
+     * Validation succeeded. Perform the atomic database overwrite.
      */
-    ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
+    FEVFileExchangeResultInfo OverwriteResult = VocabularyStorageService->OverwriteDatabase(ValidatedEntries);
+
+    OverwriteResult.FileName = ResultInfo.FileName;
+    OverwriteResult.ByteSize = Bytes.Num();
+
+    PendingImportFileOperationInfo = FEVFileOperationInfo();
+
+    ImportFilePickCompletedDelegate.Broadcast(OverwriteResult);
 }
 
 FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo)

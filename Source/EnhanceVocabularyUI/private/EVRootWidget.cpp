@@ -356,6 +356,18 @@ void UEVRootWidget::HandleOnImportExportDownloadDBOperationIssued(
     OnImportExportDownloadDBOperationIssued.Broadcast(FileOperationInfoFromSelectorWidget);
 }
 
+void UEVRootWidget::HandleReviewWordsRefresh()
+{
+    if (!ReviewWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot refresh Review Words: ReviewWords is null."));
+
+        return;
+    }
+
+    ReviewWords->DisplayWords();
+}
+
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
                                                EEVConnectionState ConnectionState)
 {
