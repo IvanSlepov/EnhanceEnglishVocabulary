@@ -513,6 +513,9 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
     /*
      * Import DB — Append
      */
+    /*
+     * Import DB — Append
+     */
     if (ConfirmedDialogType == EEVConfirmationDialogType::AppendDB)
     {
         if (!bIsOperationConfirmed)
@@ -520,7 +523,6 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
             UE_LOG(LogTemp, Warning, TEXT("Import DB append cancelled by user."));
 
             PendingFileOperationInfo = FEVFileOperationInfo();
-
             return;
         }
 
@@ -529,16 +531,32 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
             UE_LOG(LogTemp, Error, TEXT("Append confirmation received without a pending append operation."));
 
             PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
 
+        if (!EVGameInstance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Cannot start append import: EVGameInstance is null."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
             return;
         }
 
         UE_LOG(LogTemp, Warning, TEXT("Import DB append confirmed. Extension: %d"),
                static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
 
-        /*
-         * File picker wiring comes in the next change.
-         */
+        HandleLoadingSpinner(true);
+
+        const FEVRequestedActionInfo RequestedActionInfo =
+            EVGameInstance->HandleFileOperationRequested(PendingFileOperationInfo);
+
+        if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
+        {
+            HandleLoadingSpinner(false);
+            HandleActionStatusWidget(RequestedActionInfo);
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+        }
 
         return;
     }

@@ -62,6 +62,10 @@ public:
 
     FEVFileExchangeResultInfo OverwriteDatabase(const TArray<FVocabularyEntry>& Entries);
 
+    FEVFileExchangeResultInfo AppendDatabase(EEVFileExtensionType FileExtensionType,
+                                             const TArray<FVocabularyEntry>& Entries,
+                                             TArray<uint8>& OutValidationReportBytes);
+
     FEVFileExchangeResultInfo GenerateValidationReport(EEVFileExtensionType FileExtensionType,
                                                        const TArray<FEVValidationFailedEntry>& InvalidEntries,
                                                        TArray<uint8>& OutBytes);
@@ -69,4 +73,5 @@ public:
 private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
+    bool InsertVocabularyEntryStrict(const FVocabularyEntry& Entry);
 };

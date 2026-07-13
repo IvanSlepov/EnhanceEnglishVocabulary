@@ -10,8 +10,7 @@ enum class EEVConfirmationDialogType : uint8
     ExitViewWord UMETA(DisplayName = "Exit the Detailed View mode?"),
     EditWord UMETA(DisplayName = "Overwrite the existing word's fields?"),
     DeleteWord UMETA(DisplayName = "Are you sure you want to delete this word?"),
-    OverwriteDB UMETA(DisplayName = "Warning! You are about to overwrite your current DataBase. We strongly recommend "
-                                    "to EXPORT it before proceeding!"),
+    OverwriteDB UMETA(DisplayName = "Warning! You are about to overwrite your current DataBase. We strongly recommend to EXPORT it before proceeding!"),
     AppendDB UMETA(DisplayName = "Append imported data to the current DataBase?")
 };
 

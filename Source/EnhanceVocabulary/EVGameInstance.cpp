@@ -243,6 +243,9 @@ FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFi
     case EEVFileOperationType::ImportDBOverwrite:
         return HandleImportDBOverwriteRequested(FileOperationInfo);
 
+    case EEVFileOperationType::ImportDBAppend:
+        return HandleImportDBAppendRequested(FileOperationInfo);
+
     default:
     {
         FEVRequestedActionInfo ActionInfo;
@@ -303,7 +306,19 @@ void UEVGameInstance::HandleFileSaved(const FEVFileExchangeResultInfo& ResultInf
     {
         FEVRequestedActionInfo ActionInfo;
         ActionInfo.Source = EEVRequestedActionSource::ImportExport;
-        ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+
+        switch (PendingImportFileOperationInfo.OperationType)
+        {
+        case EEVFileOperationType::ImportDBAppend:
+            ActionInfo.Type = EEVRequestedActionType::ImportDBAppend;
+            break;
+
+        case EEVFileOperationType::ImportDBOverwrite:
+        default:
+            ActionInfo.Type = EEVRequestedActionType::Unknown;
+            break;
+        }
+
         ActionInfo.Status = EEVRequestedActionStatus::Failed;
 
         if (ResultInfo.IsSuccess())
@@ -376,31 +391,22 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
            static_cast<int32>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, Bytes.Num(),
            *ResultInfo.UserMessage, *ResultInfo.DebugMessage);
 
-    /*
-     * File picker or file-reading failure.
-     */
     if (!ResultInfo.IsSuccess())
     {
-        PendingImportFileOperationInfo = FEVFileOperationInfo();
-
-        ImportFilePickCompletedDelegate.Broadcast(ResultInfo);
-
+        CompleteImportFileOperation(ResultInfo);
         return;
     }
 
     if (!VocabularyStorageService)
     {
-        FEVFileExchangeResultInfo ValidationResult;
-        ValidationResult.Result = EEVFileExchangeResult::StorageValidationFailed;
-        ValidationResult.UserMessage = TEXT("Vocabulary storage service is not available.");
-        ValidationResult.DebugMessage = TEXT("HandleImportFilePicked: VocabularyStorageService is null.");
-        ValidationResult.FileName = ResultInfo.FileName;
-        ValidationResult.ByteSize = Bytes.Num();
+        FEVFileExchangeResultInfo ErrorResult;
+        ErrorResult.Result = EEVFileExchangeResult::StorageValidationFailed;
+        ErrorResult.UserMessage = TEXT("Vocabulary storage service is not available.");
+        ErrorResult.DebugMessage = TEXT("HandleImportFilePicked: VocabularyStorageService is null.");
 
-        PendingImportFileOperationInfo = FEVFileOperationInfo();
+        PopulateImportResultFileInfo(ErrorResult, ResultInfo, Bytes.Num());
 
-        ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
-
+        CompleteImportFileOperation(ErrorResult);
         return;
     }
 
@@ -410,86 +416,114 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
     FEVFileExchangeResultInfo ValidationResult = VocabularyStorageService->ValidateImportFile(
         PendingImportFileOperationInfo.FileExtensionType, Bytes, ValidationReportBytes, ValidatedEntries);
 
-    ValidationResult.FileName = ResultInfo.FileName;
-
-    ValidationResult.ByteSize = Bytes.Num();
+    PopulateImportResultFileInfo(ValidationResult, ResultInfo, Bytes.Num());
 
     UE_LOG(LogTemp, Log, TEXT("Import validation result: %d | ReportBytes: %d | Message: %s | Debug: %s"),
            static_cast<int32>(ValidationResult.Result), ValidationReportBytes.Num(), *ValidationResult.UserMessage,
            *ValidationResult.DebugMessage);
 
-    /*
-     * Storage found invalid entries and generated a report.
-     */
-    if (!ValidationReportBytes.IsEmpty())
+    if (TrySaveImportValidationReport(ValidationResult, ValidationReportBytes))
     {
-        if (!DeviceService)
-        {
-            ValidationResult.Result = EEVFileExchangeResult::UnsupportedPlatform;
-            ValidationResult.UserMessage = TEXT("The validation report could not be saved.");
-            ValidationResult.DebugMessage =
-                TEXT("HandleImportFilePicked: DeviceService is null while saving validation report.");
-
-            PendingImportFileOperationInfo = FEVFileOperationInfo();
-
-            ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
-
-            return;
-        }
-
-        /*
-         * Preserve the original validation failure because the generic
-         * file-save callback will otherwise only know whether the report
-         * itself was saved successfully.
-         */
-        PendingImportValidationResult = ValidationResult;
-
-        PendingFileSavePurpose = EEVPendingFileSavePurpose::ImportValidationReport;
-
-        UE_LOG(LogTemp, Warning, TEXT("Validation report save requested. Bytes: %d | Validation: %s"),
-               ValidationReportBytes.Num(), *ValidationResult.DebugMessage);
-
-        DeviceService->SaveBytesToUserSelectedLocation(
-            PendingImportFileOperationInfo.FileExtensionType,
-            FEVFileExchangeDefaults::GetValidationReportFileName(PendingImportFileOperationInfo.FileExtensionType),
-            ValidationReportBytes);
-
-        /*
-         * Do not broadcast ImportFilePickCompleted here.
-         *
-         * HandleFileSaved() will produce the final failed-import
-         * status after the report save completes, fails, or is
-         * cancelled.
-         */
         return;
     }
 
-    /*
-     * Validation failed without generating a report.
-     */
-    /*
-     * Validation failed without generating a report.
-     */
     if (!ValidationResult.IsSuccess())
     {
-        PendingImportFileOperationInfo = FEVFileOperationInfo();
-
-        ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
-
+        CompleteImportFileOperation(ValidationResult);
         return;
     }
 
-    /*
-     * Validation succeeded. Perform the atomic database overwrite.
-     */
-    FEVFileExchangeResultInfo OverwriteResult = VocabularyStorageService->OverwriteDatabase(ValidatedEntries);
+    FEVFileExchangeResultInfo DatabaseOperationResult =
+        ExecuteImportDatabaseOperation(ValidatedEntries, ValidationReportBytes);
 
-    OverwriteResult.FileName = ResultInfo.FileName;
-    OverwriteResult.ByteSize = Bytes.Num();
+    PopulateImportResultFileInfo(DatabaseOperationResult, ResultInfo, Bytes.Num());
 
+    UE_LOG(LogTemp, Log, TEXT("Import database operation result: %d | ReportBytes: %d | Message: %s | Debug: %s"),
+           static_cast<int32>(DatabaseOperationResult.Result), ValidationReportBytes.Num(),
+           *DatabaseOperationResult.UserMessage, *DatabaseOperationResult.DebugMessage);
+
+    if (TrySaveImportValidationReport(DatabaseOperationResult, ValidationReportBytes))
+    {
+        return;
+    }
+
+    CompleteImportFileOperation(DatabaseOperationResult);
+}
+
+void UEVGameInstance::CompleteImportFileOperation(const FEVFileExchangeResultInfo& ResultInfo)
+{
     PendingImportFileOperationInfo = FEVFileOperationInfo();
 
-    ImportFilePickCompletedDelegate.Broadcast(OverwriteResult);
+    ImportFilePickCompletedDelegate.Broadcast(ResultInfo);
+}
+
+bool UEVGameInstance::TrySaveImportValidationReport(FEVFileExchangeResultInfo ValidationResult,
+                                                    const TArray<uint8>& ValidationReportBytes)
+{
+    if (ValidationReportBytes.IsEmpty())
+    {
+        return false;
+    }
+
+    if (!DeviceService)
+    {
+        ValidationResult.Result = EEVFileExchangeResult::UnsupportedPlatform;
+
+        ValidationResult.UserMessage = TEXT("The validation report could not be saved.");
+
+        ValidationResult.DebugMessage = TEXT("TrySaveImportValidationReport: DeviceService is null.");
+
+        CompleteImportFileOperation(ValidationResult);
+
+        return true;
+    }
+
+    PendingImportValidationResult = ValidationResult;
+
+    PendingFileSavePurpose = EEVPendingFileSavePurpose::ImportValidationReport;
+
+    UE_LOG(LogTemp, Warning, TEXT("Validation report save requested. Bytes: %d | Validation: %s"),
+           ValidationReportBytes.Num(), *ValidationResult.DebugMessage);
+
+    DeviceService->SaveBytesToUserSelectedLocation(
+        PendingImportFileOperationInfo.FileExtensionType,
+        FEVFileExchangeDefaults::GetValidationReportFileName(PendingImportFileOperationInfo.FileExtensionType),
+        ValidationReportBytes);
+
+    return true;
+}
+
+FEVFileExchangeResultInfo
+UEVGameInstance::ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries,
+                                                TArray<uint8>& OutValidationReportBytes)
+{
+    switch (PendingImportFileOperationInfo.OperationType)
+    {
+    case EEVFileOperationType::ImportDBOverwrite:
+        return VocabularyStorageService->OverwriteDatabase(ValidatedEntries);
+
+    case EEVFileOperationType::ImportDBAppend:
+        return VocabularyStorageService->AppendDatabase(PendingImportFileOperationInfo.FileExtensionType,
+                                                        ValidatedEntries, OutValidationReportBytes);
+
+    default:
+    {
+        FEVFileExchangeResultInfo ResultInfo;
+        ResultInfo.Result = EEVFileExchangeResult::StorageValidationFailed;
+        ResultInfo.UserMessage = TEXT("The requested import operation is not supported.");
+        ResultInfo.DebugMessage = TEXT("ExecuteImportDatabaseOperation received an unknown import operation.");
+
+        return ResultInfo;
+    }
+    }
+}
+
+void UEVGameInstance::PopulateImportResultFileInfo(FEVFileExchangeResultInfo& ResultInfo,
+                                                   const FEVFileExchangeResultInfo& PickResult, int32 ByteCount) const
+{
+    ResultInfo.FileName = PickResult.FileName;
+
+    ResultInfo.ByteSize = ByteCount;
 }
 
 FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo)
@@ -663,6 +697,45 @@ FEVRequestedActionInfo UEVGameInstance::HandleImportDBOverwriteRequested(const F
 
     ActionInfo.Status = EEVRequestedActionStatus::InProgress;
     ActionInfo.Message = FText::FromString(TEXT("Select a database file to import."));
+    ActionInfo.GenerateColor();
+
+    return ActionInfo;
+}
+
+FEVRequestedActionInfo UEVGameInstance::HandleImportDBAppendRequested(const FEVFileOperationInfo& FileOperationInfo)
+{
+    FEVRequestedActionInfo ActionInfo;
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+    ActionInfo.Type = EEVRequestedActionType::ImportDBAppend;
+
+    if (!DeviceService)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Device service is not available."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleImportDBAppendRequested: DeviceService is null."));
+
+        return ActionInfo;
+    }
+
+    if (FileOperationInfo.FileExtensionType == EEVFileExtensionType::Unknown)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("No import file type was selected."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleImportDBAppendRequested received Unknown extension."));
+
+        return ActionInfo;
+    }
+
+    PendingImportFileOperationInfo = FileOperationInfo;
+
+    DeviceService->PickImportFile(FileOperationInfo.FileExtensionType);
+
+    ActionInfo.Status = EEVRequestedActionStatus::InProgress;
+    ActionInfo.Message = FText::FromString(TEXT("Select a database file to append."));
     ActionInfo.GenerateColor();
 
     return ActionInfo;

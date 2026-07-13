@@ -10,11 +10,10 @@ public:
     // Later, we'll update rest of the queries too.
     static FString GetCreateVocabularyTableQuery();
 
-    static constexpr const TCHAR* InsertVocabularyEntry =
+    static constexpr const TCHAR* InsertVocabularyEntryStrict =
         TEXT("INSERT INTO VocabularyEntries "
              "(Word, Definition, Usage, TranslationRu, TranslationUa) "
-             "VALUES (?, ?, ?, ?, ?) "
-             "ON CONFLICT(Word) DO NOTHING;");
+             "VALUES (?, ?, ?, ?, ?);");
 
     static constexpr const TCHAR* EditVocabularyEntry = TEXT("UPDATE VocabularyEntries "
                                                              "SET Definition = ?, "

@@ -80,7 +80,7 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::InsertVocabularyEntry,
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::InsertVocabularyEntryStrict,
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create INSERT statement"));
@@ -835,7 +835,7 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::OverwriteDatabase(const T
     {
         const FVocabularyEntry& Entry = Entries[EntryIndex];
 
-        if (!SaveVocabularyEntry(Entry))
+        if (!InsertVocabularyEntryStrict(Entry))
         {
             RollbackTransaction();
 
@@ -869,6 +869,200 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::OverwriteDatabase(const T
 
     ResultInfo.DebugMessage =
         FString::Printf(TEXT("Database overwrite committed successfully with %d entries."), Entries.Num());
+
+    return ResultInfo;
+}
+
+FEVFileExchangeResultInfo UEVVocabularyStorageService::AppendDatabase(EEVFileExtensionType FileExtensionType,
+                                                                      const TArray<FVocabularyEntry>& Entries,
+                                                                      TArray<uint8>& OutValidationReportBytes)
+{
+    FEVFileExchangeResultInfo ResultInfo;
+
+    OutValidationReportBytes.Reset();
+
+    if (!Database.IsValid())
+    {
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The database is unavailable.");
+
+        ResultInfo.DebugMessage = TEXT("AppendDatabase received an invalid database.");
+
+        return ResultInfo;
+    }
+
+    if (Entries.IsEmpty())
+    {
+        ResultInfo.Result = EEVFileExchangeResult::EmptyFile;
+
+        ResultInfo.UserMessage = TEXT("There are no vocabulary entries to append.");
+
+        ResultInfo.DebugMessage = TEXT("AppendDatabase received an empty entry array.");
+
+        return ResultInfo;
+    }
+
+    /*
+     * Read every existing word from the current database.
+     */
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntries,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseQueryFailed;
+
+        ResultInfo.UserMessage = TEXT("The current database entries could not be checked.");
+
+        ResultInfo.DebugMessage = TEXT("AppendDatabase failed to create the existing-entries SELECT statement.");
+
+        return ResultInfo;
+    }
+
+    TSet<FString> ExistingNormalizedWords;
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FString ExistingWord;
+
+        if (!Statement.GetColumnValueByIndex(0, ExistingWord))
+        {
+            ResultInfo.Result = EEVFileExchangeResult::DatabaseQueryFailed;
+
+            ResultInfo.UserMessage = TEXT("The current database entries could not be read.");
+
+            ResultInfo.DebugMessage = TEXT("AppendDatabase failed to read an existing Word value.");
+
+            return ResultInfo;
+        }
+
+        const FString NormalizedExistingWord = FEVWordInputValidator::NormalizeWordInput(ExistingWord);
+
+        ExistingNormalizedWords.Add(NormalizedExistingWord);
+    }
+
+    /*
+     * The entries came from a fully validated CSV, so their indexes
+     * correspond directly to CSV rows:
+     *
+     * Entries[0] -> CSV row 2
+     * Entries[1] -> CSV row 3
+     */
+    TArray<FEVValidationFailedEntry> DatabaseDuplicateEntries;
+
+    for (int32 EntryIndex = 0; EntryIndex < Entries.Num(); ++EntryIndex)
+    {
+        const FVocabularyEntry& Entry = Entries[EntryIndex];
+
+        const FString NormalizedImportedWord = FEVWordInputValidator::NormalizeWordInput(Entry.Word);
+
+        if (ExistingNormalizedWords.Contains(NormalizedImportedWord))
+        {
+            DatabaseDuplicateEntries.Add({EntryIndex + 2, Entry.Word});
+        }
+    }
+
+    if (!DatabaseDuplicateEntries.IsEmpty())
+    {
+        const FEVFileExchangeResultInfo ReportResult =
+            GenerateValidationReport(FileExtensionType, DatabaseDuplicateEntries, OutValidationReportBytes);
+
+        if (!ReportResult.IsSuccess())
+        {
+            ResultInfo.Result = ReportResult.Result;
+
+            ResultInfo.UserMessage = TEXT("Words already present in the database were found, "
+                                          "but the duplicate report could not be generated.");
+
+            ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d imported words already present in the database. "
+                                                           "Report generation failed: %s"),
+                                                      DatabaseDuplicateEntries.Num(), *ReportResult.DebugMessage);
+
+            return ResultInfo;
+        }
+
+        const FString EntryLabel = DatabaseDuplicateEntries.Num() == 1 ? TEXT("entry") : TEXT("entries");
+
+        ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
+
+        const FString WordLabel = DatabaseDuplicateEntries.Num() == 1 ? TEXT("word") : TEXT("words");
+
+        ResultInfo.UserMessage =
+            FString::Printf(TEXT("The selected CSV contains %d %s already present in the current database. "
+                                 "Review the generated validation report."),
+                            DatabaseDuplicateEntries.Num(), *WordLabel);
+
+        ResultInfo.DebugMessage = FString::Printf(TEXT("Append validation found %d imported words already present "
+                                                       "in the database. Generated a report containing %d bytes."),
+                                                  DatabaseDuplicateEntries.Num(), OutValidationReportBytes.Num());
+
+        return ResultInfo;
+    }
+
+    /*
+     * No duplicates were found against the current database.
+     * Append every validated entry atomically.
+     */
+    if (!Database.Execute(TEXT("BEGIN TRANSACTION;")))
+    {
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The database append could not be started.");
+
+        ResultInfo.DebugMessage = TEXT("AppendDatabase failed to begin the append transaction.");
+
+        return ResultInfo;
+    }
+
+    auto RollbackTransaction = [this]()
+    {
+        if (!Database.Execute(TEXT("ROLLBACK;")))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to roll back the database append transaction."));
+        }
+    };
+
+    for (int32 EntryIndex = 0; EntryIndex < Entries.Num(); ++EntryIndex)
+    {
+        const FVocabularyEntry& Entry = Entries[EntryIndex];
+
+        if (!InsertVocabularyEntryStrict(Entry))
+        {
+            RollbackTransaction();
+
+            ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+            ResultInfo.UserMessage = TEXT("The imported entries could not be appended to the database.");
+
+            ResultInfo.DebugMessage =
+                FString::Printf(TEXT("AppendDatabase failed to insert entry %d of %d. Word: '%s'."), EntryIndex + 1,
+                                Entries.Num(), *Entry.Word);
+
+            return ResultInfo;
+        }
+    }
+
+    if (!Database.Execute(TEXT("COMMIT;")))
+    {
+        RollbackTransaction();
+
+        ResultInfo.Result = EEVFileExchangeResult::DatabaseTransactionFailed;
+
+        ResultInfo.UserMessage = TEXT("The database append could not be completed.");
+
+        ResultInfo.DebugMessage = TEXT("AppendDatabase failed to commit the append transaction.");
+
+        return ResultInfo;
+    }
+
+    ResultInfo.Result = EEVFileExchangeResult::Success;
+
+    ResultInfo.UserMessage = TEXT("The imported entries were appended successfully.");
+
+    ResultInfo.DebugMessage = FString::Printf(TEXT("Append transaction committed successfully with %d new entries. "
+                                                   "The database previously contained %d words."),
+                                              Entries.Num(), ExistingNormalizedWords.Num());
 
     return ResultInfo;
 }
@@ -926,4 +1120,39 @@ UEVVocabularyStorageService::GenerateValidationReport(EEVFileExtensionType FileE
         FString::Printf(TEXT("Generated CSV report containing %d problematic entries."), InvalidEntries.Num());
 
     return ResultInfo;
+}
+
+bool UEVVocabularyStorageService::InsertVocabularyEntryStrict(const FVocabularyEntry& Entry)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot strictly insert entry: database is invalid."));
+
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::InsertVocabularyEntryStrict,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create strict INSERT statement for word: %s"), *Entry.Word);
+
+        return false;
+    }
+
+    Statement.SetBindingValueByIndex(1, Entry.Word);
+    Statement.SetBindingValueByIndex(2, Entry.Definition);
+    Statement.SetBindingValueByIndex(3, Entry.Usage);
+    Statement.SetBindingValueByIndex(4, Entry.TranslationRu);
+    Statement.SetBindingValueByIndex(5, Entry.TranslationUa);
+
+    if (!Statement.Execute())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Strict INSERT failed for vocabulary entry: %s"), *Entry.Word);
+
+        return false;
+    }
+
+    return true;
 }
