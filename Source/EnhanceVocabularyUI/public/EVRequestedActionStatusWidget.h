@@ -34,5 +34,5 @@ private:
 
     FTimerHandle AutoCloseTimerHandler;
 
-    float CloseThisIntervalSeconds = 1.f;
+    float CloseThisIntervalSeconds = 2.f;
 };

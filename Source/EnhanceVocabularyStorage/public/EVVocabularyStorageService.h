@@ -27,6 +27,12 @@ struct FEVDatabaseExportRow
     TArray<FString> Values;
 };
 
+struct FEVValidationFailedEntry
+{
+    int32 RowNumber = INDEX_NONE;
+    FString Entry;
+};
+
 UCLASS()
 class ENHANCEVOCABULARYSTORAGE_API UEVVocabularyStorageService : public UObject
 {
@@ -49,6 +55,13 @@ public:
     bool GetImportExportRows(TArray<FString>& OutColumnNames, TArray<FEVDatabaseExportRow>& OutRows);
 
     FEVFileExchangeResultInfo GenerateDatabaseExport(EEVFileExtensionType FileExtensionType, TArray<uint8>& OutBytes);
+
+    FEVFileExchangeResultInfo ValidateImportFile(EEVFileExtensionType FileExtensionType, const TArray<uint8>& Bytes,
+                                                 TArray<uint8>& OutValidationReportBytes);
+
+    FEVFileExchangeResultInfo GenerateValidationFailureReport(EEVFileExtensionType FileExtensionType,
+                                                              const TArray<FEVValidationFailedEntry>& InvalidEntries,
+                                                              TArray<uint8>& OutBytes);
 
 private:
     FSQLiteDatabase Database;

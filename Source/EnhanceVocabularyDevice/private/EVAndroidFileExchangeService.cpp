@@ -1,5 +1,9 @@
 #include "EVAndroidFileExchangeService.h"
 #include "Async/Async.h"
+#include "DesktopPlatformModule.h"
+#include "IDesktopPlatform.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
 
 namespace
 {
@@ -201,6 +205,8 @@ void UEVAndroidFileExchangeService::HandleAndroidFileSaveCompleted(bool bSuccess
 
     FileSavedDelegate.Broadcast(ResultInfo);
 }
+
+void UEVAndroidFileExchangeService::LoadBytesFromUserSelectedLocation(EEVFileExtensionType FileExtensionType) {}
 
 #if PLATFORM_ANDROID
 

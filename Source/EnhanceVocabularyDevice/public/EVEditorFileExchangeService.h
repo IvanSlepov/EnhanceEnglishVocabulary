@@ -25,6 +25,8 @@ public:
 
     virtual FEVOnFileSaved& OnFileSaved() override;
 
+    virtual void LoadBytesFromUserSelectedLocation(EEVFileExtensionType FileExtensionType) override;
+
 private:
     FEVOnImportFilePicked ImportFilePickedDelegate;
     FEVOnFileSaved FileSavedDelegate;

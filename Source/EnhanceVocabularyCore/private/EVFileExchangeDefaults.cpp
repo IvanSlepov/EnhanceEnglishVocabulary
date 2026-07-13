@@ -23,3 +23,15 @@ FString FEVFileExchangeDefaults::GetDatabaseExportFileName(EEVFileExtensionType 
         return TEXT("VocabularyDB_Export");
     }
 }
+
+FString FEVFileExchangeDefaults::GetValidationReportFileName(EEVFileExtensionType FileExtensionType)
+{
+    switch (FileExtensionType)
+    {
+    case EEVFileExtensionType::Csv:
+        return TEXT("VocabularyDB_ValidationReport.csv");
+
+    default:
+        return TEXT("VocabularyDB_ValidationReport");
+    }
+}

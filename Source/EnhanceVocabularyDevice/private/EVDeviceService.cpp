@@ -21,15 +21,35 @@ void UEVDeviceService::InitializeDeviceService()
 
 void UEVDeviceService::PickImportFile(EEVFileExtensionType FileExtensionType)
 {
-    IEVPlatformFileExchangeService* PlatformService =
-        Cast<IEVPlatformFileExchangeService>(PlatformFileExchangeServiceObject);
-
-    if (!PlatformService)
+    if (!PlatformFileExchangeServiceObject)
     {
+        FEVFileExchangeResultInfo ResultInfo;
+        ResultInfo.Result = EEVFileExchangeResult::UnsupportedPlatform;
+        ResultInfo.UserMessage = TEXT("File import is not available on this platform.");
+        ResultInfo.DebugMessage = TEXT("PlatformFileExchangeServiceObject is null in PickImportFile.");
+
+        ImportFilePickedDelegate.Broadcast(ResultInfo, TArray<uint8>());
+
         return;
     }
 
-    PlatformService->PickImportFile(FileExtensionType);
+    IEVPlatformFileExchangeService* PlatformFileExchangeService =
+        Cast<IEVPlatformFileExchangeService>(PlatformFileExchangeServiceObject);
+
+    if (!PlatformFileExchangeService)
+    {
+        FEVFileExchangeResultInfo ResultInfo;
+        ResultInfo.Result = EEVFileExchangeResult::UnsupportedPlatform;
+        ResultInfo.UserMessage = TEXT("File import service is unavailable.");
+        ResultInfo.DebugMessage =
+            TEXT("PlatformFileExchangeServiceObject does not implement IEVPlatformFileExchangeService.");
+
+        ImportFilePickedDelegate.Broadcast(ResultInfo, TArray<uint8>());
+
+        return;
+    }
+
+    PlatformFileExchangeService->LoadBytesFromUserSelectedLocation(FileExtensionType);
 }
 
 void UEVDeviceService::SaveBytesToUserSelectedLocation(EEVFileExtensionType FileExtensionType,

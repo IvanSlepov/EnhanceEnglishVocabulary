@@ -25,6 +25,7 @@ void AEVAppPlayerController::BeginPlay()
     if (EVGameInstance)
     {
         EVGameInstance->OnFileOperationCompleted().AddUObject(this, &ThisClass::HandleFileOperationCompleted);
+        EVGameInstance->OnImportFilePickCompleted().AddUObject(this, &ThisClass::HandleImportFilePickCompleted);
     }
 }
 
@@ -296,6 +297,41 @@ void AEVAppPlayerController::HandleFileOperationCompleted(const FEVRequestedActi
     HandleActionStatusWidget(RequestedActionInfo);
 }
 
+void AEVAppPlayerController::HandleImportFilePickCompleted(const FEVFileExchangeResultInfo& ResultInfo)
+{
+    HandleLoadingSpinner(false);
+
+    if (ResultInfo.Result == EEVFileExchangeResult::CancelledByUser)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Import file selection cancelled by user."));
+
+        PendingFileOperationInfo = FEVFileOperationInfo();
+        return;
+    }
+
+    if (!ResultInfo.IsSuccess())
+    {
+        FEVRequestedActionInfo ActionInfo;
+        ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+        ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
+        ActionInfo.GenerateColor();
+
+        HandleActionStatusWidget(ActionInfo);
+
+        PendingFileOperationInfo = FEVFileOperationInfo();
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Import file selected successfully: %s"), *ResultInfo.FileName);
+
+    /*
+     * Keep PendingFileOperationInfo for now.
+     * The actual overwrite import logic will use it next.
+     */
+}
+
 void AEVAppPlayerController::HandleDetailedViewButtonPressed()
 {
     if (DetailedWordEntryWidgetInstance)
@@ -406,7 +442,6 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
             UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite cancelled by user."));
 
             PendingFileOperationInfo = FEVFileOperationInfo();
-
             return;
         }
 
@@ -415,19 +450,40 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
             UE_LOG(LogTemp, Error, TEXT("Overwrite confirmation received without a pending overwrite operation."));
 
             PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
 
+        if (!EVGameInstance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Cannot start overwrite import: EVGameInstance is null."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
             return;
         }
 
         UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite confirmed. Extension: %d"),
                static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
 
-        /*
-         * The Editor file picker will be started here
-         * in the next change.
-         */
+        HandleLoadingSpinner(true);
 
-        PendingFileOperationInfo = FEVFileOperationInfo();
+        const FEVRequestedActionInfo RequestedActionInfo =
+            EVGameInstance->HandleFileOperationRequested(PendingFileOperationInfo);
+
+        // Start before invoking GameInstance.
+        //
+        // Editor picker is synchronous, so its completion callback may execute
+        // before HandleFileOperationRequested() returns.
+        //
+        // Android will later be asynchronous, and the same spinner will remain
+        // visible until its callback arrives.
+
+        if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
+        {
+            HandleLoadingSpinner(false);
+            HandleActionStatusWidget(RequestedActionInfo);
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+        }
 
         return;
     }

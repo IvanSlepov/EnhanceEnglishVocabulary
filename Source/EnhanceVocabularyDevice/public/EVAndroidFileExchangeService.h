@@ -28,6 +28,8 @@ public:
     void HandleAndroidFileSaveCompleted(bool bSuccess, bool bCancelled, const FString& FileName,
                                         const FString& ErrorMessage);
 
+    virtual void LoadBytesFromUserSelectedLocation(EEVFileExtensionType FileExtensionType) override;
+
 private:
     FEVOnImportFilePicked ImportFilePickedDelegate;
     FEVOnFileSaved FileSavedDelegate;

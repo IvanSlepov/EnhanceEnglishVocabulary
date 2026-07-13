@@ -8,14 +8,20 @@ public class EnhanceVocabularyDevice: ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
-            "EnhanceVocabularyCore"
+            "EnhanceVocabularyCore",
+            "Slate",
+            "SlateCore",
+            "DesktopPlatform"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] {
             "Core", 
             "CoreUObject", 
             "Engine", 
-            "EnhanceVocabularyCore"
+            "EnhanceVocabularyCore",
+            "Slate",
+            "SlateCore",
+            "DesktopPlatform"
         });
 
         if (Target.Platform == UnrealTargetPlatform.Android)

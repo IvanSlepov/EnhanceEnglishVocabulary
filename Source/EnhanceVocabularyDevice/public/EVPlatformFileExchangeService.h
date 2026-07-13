@@ -36,4 +36,6 @@ public:
     virtual FEVOnImportFilePicked& OnImportFilePicked() = 0;
 
     virtual FEVOnFileSaved& OnFileSaved() = 0;
+
+    virtual void LoadBytesFromUserSelectedLocation(EEVFileExtensionType FileExtensionType) = 0;
 };

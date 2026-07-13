@@ -79,6 +79,7 @@ public:
     FOnWidgetsError OnWidgetsError;
 
     void HandleFileOperationCompleted(const FEVRequestedActionInfo& RequestedActionInfo);
+    void HandleImportFilePickCompleted(const FEVFileExchangeResultInfo& ResultInfo);
 
 protected:
     virtual void BeginPlay() override;

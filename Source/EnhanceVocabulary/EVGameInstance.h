@@ -24,6 +24,7 @@ class UEVDeviceService;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnectionState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVImportFilePickCompleted, const FEVFileExchangeResultInfo&);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -33,6 +34,14 @@ enum class EEVVocabularyStorageServiceResult : uint8
     DatabaseError,
     VocabularyStorageInstanceError,
     Empty
+};
+
+enum class EEVPendingFileSavePurpose : uint8
+{
+    None,
+    DownloadTemplate,
+    ExportDatabase,
+    ImportValidationReport
 };
 
 UCLASS()
@@ -90,6 +99,11 @@ public:
 
     FEVFileOperationCompletedFromGameInstance& OnFileOperationCompleted();
 
+    FEVImportFilePickCompleted& OnImportFilePickCompleted()
+    {
+        return ImportFilePickCompletedDelegate;
+    }
+
 protected:
     virtual void Init() override;
     virtual void Shutdown() override;
@@ -108,6 +122,7 @@ private:
     // the connectivity var being set to Offline and that makes the check in the corresponding Handler to return
     // immediately
     EEVConnectionState EVConnectionState = EEVConnectionState::Connecting;
+    EEVPendingFileSavePurpose PendingFileSavePurpose = EEVPendingFileSavePurpose::None;
 
     void HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
 
@@ -117,8 +132,14 @@ private:
 
     FEVRequestedActionInfo HandleExportDBRequested(const FEVFileOperationInfo& FileOperationInfo);
 
+    FEVRequestedActionInfo HandleImportDBOverwriteRequested(const FEVFileOperationInfo& FileOperationInfo);
+
     FEVRequestedActionInfo
     ConvertFileExchangeResultToRequestedAction(const FEVFileExchangeResultInfo& ResultInfo) const;
 
     FEVFileOperationCompletedFromGameInstance FileOperationCompletedDelegate;
+    FEVImportFilePickCompleted ImportFilePickCompletedDelegate;
+
+    FEVFileOperationInfo PendingImportFileOperationInfo;
+    FEVFileExchangeResultInfo PendingImportValidationResult;
 };

@@ -2,6 +2,8 @@
 
 #include "EVGameInstance.h"
 
+#include "EVFileExchangeDefaults.h"
+
 #include "EVVocabularyStorageService.h"
 #include "EVWordSearchService.h"
 #include "EVConnectivityService.h"
@@ -12,14 +14,17 @@ void UEVGameInstance::Init()
     Super::Init();
 
     VocabularyStorageService = NewObject<UEVVocabularyStorageService>(this);
+
     WordSearchService = NewObject<UEVWordSearchService>(this);
+
     ConnectivityService = NewObject<UEVConnectivityService>(this);
+
     DeviceService = NewObject<UEVDeviceService>(this);
 
     if (WordSearchService)
     {
-        // Creating and HttpService instance within
         WordSearchService->Initialize();
+
         WordSearchService->OnEVWordSearchCompleted.AddDynamic(
             this, &ThisClass::HandleEVWordSearchCompletedFromEVGameInstance);
     }
@@ -32,7 +37,8 @@ void UEVGameInstance::Init()
     {
         ConnectivityService->Initialize();
         ConnectivityService->RefreshConnection();
-        ConnectivityService->OnConnectionStateChanged.AddDynamic(this, &UEVGameInstance::HandleConnectionStateChanged);
+
+        ConnectivityService->OnConnectionStateChanged.AddDynamic(this, &ThisClass::HandleConnectionStateChanged);
 
         if (UWorld* World = GetWorld())
         {
@@ -60,6 +66,7 @@ void UEVGameInstance::Init()
     if (DeviceService)
     {
         DeviceService->InitializeDeviceService();
+
         DeviceService->OnFileSaved().AddUObject(this, &ThisClass::HandleFileSaved);
 
         DeviceService->OnImportFilePicked().AddUObject(this, &ThisClass::HandleImportFilePicked);
@@ -101,6 +108,7 @@ EEVVocabularyStorageServiceResult UEVGameInstance::DoesWordExist(const FString& 
     if (!VocabularyStorageService)
     {
         UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+
         return EEVVocabularyStorageServiceResult::VocabularyStorageInstanceError;
     }
 
@@ -108,13 +116,13 @@ EEVVocabularyStorageServiceResult UEVGameInstance::DoesWordExist(const FString& 
     {
     case EEVWordLookupResult::DatabaseError:
         return EEVVocabularyStorageServiceResult::DatabaseError;
-        break;
+
     case EEVWordLookupResult::Exists:
         return EEVVocabularyStorageServiceResult::WordExists;
-        break;
+
     case EEVWordLookupResult::DoesNotExist:
         return EEVVocabularyStorageServiceResult::WordDoesNotExist;
-        break;
+
     default:
         break;
     }
@@ -127,6 +135,7 @@ bool UEVGameInstance::SaveVocabularyEntry(const FWordSearchResult& WordSearchRes
     if (!VocabularyStorageService)
     {
         UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+
         return false;
     }
 
@@ -137,12 +146,7 @@ bool UEVGameInstance::SaveVocabularyEntry(const FWordSearchResult& WordSearchRes
     Entry.TranslationRu = WordSearchResult.TranslationRu;
     Entry.TranslationUa = WordSearchResult.TranslationUa;
 
-    if (VocabularyStorageService->SaveVocabularyEntry(Entry))
-    {
-        return true;
-    }
-
-    return false;
+    return VocabularyStorageService->SaveVocabularyEntry(Entry);
 }
 
 bool UEVGameInstance::UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVocabularyEntry& OutEntry)
@@ -152,12 +156,14 @@ bool UEVGameInstance::UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVoca
     if (!VocabularyStorageService)
     {
         UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+
         return false;
     }
 
     if (!VocabularyStorageService->UpdateVocabularyEntry(Entry))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to update vocabulary entry: %s"), *Entry.Word);
+
         return false;
     }
 
@@ -169,12 +175,14 @@ bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
     if (!VocabularyStorageService)
     {
         UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+
         return false;
     }
 
     if (!VocabularyStorageService->DeleteVocabularyEntry(Entry))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to delete vocabulary entry: %s"), *Entry.Word);
+
         return false;
     }
 
@@ -183,14 +191,16 @@ bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
 
 bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber)
 {
-    if (VocabularyStorageService)
+    if (!VocabularyStorageService)
     {
-        OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(EntryNumber);
-        return true;
+        UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
+
+        return false;
     }
 
-    UE_LOG(LogTemp, Error, TEXT("VocabularyStorageService is null"));
-    return false;
+    OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(EntryNumber);
+
+    return true;
 }
 
 FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
@@ -200,6 +210,7 @@ FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
         FWordSearchResult Result;
         Result.bSuccess = false;
         Result.ErrorMessage = TEXT("WordSearchService/Fake search is null");
+
         return Result;
     }
 
@@ -211,10 +222,9 @@ void UEVGameInstance::SearchWordOnline(const FString& Word, EEVWebProvider Defin
 {
     if (!WordSearchService)
     {
-        FWordSearchResult Result;
-        Result.bSuccess = false;
-        Result.ErrorMessage = TEXT("WordSearchService/Real Online Search is null");
-        // return Result;
+        UE_LOG(LogTemp, Error, TEXT("WordSearchService/Real Online Search is null"));
+
+        return;
     }
 
     WordSearchService->SearchWordOnline(Word, DefinitionUsageProvider, TranslationProvider);
@@ -226,8 +236,12 @@ FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFi
     {
     case EEVFileOperationType::DownloadTemplate:
         return HandleDownloadTemplateRequested(FileOperationInfo);
+
     case EEVFileOperationType::ExportDB:
         return HandleExportDBRequested(FileOperationInfo);
+
+    case EEVFileOperationType::ImportDBOverwrite:
+        return HandleImportDBOverwriteRequested(FileOperationInfo);
 
     default:
     {
@@ -236,6 +250,7 @@ FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFi
         ActionInfo.Status = EEVRequestedActionStatus::Failed;
         ActionInfo.Message = FText::FromString(TEXT("Unsupported file operation."));
         ActionInfo.GenerateColor();
+
         return ActionInfo;
     }
     }
@@ -247,11 +262,10 @@ EEVConnectionState UEVGameInstance::GetConnectionState() const
     {
         return ConnectivityService->GetConnectionState();
     }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("ConnectivityService is null in UEVGameInstance::GetConnectionState()"));
-        return EEVConnectionState::Offline;
-    }
+
+    UE_LOG(LogTemp, Error, TEXT("ConnectivityService is null in UEVGameInstance::GetConnectionState()"));
+
+    return EEVConnectionState::Offline;
 }
 
 void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
@@ -262,6 +276,7 @@ void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
     }
 
     EVConnectionState = NewState;
+
     OnConnectionStateChanged.Broadcast(NewState);
 }
 
@@ -274,10 +289,82 @@ void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
 void UEVGameInstance::HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo)
 {
     UE_LOG(LogTemp, Log, TEXT("File saved result: %d | File: %s | Bytes: %lld | Message: %s | Debug: %s"),
-           static_cast<uint8>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, *ResultInfo.UserMessage,
+           static_cast<int32>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, *ResultInfo.UserMessage,
            *ResultInfo.DebugMessage);
 
-    const FEVRequestedActionInfo ActionInfo = ConvertFileExchangeResultToRequestedAction(ResultInfo);
+    /*
+     * A successfully saved validation report does not mean that
+     * the database import succeeded.
+     *
+     * The import remains failed because its source data did not
+     * pass validation.
+     */
+    if (PendingFileSavePurpose == EEVPendingFileSavePurpose::ImportValidationReport)
+    {
+        FEVRequestedActionInfo ActionInfo;
+        ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+        ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+
+        if (ResultInfo.IsSuccess())
+        {
+            ActionInfo.Message = FText::FromString(PendingImportValidationResult.UserMessage +
+                                                   TEXT(" The validation report was saved successfully."));
+        }
+        else if (ResultInfo.Result == EEVFileExchangeResult::CancelledByUser)
+        {
+            ActionInfo.Message = FText::FromString(PendingImportValidationResult.UserMessage +
+                                                   TEXT(" Saving the validation report was cancelled."));
+        }
+        else
+        {
+            ActionInfo.Message = FText::FromString(PendingImportValidationResult.UserMessage +
+                                                   TEXT(" The validation report could not be saved."));
+        }
+
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Warning,
+               TEXT("Import validation failed. Report save result: %d | Validation debug: %s | Save debug: %s"),
+               static_cast<int32>(ResultInfo.Result), *PendingImportValidationResult.DebugMessage,
+               *ResultInfo.DebugMessage);
+
+        PendingFileSavePurpose = EEVPendingFileSavePurpose::None;
+
+        PendingImportValidationResult = FEVFileExchangeResultInfo();
+
+        PendingImportFileOperationInfo = FEVFileOperationInfo();
+
+        FileOperationCompletedDelegate.Broadcast(ActionInfo);
+
+        return;
+    }
+
+    /*
+     * Normal Template / Export completion.
+     */
+    FEVFileExchangeResultInfo AdjustedResult = ResultInfo;
+
+    if (ResultInfo.IsSuccess())
+    {
+        switch (PendingFileSavePurpose)
+        {
+        case EEVPendingFileSavePurpose::DownloadTemplate:
+            AdjustedResult.UserMessage = TEXT("The database template was saved successfully.");
+            break;
+
+        case EEVPendingFileSavePurpose::ExportDatabase:
+            AdjustedResult.UserMessage = TEXT("The database export was saved successfully.");
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    PendingFileSavePurpose = EEVPendingFileSavePurpose::None;
+
+    const FEVRequestedActionInfo ActionInfo = ConvertFileExchangeResultToRequestedAction(AdjustedResult);
 
     FileOperationCompletedDelegate.Broadcast(ActionInfo);
 }
@@ -286,19 +373,114 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
 {
     UE_LOG(LogTemp, Log,
            TEXT("Import file picked result: %d | File: %s | Bytes: %lld | ReceivedBytes: %d | Message: %s | Debug: %s"),
-           static_cast<uint8>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, Bytes.Num(),
+           static_cast<int32>(ResultInfo.Result), *ResultInfo.FileName, ResultInfo.ByteSize, Bytes.Num(),
            *ResultInfo.UserMessage, *ResultInfo.DebugMessage);
 
-    // Import logic comes later:
-    // Result success -> pass Bytes to Storage
-    // Storage validates CSV/data
-    // Append/Overwrite based on pending operation.
+    /*
+     * File picker or file-reading failure.
+     */
+    if (!ResultInfo.IsSuccess())
+    {
+        PendingImportFileOperationInfo = FEVFileOperationInfo();
+
+        ImportFilePickCompletedDelegate.Broadcast(ResultInfo);
+
+        return;
+    }
+
+    if (!VocabularyStorageService)
+    {
+        FEVFileExchangeResultInfo ValidationResult;
+        ValidationResult.Result = EEVFileExchangeResult::StorageValidationFailed;
+        ValidationResult.UserMessage = TEXT("Vocabulary storage service is not available.");
+        ValidationResult.DebugMessage = TEXT("HandleImportFilePicked: VocabularyStorageService is null.");
+        ValidationResult.FileName = ResultInfo.FileName;
+        ValidationResult.ByteSize = Bytes.Num();
+
+        PendingImportFileOperationInfo = FEVFileOperationInfo();
+
+        ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
+
+        return;
+    }
+
+    TArray<uint8> ValidationReportBytes;
+
+    FEVFileExchangeResultInfo ValidationResult = VocabularyStorageService->ValidateImportFile(
+        PendingImportFileOperationInfo.FileExtensionType, Bytes, ValidationReportBytes);
+
+    ValidationResult.FileName = ResultInfo.FileName;
+
+    ValidationResult.ByteSize = Bytes.Num();
+
+    UE_LOG(LogTemp, Log, TEXT("Import validation result: %d | ReportBytes: %d | Message: %s | Debug: %s"),
+           static_cast<int32>(ValidationResult.Result), ValidationReportBytes.Num(), *ValidationResult.UserMessage,
+           *ValidationResult.DebugMessage);
+
+    /*
+     * Storage found invalid entries and generated a report.
+     */
+    if (!ValidationReportBytes.IsEmpty())
+    {
+        if (!DeviceService)
+        {
+            ValidationResult.Result = EEVFileExchangeResult::UnsupportedPlatform;
+            ValidationResult.UserMessage = TEXT("The validation report could not be saved.");
+            ValidationResult.DebugMessage =
+                TEXT("HandleImportFilePicked: DeviceService is null while saving validation report.");
+
+            PendingImportFileOperationInfo = FEVFileOperationInfo();
+
+            ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
+
+            return;
+        }
+
+        /*
+         * Preserve the original validation failure because the generic
+         * file-save callback will otherwise only know whether the report
+         * itself was saved successfully.
+         */
+        PendingImportValidationResult = ValidationResult;
+
+        PendingFileSavePurpose = EEVPendingFileSavePurpose::ImportValidationReport;
+
+        UE_LOG(LogTemp, Warning, TEXT("Validation report save requested. Bytes: %d | Validation: %s"),
+               ValidationReportBytes.Num(), *ValidationResult.DebugMessage);
+
+        DeviceService->SaveBytesToUserSelectedLocation(
+            PendingImportFileOperationInfo.FileExtensionType,
+            FEVFileExchangeDefaults::GetValidationReportFileName(PendingImportFileOperationInfo.FileExtensionType),
+            ValidationReportBytes);
+
+        /*
+         * Do not broadcast ImportFilePickCompleted here.
+         *
+         * HandleFileSaved() will produce the final failed-import
+         * status after the report save completes, fails, or is
+         * cancelled.
+         */
+        return;
+    }
+
+    /*
+     * Validation failed without generating a report.
+     */
+    if (!ValidationResult.IsSuccess())
+    {
+        PendingImportFileOperationInfo = FEVFileOperationInfo();
+    }
+
+    /*
+     * At the moment, successful validation stops here.
+     * The actual overwrite transaction will be added later.
+     */
+    ImportFilePickCompletedDelegate.Broadcast(ValidationResult);
 }
 
 FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo)
 {
     FEVRequestedActionInfo ActionInfo;
-
     ActionInfo.Source = EEVRequestedActionSource::ImportExport;
     ActionInfo.Type = EEVRequestedActionType::DownloadDBTemplate;
 
@@ -352,6 +534,8 @@ FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FE
         return ActionInfo;
     }
 
+    PendingFileSavePurpose = EEVPendingFileSavePurpose::DownloadTemplate;
+
     DeviceService->SaveBytesToUserSelectedLocation(
         FileOperationInfo.FileExtensionType,
         FEVFileExchangeDefaults::GetTemplateFileName(FileOperationInfo.FileExtensionType), TemplateBytes);
@@ -366,7 +550,6 @@ FEVRequestedActionInfo UEVGameInstance::HandleDownloadTemplateRequested(const FE
 FEVRequestedActionInfo UEVGameInstance::HandleExportDBRequested(const FEVFileOperationInfo& FileOperationInfo)
 {
     FEVRequestedActionInfo ActionInfo;
-
     ActionInfo.Source = EEVRequestedActionSource::ImportExport;
     ActionInfo.Type = EEVRequestedActionType::ExportDB;
 
@@ -419,12 +602,53 @@ FEVRequestedActionInfo UEVGameInstance::HandleExportDBRequested(const FEVFileOpe
         return ActionInfo;
     }
 
+    PendingFileSavePurpose = EEVPendingFileSavePurpose::ExportDatabase;
+
     DeviceService->SaveBytesToUserSelectedLocation(
         FileOperationInfo.FileExtensionType,
         FEVFileExchangeDefaults::GetDatabaseExportFileName(FileOperationInfo.FileExtensionType), ExportBytes);
 
     ActionInfo.Status = EEVRequestedActionStatus::InProgress;
     ActionInfo.Message = FText::FromString(TEXT("Preparing database export..."));
+    ActionInfo.GenerateColor();
+
+    return ActionInfo;
+}
+
+FEVRequestedActionInfo UEVGameInstance::HandleImportDBOverwriteRequested(const FEVFileOperationInfo& FileOperationInfo)
+{
+    FEVRequestedActionInfo ActionInfo;
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+    ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+
+    if (!DeviceService)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("Device service is not available."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleImportDBOverwriteRequested: DeviceService is null."));
+
+        return ActionInfo;
+    }
+
+    if (FileOperationInfo.FileExtensionType == EEVFileExtensionType::Unknown)
+    {
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(TEXT("No import file type was selected."));
+        ActionInfo.GenerateColor();
+
+        UE_LOG(LogTemp, Error, TEXT("HandleImportDBOverwriteRequested received Unknown extension."));
+
+        return ActionInfo;
+    }
+
+    PendingImportFileOperationInfo = FileOperationInfo;
+
+    DeviceService->PickImportFile(FileOperationInfo.FileExtensionType);
+
+    ActionInfo.Status = EEVRequestedActionStatus::InProgress;
+    ActionInfo.Message = FText::FromString(TEXT("Select a database file to import."));
     ActionInfo.GenerateColor();
 
     return ActionInfo;
@@ -440,9 +664,11 @@ UEVGameInstance::ConvertFileExchangeResultToRequestedAction(const FEVFileExchang
 {
     FEVRequestedActionInfo ActionInfo;
     ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+
     ActionInfo.Status = ResultInfo.IsSuccess() ? EEVRequestedActionStatus::Completed : EEVRequestedActionStatus::Failed;
 
     ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
+
     ActionInfo.GenerateColor();
 
     return ActionInfo;

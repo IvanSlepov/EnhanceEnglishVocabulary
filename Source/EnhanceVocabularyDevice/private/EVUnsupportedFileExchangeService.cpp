@@ -1,5 +1,10 @@
 #include "EVUnsupportedFileExchangeService.h"
 
+#include "DesktopPlatformModule.h"
+#include "IDesktopPlatform.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
+
 bool UEVUnsupportedFileExchangeService::SupportsFileExtension(EEVFileExtensionType FileExtensionType) const
 {
     return false;
@@ -39,3 +44,5 @@ FEVOnFileSaved& UEVUnsupportedFileExchangeService::OnFileSaved()
 {
     return FileSavedDelegate;
 }
+
+void UEVUnsupportedFileExchangeService::LoadBytesFromUserSelectedLocation(EEVFileExtensionType FileExtensionType) {}
