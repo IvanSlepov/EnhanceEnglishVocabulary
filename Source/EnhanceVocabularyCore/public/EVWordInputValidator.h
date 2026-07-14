@@ -10,9 +10,10 @@ class ENHANCEVOCABULARYCORE_API FEVWordInputValidator
 public:
     static EEVInputValidationResult ValidateSearchInput(const FString& RawInput, FString& OutNormalizedWord,
                                                         FText& OutErrorMessage);
-
-private:
     static FString NormalizeWordInput(const FString& RawInput);
 
     static bool ContainsOnlyLettersAndSpaces(const FString& Input);
+
+private:
+
 };

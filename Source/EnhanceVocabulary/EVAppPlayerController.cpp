@@ -22,6 +22,11 @@ void AEVAppPlayerController::BeginPlay()
 
     InitEVAppPlayerController();
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnFileOperationCompleted().AddUObject(this, &ThisClass::HandleFileOperationCompleted);
+        EVGameInstance->OnImportFilePickCompleted().AddUObject(this, &ThisClass::HandleImportFilePickCompleted);
+    }
 }
 
 void AEVAppPlayerController::InitEVAppPlayerController()
@@ -80,6 +85,17 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                 {
                     UE_LOG(LogTemp, Error,
                            TEXT("FOnWordEntryWidgetControlsActivated in EVAppPlayerController.cpp is nullptr"));
+                }
+
+                if (FOnImportExportDownloadDBOperationIssued* ImportExportDownloadDBOperationIssued =
+                        WidgetCommonEvents->GetIssuedFileOperationInfo())
+                {
+                    ImportExportDownloadDBOperationIssued->AddDynamic(this, &ThisClass::HandleIssuedFileOperation);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnImportExportDownloadDBOperationIssued in EVAppPlayerController.cpp is nullptr"));
                 }
             }
             else
@@ -234,6 +250,110 @@ void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo&
     }
 }
 
+// Will try to control the action that came from widget (ImportExportDB in this case)
+// from the PC rather than on the widget's side. If this approach proves to be cleaner than
+// what we have now we'll try to refactor other parts of the app to implement it.
+void AEVAppPlayerController::HandleIssuedFileOperation(const FEVFileOperationInfo& IssuedFileOperation)
+{
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in EVAppPlayerController"));
+
+        return;
+    }
+
+    switch (IssuedFileOperation.OperationType)
+    {
+    case EEVFileOperationType::ImportDBOverwrite:
+    {
+        PendingFileOperationInfo = IssuedFileOperation;
+
+        // Do not show the spinner while waiting for confirmation.
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::OverwriteDB, EEVWordEntryActionType::Unknown);
+
+        return;
+    }
+    case EEVFileOperationType::ImportDBAppend:
+    {
+        PendingFileOperationInfo = IssuedFileOperation;
+
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::AppendDB, EEVWordEntryActionType::Unknown);
+
+        return;
+    }
+
+    default:
+        break;
+    }
+
+    // Existing Download Template / Export flow.
+    HandleLoadingSpinner(true);
+
+    const FEVRequestedActionInfo RequestedActionInfo =
+        EVGameInstance->HandleFileOperationRequested(IssuedFileOperation);
+
+    if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
+    {
+        HandleLoadingSpinner(false);
+        HandleActionStatusWidget(RequestedActionInfo);
+    }
+}
+
+void AEVAppPlayerController::HandleFileOperationCompleted(const FEVRequestedActionInfo& RequestedActionInfo)
+{
+    HandleLoadingSpinner(false);
+    HandleActionStatusWidget(RequestedActionInfo);
+}
+
+void AEVAppPlayerController::HandleImportFilePickCompleted(const FEVFileExchangeResultInfo& ResultInfo)
+{
+    HandleLoadingSpinner(false);
+
+    if (ResultInfo.Result == EEVFileExchangeResult::CancelledByUser)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Import file selection cancelled by user."));
+
+        PendingFileOperationInfo = FEVFileOperationInfo();
+        return;
+    }
+
+    if (!ResultInfo.IsSuccess())
+    {
+        FEVRequestedActionInfo ActionInfo;
+        ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+        ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+        ActionInfo.Status = EEVRequestedActionStatus::Failed;
+        ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
+        ActionInfo.GenerateColor();
+
+        HandleActionStatusWidget(ActionInfo);
+
+        PendingFileOperationInfo = FEVFileOperationInfo();
+        return;
+    }
+
+    FEVRequestedActionInfo ActionInfo;
+
+    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
+
+    ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
+
+    ActionInfo.Status = EEVRequestedActionStatus::Completed;
+
+    ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
+
+    ActionInfo.GenerateColor();
+
+    HandleActionStatusWidget(ActionInfo);
+
+    PendingFileOperationInfo = FEVFileOperationInfo();
+
+    if (WidgetCommonEvents)
+    {
+        WidgetCommonEvents->HandleReviewWordsRefresh();
+    }
+}
+
 void AEVAppPlayerController::HandleDetailedViewButtonPressed()
 {
     if (DetailedWordEntryWidgetInstance)
@@ -274,7 +394,11 @@ void AEVAppPlayerController::HandleDetailedDeleteButtonPressed()
 void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialogType DialogType,
                                                             EEVWordEntryActionType PendingActionType)
 {
+    PendingConfirmationDialogType = DialogType;
+
     CachedWordEntryWidgetInfo.ActionType = PendingActionType;
+
+    // Existing implementation continues unchanged...
 
     if (!ConfirmationDialogWidgetClass)
     {
@@ -319,6 +443,10 @@ void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialo
 
 void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed)
 {
+    const EEVConfirmationDialogType ConfirmedDialogType = PendingConfirmationDialogType;
+
+    PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+
     if (ConfirmationDialogWidgetInstance)
     {
         ConfirmationDialogWidgetInstance->RemoveFromParent();
@@ -326,6 +454,116 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
         ConfirmationDialogWidget = nullptr;
     }
 
+    /*
+     * Import DB — Overwrite
+     */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::OverwriteDB)
+    {
+        if (!bIsOperationConfirmed)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite cancelled by user."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
+
+        if (PendingFileOperationInfo.OperationType != EEVFileOperationType::ImportDBOverwrite)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Overwrite confirmation received without a pending overwrite operation."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
+
+        if (!EVGameInstance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Cannot start overwrite import: EVGameInstance is null."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite confirmed. Extension: %d"),
+               static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
+
+        HandleLoadingSpinner(true);
+
+        const FEVRequestedActionInfo RequestedActionInfo =
+            EVGameInstance->HandleFileOperationRequested(PendingFileOperationInfo);
+
+        // Start before invoking GameInstance.
+        //
+        // Editor picker is synchronous, so its completion callback may execute
+        // before HandleFileOperationRequested() returns.
+        //
+        // Android will later be asynchronous, and the same spinner will remain
+        // visible until its callback arrives.
+
+        if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
+        {
+            HandleLoadingSpinner(false);
+            HandleActionStatusWidget(RequestedActionInfo);
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+        }
+
+        return;
+    }
+
+    /*
+     * Import DB — Append
+     */
+    /*
+     * Import DB — Append
+     */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::AppendDB)
+    {
+        if (!bIsOperationConfirmed)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Import DB append cancelled by user."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
+
+        if (PendingFileOperationInfo.OperationType != EEVFileOperationType::ImportDBAppend)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Append confirmation received without a pending append operation."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
+
+        if (!EVGameInstance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Cannot start append import: EVGameInstance is null."));
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Import DB append confirmed. Extension: %d"),
+               static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
+
+        HandleLoadingSpinner(true);
+
+        const FEVRequestedActionInfo RequestedActionInfo =
+            EVGameInstance->HandleFileOperationRequested(PendingFileOperationInfo);
+
+        if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
+        {
+            HandleLoadingSpinner(false);
+            HandleActionStatusWidget(RequestedActionInfo);
+
+            PendingFileOperationInfo = FEVFileOperationInfo();
+        }
+
+        return;
+    }
+
+    /*
+     * Existing word-entry confirmation flow
+     */
     if (!bIsOperationConfirmed)
     {
         if (CachedWordEntryWidgetInfo.ActionType == EEVWordEntryActionType::SaveEditedEntry)
@@ -335,7 +573,9 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
             if (DetailedWordEntryDisplay)
             {
                 DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedWordEntry);
+
                 DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
+
                 DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
             }
         }
@@ -349,14 +589,13 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
         if (DetailedWordEntryWidgetInstance)
         {
             DetailedWordEntryWidgetInstance->RemoveFromParent();
+
             DetailedWordEntryWidgetInstance = nullptr;
             DetailedWordEntryDisplay = nullptr;
         }
         break;
 
     case EEVWordEntryActionType::SaveEditedEntry:
-        // Save CachedWordEntryWidgetInfo.EntryInfo here.
-        // Keep DetailedWordEntryWidgetInstance alive.
         ProcessConfirmedWordUpdate();
         break;
 

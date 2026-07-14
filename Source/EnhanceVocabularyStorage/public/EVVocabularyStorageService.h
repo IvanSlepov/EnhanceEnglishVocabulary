@@ -6,6 +6,7 @@
 #include "UObject/Object.h"
 #include "EVVocabularyTypes.h"
 #include "SQLiteDatabase.h"
+#include "EVFileExchangeTypes.h"
 #include "EVVocabularyStorageService.generated.h"
 
 /**
@@ -19,6 +20,17 @@ enum class EEVWordLookupResult : uint8
     DoesNotExist,
     DatabaseError,
     Empty
+};
+
+struct FEVDatabaseExportRow
+{
+    TArray<FString> Values;
+};
+
+struct FEVValidationFailedEntry
+{
+    int32 RowNumber = INDEX_NONE;
+    FString Entry;
 };
 
 UCLASS()
@@ -37,7 +49,29 @@ public:
     void ShutdownStorage();
     EEVWordLookupResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
+    FEVFileExchangeResultInfo GenerateDatabaseExportTemplate(EEVFileExtensionType FileExtensionType,
+                                                             TArray<uint8>& OutBytes);
+
+    bool GetImportExportRows(TArray<FString>& OutColumnNames, TArray<FEVDatabaseExportRow>& OutRows);
+
+    FEVFileExchangeResultInfo GenerateDatabaseExport(EEVFileExtensionType FileExtensionType, TArray<uint8>& OutBytes);
+
+    FEVFileExchangeResultInfo ValidateImportFile(EEVFileExtensionType FileExtensionType, const TArray<uint8>& Bytes,
+                                                 TArray<uint8>& OutValidationReportBytes,
+                                                 TArray<FVocabularyEntry>& OutValidatedEntries);
+
+    FEVFileExchangeResultInfo OverwriteDatabase(const TArray<FVocabularyEntry>& Entries);
+
+    FEVFileExchangeResultInfo AppendDatabase(EEVFileExtensionType FileExtensionType,
+                                             const TArray<FVocabularyEntry>& Entries,
+                                             TArray<uint8>& OutValidationReportBytes);
+
+    FEVFileExchangeResultInfo GenerateValidationReport(EEVFileExtensionType FileExtensionType,
+                                                       const TArray<FEVValidationFailedEntry>& InvalidEntries,
+                                                       TArray<uint8>& OutBytes);
+
 private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
+    bool InsertVocabularyEntryStrict(const FVocabularyEntry& Entry);
 };

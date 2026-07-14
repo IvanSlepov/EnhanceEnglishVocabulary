@@ -5,22 +5,15 @@
 class ENHANCEVOCABULARYSTORAGE_API FEVVocabularySqlQueries
 {
 public:
-    static constexpr const TCHAR* CreateVocabularyTable = TEXT("CREATE TABLE IF NOT EXISTS VocabularyEntries ("
-                                                               "Id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                                                               "Word TEXT NOT NULL UNIQUE,"
-                                                               "Definition TEXT,"
-                                                               "Usage TEXT,"
-                                                               "TranslationRu TEXT,"
-                                                               "TranslationUa TEXT,"
-                                                               "CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
-                                                               "UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
-                                                               ");");
+    // We moved the DB creation from query to the dedicated function
+    // in order to control the DB fields.
+    // Later, we'll update rest of the queries too.
+    static FString GetCreateVocabularyTableQuery();
 
-    static constexpr const TCHAR* InsertVocabularyEntry =
+    static constexpr const TCHAR* InsertVocabularyEntryStrict =
         TEXT("INSERT INTO VocabularyEntries "
              "(Word, Definition, Usage, TranslationRu, TranslationUa) "
-             "VALUES (?, ?, ?, ?, ?) "
-             "ON CONFLICT(Word) DO NOTHING;");
+             "VALUES (?, ?, ?, ?, ?);");
 
     static constexpr const TCHAR* EditVocabularyEntry = TEXT("UPDATE VocabularyEntries "
                                                              "SET Definition = ?, "
@@ -36,6 +29,10 @@ public:
         TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
              "FROM VocabularyEntries "
              "WHERE Word = ?;");
+
+    // Use this func to make Importing/Exporting the DB less hardcoded column names
+    // dependent
+    static FString GetSelectImportExportColumnsQuery();
 
     static constexpr const TCHAR* SelectVocabularyEntries =
         TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "

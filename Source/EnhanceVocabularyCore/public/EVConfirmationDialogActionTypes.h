@@ -9,7 +9,9 @@ enum class EEVConfirmationDialogType : uint8
     Unknown UMETA(DisplayName = "Unknown"),
     ExitViewWord UMETA(DisplayName = "Exit the Detailed View mode?"),
     EditWord UMETA(DisplayName = "Overwrite the existing word's fields?"),
-    DeleteWord UMETA(DisplayName = "Are you sure you want to delete this word?")
+    DeleteWord UMETA(DisplayName = "Are you sure you want to delete this word?"),
+    OverwriteDB UMETA(DisplayName = "Warning! You are about to overwrite your current DataBase. We strongly recommend to EXPORT it before proceeding!"),
+    AppendDB UMETA(DisplayName = "Append imported data to the current DataBase?")
 };
 
 USTRUCT(BlueprintType)
@@ -67,6 +69,20 @@ private:
             DiscardButtonText = FText::FromString(TEXT("RETAIN"));
             break;
 
+        case EEVConfirmationDialogType::OverwriteDB:
+            DialogText = FText::FromString(TEXT("Warning! You are about to overwrite your current DataBase. We "
+                                                "strongly recommend to EXPORT it before proceeding!"));
+            ConfirmButtonText = FText::FromString(TEXT("OVERWRITE"));
+            DiscardButtonText = FText::FromString(TEXT("CANCEL"));
+            break;
+
+        case EEVConfirmationDialogType::AppendDB:
+            DialogText = FText::FromString(
+                TEXT("Append imported data to your current DataBase? Existing entries will be retained."));
+            ConfirmButtonText = FText::FromString(TEXT("APPEND"));
+            DiscardButtonText = FText::FromString(TEXT("CANCEL"));
+            break;
+
         default:
             DialogText = FText::FromString(TEXT("Unknown"));
             ConfirmButtonText = FText::FromString(TEXT("CONFIRM"));
@@ -94,6 +110,18 @@ private:
         case EEVConfirmationDialogType::EditWord:
             DialogTextColor = FLinearColor(0.85f, 0.15f, 0.15f);
             ConfirmButtonColor = FLinearColor(0.85f, 0.15f, 0.15f);
+            DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
+            break;
+
+        case EEVConfirmationDialogType::OverwriteDB:
+            DialogTextColor = FLinearColor(0.85f, 0.15f, 0.15f);
+            ConfirmButtonColor = FLinearColor(0.85f, 0.15f, 0.15f);
+            DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
+            break;
+
+        case EEVConfirmationDialogType::AppendDB:
+            DialogTextColor = FLinearColor(1.00f, 0.60f, 0.00f);
+            ConfirmButtonColor = FLinearColor(1.00f, 0.60f, 0.00f);
             DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
             break;
 

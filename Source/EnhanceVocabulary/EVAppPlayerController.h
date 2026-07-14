@@ -13,6 +13,7 @@
 #include "EVWordEntryDisplayWidgetProvider.h"
 #include "EVGameInstance.h"
 #include "EVWidgetCommonEvents.h"
+#include "EVFileExchangeTypes.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -77,6 +78,9 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
     FOnWidgetsError OnWidgetsError;
 
+    void HandleFileOperationCompleted(const FEVRequestedActionInfo& RequestedActionInfo);
+    void HandleImportFilePickCompleted(const FEVFileExchangeResultInfo& ResultInfo);
+
 protected:
     virtual void BeginPlay() override;
     void InitEVAppPlayerController();
@@ -91,6 +95,10 @@ private:
     // we'll retreat to displaying FEVWordEntryActionInfo CachedWordEntryWidgetInfo
     FVocabularyEntry CachedConfirmedWordEntry;
 
+    FEVFileOperationInfo PendingFileOperationInfo;
+
+    EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
 
@@ -102,6 +110,9 @@ private:
 
     UFUNCTION()
     void HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo);
+
+    UFUNCTION()
+    void HandleIssuedFileOperation(const FEVFileOperationInfo& IssuedFileOperation);
 
     // Handlers for the "EVWordEntryWidgetDetailed.h" buttons
     UFUNCTION()

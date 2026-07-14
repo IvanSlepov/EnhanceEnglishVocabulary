@@ -6,12 +6,16 @@
 #include "Engine/GameInstance.h"
 #include "EVConnectionTypesAndEnums.h"
 #include "EVWebProviderTypes.h"
+#include "EVFileExchangeTypes.h"
+#include "EVRequestedActionTypes.h"
+#include "EVFileExchangeDefaults.h"
 
 #include "EVGameInstance.generated.h"
 
 class UEVVocabularyStorageService;
 class UEVWordSearchService;
 class UEVConnectivityService;
+class UEVDeviceService;
 
 /**
  *
@@ -19,6 +23,8 @@ class UEVConnectivityService;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnectionState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVImportFilePickCompleted, const FEVFileExchangeResultInfo&);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -28,6 +34,14 @@ enum class EEVVocabularyStorageServiceResult : uint8
     DatabaseError,
     VocabularyStorageInstanceError,
     Empty
+};
+
+enum class EEVPendingFileSavePurpose : uint8
+{
+    None,
+    DownloadTemplate,
+    ExportDatabase,
+    ImportValidationReport
 };
 
 UCLASS()
@@ -44,6 +58,9 @@ public:
 
     UPROPERTY()
     TObjectPtr<UEVConnectivityService> ConnectivityService;
+
+    UPROPERTY()
+    TObjectPtr<UEVDeviceService> DeviceService;
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     EEVVocabularyStorageServiceResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
@@ -67,6 +84,9 @@ public:
     void SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
                           EEVWebProvider TranslationProvider);
 
+    UFUNCTION(BlueprintCallable, Category = "File Exchange")
+    FEVRequestedActionInfo HandleFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo);
+
     // Connection functions
     EEVConnectionState GetConnectionState() const;
 
@@ -76,6 +96,13 @@ public:
 
     UPROPERTY(BlueprintAssignable)
     FEVWordSearchCompletedFromEVGameInstance OnEVWordSearchCompletedFromEVGameInstance;
+
+    FEVFileOperationCompletedFromGameInstance& OnFileOperationCompleted();
+
+    FEVImportFilePickCompleted& OnImportFilePickCompleted()
+    {
+        return ImportFilePickCompletedDelegate;
+    }
 
 protected:
     virtual void Init() override;
@@ -95,4 +122,41 @@ private:
     // the connectivity var being set to Offline and that makes the check in the corresponding Handler to return
     // immediately
     EEVConnectionState EVConnectionState = EEVConnectionState::Connecting;
+    EEVPendingFileSavePurpose PendingFileSavePurpose = EEVPendingFileSavePurpose::None;
+
+    void HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
+
+
+    // HandleImportFilePicked related funcs
+    void HandleImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes);
+
+    void CompleteImportFileOperation(const FEVFileExchangeResultInfo& ResultInfo);
+
+    bool TrySaveImportValidationReport(FEVFileExchangeResultInfo ValidationResult,
+                                       const TArray<uint8>& ValidationReportBytes);
+
+    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries,
+                                                             TArray<uint8>& OutValidationReportBytes);
+
+    void PopulateImportResultFileInfo(FEVFileExchangeResultInfo& ResultInfo,
+                                      const FEVFileExchangeResultInfo& PickResult, int32 ByteCount) const;
+    // --- end of the HandleImportFilePicked funcs
+
+
+    FEVRequestedActionInfo HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo);
+
+    FEVRequestedActionInfo HandleExportDBRequested(const FEVFileOperationInfo& FileOperationInfo);
+
+    FEVRequestedActionInfo HandleImportDBOverwriteRequested(const FEVFileOperationInfo& FileOperationInfo);
+
+    FEVRequestedActionInfo HandleImportDBAppendRequested(const FEVFileOperationInfo& FileOperationInfo);
+
+    FEVRequestedActionInfo
+    ConvertFileExchangeResultToRequestedAction(const FEVFileExchangeResultInfo& ResultInfo) const;
+
+    FEVFileOperationCompletedFromGameInstance FileOperationCompletedDelegate;
+    FEVImportFilePickCompleted ImportFilePickCompletedDelegate;
+
+    FEVFileOperationInfo PendingImportFileOperationInfo;
+    FEVFileExchangeResultInfo PendingImportValidationResult;
 };

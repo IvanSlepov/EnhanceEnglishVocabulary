@@ -16,12 +16,14 @@
 #include "EVNoMenuWidget.h"
 #include "EVReviewWordsWidget.h"
 #include "EVAppSettingsWidget.h"
+#include "EVImportExportDBWidget.h"
 #include "EVErrorProvider.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "EVConnectionTypesAndEnums.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVWordEntryActionTypes.h"
+#include "EVFileExchangeTypes.h"
 #include "EVRootWidget.generated.h"
 
 /**
@@ -60,6 +62,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVAppSettingsWidget> Settings_SelectWebProviders;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UEVImportExportDBWidget> ImportExportDB;
+
     class UEVGameInstance* EVGameInstance;
 
     /*Events*/
@@ -85,7 +90,14 @@ public:
         return &OnWordEntryWidgetControlsActivated;
     }
 
+    virtual FOnImportExportDownloadDBOperationIssued* GetIssuedFileOperationInfo() override
+    {
+        return &OnImportExportDownloadDBOperationIssued;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
+
+    virtual void HandleReviewWordsRefresh() override;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -132,6 +144,9 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnWordEntryWidgetControlsActivated OnWordEntryWidgetControlsActivated;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnImportExportDownloadDBOperationIssued OnImportExportDownloadDBOperationIssued;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -151,6 +166,9 @@ private:
 
     UFUNCTION()
     void HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo);
+
+    UFUNCTION()
+    void HandleOnImportExportDownloadDBOperationIssued(const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;
