@@ -12,7 +12,9 @@ struct FEVDatabaseColumnDefinition
 {
     FString Name;
     FString SqlDefinition;
-    EEVDatabaseColumnRole Role = EEVDatabaseColumnRole::Internal;
+    EEVDatabaseColumnRole Role;
+
+    FString ImportTemplateHint;
 };
 
 class ENHANCEVOCABULARYSTORAGE_API FEVVocabularyDatabaseSchema
