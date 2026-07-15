@@ -12,8 +12,7 @@ public:
                                                         FText& OutErrorMessage);
     static FString NormalizeWordInput(const FString& RawInput);
 
-    static bool ContainsOnlyLettersAndSpaces(const FString& Input);
+    static bool ContainsOnlyLettersSpacesAndInternalApostrophes(const FString& Input);
 
 private:
-
 };

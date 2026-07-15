@@ -14,48 +14,42 @@ FString FEVWordInputValidator::NormalizeWordInput(const FString& RawInput)
     return Result.ToLower();
 }
 
-bool FEVWordInputValidator::ContainsOnlyLettersAndSpaces(const FString& Input)
+bool FEVWordInputValidator::ContainsOnlyLettersSpacesAndInternalApostrophes(const FString& Value)
 {
-    if (Input.IsEmpty())
+    for (int32 Index = 0; Index < Value.Len(); ++Index)
     {
+        const TCHAR Character = Value[Index];
+
+        if (FChar::IsAlpha(Character) || FChar::IsWhitespace(Character))
+        {
+            continue;
+        }
+
+        if (Character == TEXT('\''))
+        {
+            // Apostrophes cannot begin a word or follow a non-letter.
+            if (Index == 0 || !FChar::IsAlpha(Value[Index - 1]))
+            {
+                return false;
+            }
+
+            const bool bIsLastCharacter = Index == Value.Len() - 1;
+
+            if (bIsLastCharacter)
+            {
+                continue;
+            }
+
+            // Internal apostrophes must be followed by a letter.
+            if (!FChar::IsAlpha(Value[Index + 1]))
+            {
+                return false;
+            }
+
+            continue;
+        }
+
         return false;
-    }
-
-    for (int32 Index = 0; Index < Input.Len(); ++Index)
-    {
-        const TCHAR Char = Input[Index];
-
-        const bool bIsLetter = FChar::IsAlpha(Char);
-        const bool bIsSpace = FChar::IsWhitespace(Char);
-        const bool bIsHyphen = Char == TEXT('-');
-
-        if (!bIsLetter && !bIsSpace && !bIsHyphen)
-        {
-            return false;
-        }
-
-        const bool bIsSeparator = bIsSpace || bIsHyphen;
-
-        if (bIsSeparator)
-        {
-            const bool bIsAtEdge = Index == 0 || Index == Input.Len() - 1;
-            if (bIsAtEdge)
-            {
-                return false;
-            }
-
-            const TCHAR PreviousChar = Input[Index - 1];
-            const TCHAR NextChar = Input[Index + 1];
-
-            const bool bPreviousIsSeparator = FChar::IsWhitespace(PreviousChar) || PreviousChar == TEXT('-');
-
-            const bool bNextIsSeparator = FChar::IsWhitespace(NextChar) || NextChar == TEXT('-');
-
-            if (bPreviousIsSeparator || bNextIsSeparator)
-            {
-                return false;
-            }
-        }
     }
 
     return true;
@@ -70,12 +64,14 @@ EEVInputValidationResult FEVWordInputValidator::ValidateSearchInput(const FStrin
     if (OutNormalizedWord.IsEmpty())
     {
         OutErrorMessage = FText::FromString(TEXT("Please enter a word."));
+
         return EEVInputValidationResult::EmptyInput;
     }
 
-    if (!ContainsOnlyLettersAndSpaces(OutNormalizedWord))
+    if (!ContainsOnlyLettersSpacesAndInternalApostrophes(OutNormalizedWord))
     {
-        OutErrorMessage = FText::FromString(TEXT("Only letters and spaces are allowed."));
+        OutErrorMessage = FText::FromString(TEXT("Only letters, spaces, and internal apostrophes are allowed."));
+
         return EEVInputValidationResult::InvalidCharacters;
     }
 

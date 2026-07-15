@@ -135,12 +135,14 @@ void UEVAddWordWidget::HandleOnSearchPressed()
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::EmptyString;
         EVErrorInfo.Message = WordInputError;
+        EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
         break;
     case EEVInputValidationResult::InvalidCharacters:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::InvalidInput;
         EVErrorInfo.Message = WordInputError;
+        EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
         break;
     default:
