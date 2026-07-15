@@ -414,7 +414,8 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
     TArray<FVocabularyEntry> ValidatedEntries;
 
     FEVFileExchangeResultInfo ValidationResult = VocabularyStorageService->ValidateImportFile(
-        PendingImportFileOperationInfo.FileExtensionType, Bytes, ValidationReportBytes, ValidatedEntries);
+        PendingImportFileOperationInfo.FileExtensionType, PendingImportFileOperationInfo.OperationType, Bytes,
+        ValidationReportBytes, ValidatedEntries);
 
     PopulateImportResultFileInfo(ValidationResult, ResultInfo, Bytes.Num());
 
@@ -433,8 +434,7 @@ void UEVGameInstance::HandleImportFilePicked(const FEVFileExchangeResultInfo& Re
         return;
     }
 
-    FEVFileExchangeResultInfo DatabaseOperationResult =
-        ExecuteImportDatabaseOperation(ValidatedEntries, ValidationReportBytes);
+    FEVFileExchangeResultInfo DatabaseOperationResult = ExecuteImportDatabaseOperation(ValidatedEntries);
 
     PopulateImportResultFileInfo(DatabaseOperationResult, ResultInfo, Bytes.Num());
 
@@ -494,8 +494,7 @@ bool UEVGameInstance::TrySaveImportValidationReport(FEVFileExchangeResultInfo Va
 }
 
 FEVFileExchangeResultInfo
-UEVGameInstance::ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries,
-                                                TArray<uint8>& OutValidationReportBytes)
+UEVGameInstance::ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries)
 {
     switch (PendingImportFileOperationInfo.OperationType)
     {
@@ -503,8 +502,7 @@ UEVGameInstance::ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& 
         return VocabularyStorageService->OverwriteDatabase(ValidatedEntries);
 
     case EEVFileOperationType::ImportDBAppend:
-        return VocabularyStorageService->AppendDatabase(PendingImportFileOperationInfo.FileExtensionType,
-                                                        ValidatedEntries, OutValidationReportBytes);
+        return VocabularyStorageService->AppendDatabase(ValidatedEntries);
 
     default:
     {

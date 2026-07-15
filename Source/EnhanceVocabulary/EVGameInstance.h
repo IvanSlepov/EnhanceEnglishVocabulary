@@ -126,7 +126,6 @@ private:
 
     void HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
 
-
     // HandleImportFilePicked related funcs
     void HandleImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes);
 
@@ -135,13 +134,11 @@ private:
     bool TrySaveImportValidationReport(FEVFileExchangeResultInfo ValidationResult,
                                        const TArray<uint8>& ValidationReportBytes);
 
-    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries,
-                                                             TArray<uint8>& OutValidationReportBytes);
+    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries);
 
     void PopulateImportResultFileInfo(FEVFileExchangeResultInfo& ResultInfo,
                                       const FEVFileExchangeResultInfo& PickResult, int32 ByteCount) const;
     // --- end of the HandleImportFilePicked funcs
-
 
     FEVRequestedActionInfo HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo);
 
