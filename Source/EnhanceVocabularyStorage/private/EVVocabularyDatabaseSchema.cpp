@@ -9,15 +9,27 @@ const FString& FEVVocabularyDatabaseSchema::GetTableName()
 
 const TArray<FEVDatabaseColumnDefinition>& FEVVocabularyDatabaseSchema::GetColumns()
 {
+    // Import-related metadata.
+    // Used to generate both:
+    // 1. the downloadable import template;
+    // 2. the validation report and import rules.
     static const TArray<FEVDatabaseColumnDefinition> Columns = {
-        {TEXT("Id"), TEXT("INTEGER PRIMARY KEY AUTOINCREMENT"), EEVDatabaseColumnRole::Internal},
-        {TEXT("Word"), TEXT("TEXT NOT NULL UNIQUE"), EEVDatabaseColumnRole::ImportExport},
-        {TEXT("Definition"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport},
-        {TEXT("Usage"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport},
-        {TEXT("TranslationRu"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport},
-        {TEXT("TranslationUa"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport},
-        {TEXT("CreatedAt"), TEXT("TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"), EEVDatabaseColumnRole::Internal},
-        {TEXT("UpdatedAt"), TEXT("TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"), EEVDatabaseColumnRole::Internal}};
+        {TEXT("Id"), TEXT("INTEGER PRIMARY KEY AUTOINCREMENT"), EEVDatabaseColumnRole::Internal,
+         EEVImportRequirement::None, TEXT("")},
+        {TEXT("Word"), TEXT("TEXT NOT NULL UNIQUE"), EEVDatabaseColumnRole::ImportExport,
+         EEVImportRequirement::Required, TEXT("WORD - can't be empty!!!")},
+        {TEXT("Definition"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport, EEVImportRequirement::Optional,
+         TEXT("Definition - can be empty")},
+        {TEXT("Usage"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport, EEVImportRequirement::Optional,
+         TEXT("Usage - can be empty")},
+        {TEXT("TranslationRu"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport, EEVImportRequirement::Optional,
+         TEXT("TranslationRU - can be empty")},
+        {TEXT("TranslationUa"), TEXT("TEXT"), EEVDatabaseColumnRole::ImportExport, EEVImportRequirement::Optional,
+         TEXT("TranslationUA - can be empty")},
+        {TEXT("CreatedAt"), TEXT("TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"), EEVDatabaseColumnRole::Internal,
+         EEVImportRequirement::None, TEXT("")},
+        {TEXT("UpdatedAt"), TEXT("TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"), EEVDatabaseColumnRole::Internal,
+         EEVImportRequirement::None, TEXT("")}};
 
     return Columns;
 }

@@ -16,6 +16,7 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     if (!FJsonSerializer::Deserialize(Reader, JsonArray) || JsonArray.IsEmpty())
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to parse FreeDictionary JSON array."));
+
         return false;
     }
 
@@ -24,12 +25,14 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     if (!JsonArray[0].IsValid() || !JsonArray[0]->AsObject().IsValid())
     {
         UE_LOG(LogTemp, Error, TEXT("FreeDictionary first array item is invalid."));
+
         return false;
     }
 
     if (!FJsonObjectConverter::JsonObjectToUStruct(JsonArray[0]->AsObject().ToSharedRef(), &Response))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to convert FreeDictionary object to struct."));
+
         return false;
     }
 
@@ -39,20 +42,19 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     FString UsageText;
 
     int32 Index = 1;
+    bool bHasAnyUsageExample = false;
 
     for (const FEVFreeDictionaryMeaningGroup& Meaning : Response.Meanings)
     {
         for (const FEVFreeDictionaryDefinitionItem& Definition : Meaning.Definitions)
         {
-            DefinitionText += FString::Printf(TEXT("%d. %s\n"), Index, *Definition.Definition);
+            DefinitionText += FString::Printf(TEXT("%d. %s\n\n"), Index, *Definition.Definition);
 
             if (!Definition.Example.IsEmpty())
             {
-                UsageText += FString::Printf(TEXT("%d. %s\n"), Index, *Definition.Example);
-            }
-            else
-            {
-                UsageText += FString::Printf(TEXT("%d. No usage example provided.\n"), Index);
+                UsageText += FString::Printf(TEXT("%d. %s\n\n"), Index, *Definition.Example);
+
+                bHasAnyUsageExample = true;
             }
 
             ++Index;
@@ -60,7 +62,16 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     }
 
     OutResult.Definition = DefinitionText.TrimEnd();
-    OutResult.Usage = UsageText.TrimEnd();
+    OutResult.bHasUsageExamples = bHasAnyUsageExample;
+
+    if (bHasAnyUsageExample)
+    {
+        OutResult.Usage = UsageText.TrimEnd();
+    }
+    else
+    {
+        OutResult.Usage = EVVocabularyUsage::GetNoUsageExamplesText();
+    }
 
     return true;
 }

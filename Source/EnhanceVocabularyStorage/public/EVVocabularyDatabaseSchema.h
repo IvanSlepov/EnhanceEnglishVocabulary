@@ -8,11 +8,21 @@ enum class EEVDatabaseColumnRole : uint8
     ImportExport
 };
 
+enum class EEVImportRequirement : uint8
+{
+    None,
+    Required,
+    Optional
+};
+
 struct FEVDatabaseColumnDefinition
 {
     FString Name;
     FString SqlDefinition;
-    EEVDatabaseColumnRole Role = EEVDatabaseColumnRole::Internal;
+    EEVDatabaseColumnRole Role;
+
+    EEVImportRequirement ImportRequirement;
+    FString ImportGuidance;
 };
 
 class ENHANCEVOCABULARYSTORAGE_API FEVVocabularyDatabaseSchema

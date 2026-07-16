@@ -8,6 +8,7 @@
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "EVVocabularyUiStyle.h"
 
 void UEVAddWordWidget::NativeOnInitialized()
 {
@@ -135,12 +136,14 @@ void UEVAddWordWidget::HandleOnSearchPressed()
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::EmptyString;
         EVErrorInfo.Message = WordInputError;
+        EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
         break;
     case EEVInputValidationResult::InvalidCharacters:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::InvalidInput;
         EVErrorInfo.Message = WordInputError;
+        EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
         break;
     default:
@@ -164,6 +167,11 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
         WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::FromString(Result.Definition));
 
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::FromString(Result.Usage));
+
+        // Set the Usage color to Red if no usage was provided
+        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetColorAndOpacity(
+            Result.bHasUsageExamples ? EVVocabularyUiStyle::GetNormalWrodEntryTextFontColor()
+                                     : EVVocabularyUiStyle::GetMissingWrodEntryTextFontColor());
 
         WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(
             FText::FromString(Result.TranslationRu));

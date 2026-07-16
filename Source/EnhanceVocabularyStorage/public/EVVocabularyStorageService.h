@@ -7,6 +7,7 @@
 #include "EVVocabularyTypes.h"
 #include "SQLiteDatabase.h"
 #include "EVFileExchangeTypes.h"
+#include "EVImportValidationTypes.h"
 #include "EVVocabularyStorageService.generated.h"
 
 /**
@@ -25,12 +26,6 @@ enum class EEVWordLookupResult : uint8
 struct FEVDatabaseExportRow
 {
     TArray<FString> Values;
-};
-
-struct FEVValidationFailedEntry
-{
-    int32 RowNumber = INDEX_NONE;
-    FString Entry;
 };
 
 UCLASS()
@@ -56,15 +51,14 @@ public:
 
     FEVFileExchangeResultInfo GenerateDatabaseExport(EEVFileExtensionType FileExtensionType, TArray<uint8>& OutBytes);
 
-    FEVFileExchangeResultInfo ValidateImportFile(EEVFileExtensionType FileExtensionType, const TArray<uint8>& Bytes,
+    FEVFileExchangeResultInfo ValidateImportFile(EEVFileExtensionType FileExtensionType,
+                                                 EEVFileOperationType OperationType, const TArray<uint8>& Bytes,
                                                  TArray<uint8>& OutValidationReportBytes,
                                                  TArray<FVocabularyEntry>& OutValidatedEntries);
 
     FEVFileExchangeResultInfo OverwriteDatabase(const TArray<FVocabularyEntry>& Entries);
 
-    FEVFileExchangeResultInfo AppendDatabase(EEVFileExtensionType FileExtensionType,
-                                             const TArray<FVocabularyEntry>& Entries,
-                                             TArray<uint8>& OutValidationReportBytes);
+    FEVFileExchangeResultInfo AppendDatabase(const TArray<FVocabularyEntry>& Entries);
 
     FEVFileExchangeResultInfo GenerateValidationReport(EEVFileExtensionType FileExtensionType,
                                                        const TArray<FEVValidationFailedEntry>& InvalidEntries,
@@ -74,4 +68,6 @@ private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
     bool InsertVocabularyEntryStrict(const FVocabularyEntry& Entry);
+    void CollectAppendValidationProblems(const TArray<FVocabularyEntry>& Entries,
+                                         TArray<FEVValidationFailedEntry>& OutProblems);
 };

@@ -4,12 +4,28 @@
 #include "EVVocabularySqlQueries.h"
 #include "EVWordInputValidator.h"
 
+#include "EVImportValidationReportFormatter.h"
+#include "EVImportValidationRules.h"
+
 #include "Misc/Paths.h"
 #include "SQLitePreparedStatement.h"
 #include "EVHelpers.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 #include "Serialization/Csv/CsvParser.h"
+
+namespace
+{
+FString QuoteCsvField(const FString& Value)
+{
+    FString EscapedValue = Value;
+
+    // A quote inside a quoted CSV field is represented by two quotes.
+    EscapedValue.ReplaceInline(TEXT("\""), TEXT("\"\""));
+
+    return FString::Printf(TEXT("\"%s\""), *EscapedValue);
+}
+} // namespace
 
 bool UEVVocabularyStorageService::InitializeStorage()
 {
@@ -245,6 +261,8 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
         Statement.GetColumnValueByIndex(3, Entry.TranslationRu);
         Statement.GetColumnValueByIndex(4, Entry.TranslationUa);
 
+        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
+
         UE_LOG(LogTemp, Warning, TEXT("Loaded word: %s"), *Entry.Word);
 
         Entries.Add(Entry);
@@ -305,19 +323,26 @@ UEVVocabularyStorageService::GenerateDatabaseExportTemplate(EEVFileExtensionType
     {
     case EEVFileExtensionType::Csv:
     {
-        const TArray<FString> ColumnNames = FEVVocabularyDatabaseSchema::GetImportExportColumnNames();
+        const TArray<FEVDatabaseColumnDefinition> Columns = FEVVocabularyDatabaseSchema::GetImportExportColumns();
 
-        if (ColumnNames.IsEmpty())
+        TArray<FString> HeaderFields;
+        TArray<FString> HintFields;
+
+        HeaderFields.Reserve(Columns.Num());
+        HintFields.Reserve(Columns.Num());
+
+        for (const FEVDatabaseColumnDefinition& Column : Columns)
         {
-            ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
-            ResultInfo.UserMessage = TEXT("No import/export columns are configured.");
-            ResultInfo.DebugMessage = TEXT("The vocabulary schema contains no ImportExport columns.");
-
-            return ResultInfo;
+            HeaderFields.Add(Column.Name);
+            HintFields.Add(QuoteCsvField(Column.ImportGuidance));
         }
 
-        FString CsvTemplate = FString::Join(ColumnNames, TEXT(","));
+        FString CsvTemplate;
 
+        CsvTemplate += FString::Join(HeaderFields, TEXT(","));
+        CsvTemplate += TEXT("\r\n");
+
+        CsvTemplate += FString::Join(HintFields, TEXT(","));
         CsvTemplate += TEXT("\r\n");
 
         const FTCHARToUTF8 Utf8Converter(*CsvTemplate);
@@ -327,7 +352,7 @@ UEVVocabularyStorageService::GenerateDatabaseExportTemplate(EEVFileExtensionType
         ResultInfo.Result = EEVFileExchangeResult::Success;
         ResultInfo.ByteSize = OutBytes.Num();
         ResultInfo.UserMessage = TEXT("Database template generated successfully.");
-        ResultInfo.DebugMessage = TEXT("CSV template generated from the database schema.");
+        ResultInfo.DebugMessage = TEXT("CSV template generated dynamically from the database schema.");
 
         return ResultInfo;
     }
@@ -497,6 +522,7 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::GenerateDatabaseExport(EE
 }
 
 FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFileExtensionType FileExtensionType,
+                                                                          EEVFileOperationType OperationType,
                                                                           const TArray<uint8>& Bytes,
                                                                           TArray<uint8>& OutValidationReportBytes,
                                                                           TArray<FVocabularyEntry>& OutValidatedEntries)
@@ -511,9 +537,7 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
     if (FileExtensionType != EEVFileExtensionType::Csv)
     {
         ResultInfo.Result = EEVFileExchangeResult::InvalidExtension;
-
         ResultInfo.UserMessage = TEXT("The selected import format is not supported.");
-
         ResultInfo.DebugMessage = TEXT("ValidateImportFile received a non-CSV extension.");
 
         return ResultInfo;
@@ -522,9 +546,7 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
     if (Bytes.IsEmpty())
     {
         ResultInfo.Result = EEVFileExchangeResult::EmptyFile;
-
         ResultInfo.UserMessage = TEXT("The selected import file is empty.");
-
         ResultInfo.DebugMessage = TEXT("ValidateImportFile received an empty byte buffer.");
 
         return ResultInfo;
@@ -544,11 +566,11 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
     if (ParsedRows.Num() < 2)
     {
         ResultInfo.Result = EEVFileExchangeResult::EmptyFile;
-
         ResultInfo.UserMessage = TEXT("The selected import file contains no vocabulary entries.");
 
-        ResultInfo.DebugMessage = FString::Printf(
-            TEXT("CSV parser returned %d row(s); expected a header and at least one data row."), ParsedRows.Num());
+        ResultInfo.DebugMessage = FString::Printf(TEXT("CSV parser returned %d row(s); expected a header "
+                                                       "and at least one data row."),
+                                                  ParsedRows.Num());
 
         return ResultInfo;
     }
@@ -566,43 +588,178 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
         return ResultInfo;
     }
 
+    /*
+     * Header validation
+     */
+
     const TArray<const TCHAR*>& HeaderRow = ParsedRows[0];
 
-    if (HeaderRow.Num() != ExpectedColumnNames.Num())
+    TArray<FString> ActualColumnNames;
+    ActualColumnNames.Reserve(HeaderRow.Num());
+
+    for (const TCHAR* HeaderValue : HeaderRow)
     {
+        ActualColumnNames.Add(FString(HeaderValue).TrimStartAndEnd());
+    }
+
+    TArray<FEVValidationFailedEntry> HeaderProblems;
+
+    /*
+     * Find every expected column that is completely absent.
+     */
+    for (int32 ExpectedIndex = 0; ExpectedIndex < ExpectedColumnNames.Num(); ++ExpectedIndex)
+    {
+        const FString& ExpectedColumnName = ExpectedColumnNames[ExpectedIndex];
+
+        const int32 ActualPosition = ActualColumnNames.IndexOfByKey(ExpectedColumnName);
+
+        if (ActualPosition != INDEX_NONE)
+        {
+            continue;
+        }
+
+        FEVValidationFailedEntry Problem;
+        Problem.Scope = EEVValidationProblemScope::Header;
+        Problem.RowNumber = 1;
+        Problem.ColumnName = ExpectedColumnName;
+        Problem.Entry = TEXT("<missing>");
+
+        Problem.Reason = FString::Printf(TEXT("Required column '%s' is missing. "
+                                              "It must appear at position %d."),
+                                         *ExpectedColumnName, ExpectedIndex + 1);
+
+        HeaderProblems.Add(MoveTemp(Problem));
+    }
+
+    /*
+     * Find unexpected, empty, or incorrectly named columns.
+     */
+    for (int32 ActualIndex = 0; ActualIndex < ActualColumnNames.Num(); ++ActualIndex)
+    {
+        const FString& ActualColumnName = ActualColumnNames[ActualIndex];
+
+        if (ActualColumnName.IsEmpty())
+        {
+            FEVValidationFailedEntry Problem;
+            Problem.Scope = EEVValidationProblemScope::Header;
+            Problem.RowNumber = 1;
+
+            if (ExpectedColumnNames.IsValidIndex(ActualIndex))
+            {
+                Problem.ColumnName = ExpectedColumnNames[ActualIndex];
+            }
+
+            Problem.Entry = TEXT("<empty column name>");
+
+            Problem.Reason = FString::Printf(TEXT("The column name at position %d is empty."), ActualIndex + 1);
+
+            HeaderProblems.Add(MoveTemp(Problem));
+
+            continue;
+        }
+
+        if (ExpectedColumnNames.Contains(ActualColumnName))
+        {
+            continue;
+        }
+
+        FEVValidationFailedEntry Problem;
+        Problem.Scope = EEVValidationProblemScope::Header;
+        Problem.RowNumber = 1;
+        Problem.Entry = ActualColumnName;
+
+        if (ExpectedColumnNames.IsValidIndex(ActualIndex))
+        {
+            Problem.ColumnName = ExpectedColumnNames[ActualIndex];
+
+            Problem.Reason = FString::Printf(TEXT("Incorrect column name '%s' at position %d. "
+                                                  "Expected '%s'."),
+                                             *ActualColumnName, ActualIndex + 1, *ExpectedColumnNames[ActualIndex]);
+        }
+        else
+        {
+            Problem.Reason = FString::Printf(TEXT("Unexpected extra column '%s' at position %d."), *ActualColumnName,
+                                             ActualIndex + 1);
+        }
+
+        HeaderProblems.Add(MoveTemp(Problem));
+    }
+
+    /*
+     * Check order only when no columns are missing or unexpected.
+     *
+     * When the column sets differ, reporting positional problems too
+     * would create confusing or contradictory messages.
+     */
+    if (HeaderProblems.IsEmpty())
+    {
+        for (int32 ColumnIndex = 0; ColumnIndex < ExpectedColumnNames.Num(); ++ColumnIndex)
+        {
+            const FString& ExpectedColumnName = ExpectedColumnNames[ColumnIndex];
+
+            const FString& ActualColumnName = ActualColumnNames[ColumnIndex];
+
+            if (ActualColumnName.Equals(ExpectedColumnName, ESearchCase::CaseSensitive))
+            {
+                continue;
+            }
+
+            const int32 CorrectPosition = ExpectedColumnNames.IndexOfByKey(ActualColumnName);
+
+            FEVValidationFailedEntry Problem;
+            Problem.Scope = EEVValidationProblemScope::Header;
+            Problem.RowNumber = 1;
+            Problem.ColumnName = ExpectedColumnName;
+            Problem.Entry = ActualColumnName;
+
+            Problem.Reason =
+                FString::Printf(TEXT("Column '%s' is in the wrong position. "
+                                     "It belongs at position %d, but appears at "
+                                     "position %d. Expected '%s' here."),
+                                *ActualColumnName, CorrectPosition + 1, ColumnIndex + 1, *ExpectedColumnName);
+
+            HeaderProblems.Add(MoveTemp(Problem));
+        }
+    }
+
+    if (!HeaderProblems.IsEmpty())
+    {
+        const FEVFileExchangeResultInfo ReportResult =
+            GenerateValidationReport(FileExtensionType, HeaderProblems, OutValidationReportBytes);
+
+        if (!ReportResult.IsSuccess())
+        {
+            ResultInfo.Result = ReportResult.Result;
+
+            ResultInfo.UserMessage = TEXT("Header problems were found, but the validation "
+                                          "report could not be generated.");
+
+            ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d header problems. "
+                                                           "Report generation failed: %s"),
+                                                      HeaderProblems.Num(), *ReportResult.DebugMessage);
+
+            return ResultInfo;
+        }
+
         ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
 
-        ResultInfo.UserMessage = TEXT("The selected CSV has an invalid header structure. "
-                                      "Please use the downloadable template as a reference.");
+        ResultInfo.UserMessage =
+            FString::Printf(TEXT("The selected CSV contains %d header problem%s. "
+                                 "Review the generated validation report."),
+                            HeaderProblems.Num(), HeaderProblems.Num() == 1 ? TEXT("") : TEXT("s"));
 
-        ResultInfo.DebugMessage = FString::Printf(TEXT("CSV header contains %d columns; expected %d."), HeaderRow.Num(),
-                                                  ExpectedColumnNames.Num());
+        ResultInfo.DebugMessage = FString::Printf(TEXT("CSV header validation found %d problems. "
+                                                       "Generated a report containing %d bytes."),
+                                                  HeaderProblems.Num(), OutValidationReportBytes.Num());
 
         return ResultInfo;
     }
 
-    for (int32 ColumnIndex = 0; ColumnIndex < ExpectedColumnNames.Num(); ++ColumnIndex)
-    {
-        const FString ActualColumnName = FString(HeaderRow[ColumnIndex]).TrimStartAndEnd();
+    /*
+     * Row validation
+     */
 
-        const FString& ExpectedColumnName = ExpectedColumnNames[ColumnIndex];
-
-        if (!ActualColumnName.Equals(ExpectedColumnName, ESearchCase::CaseSensitive))
-        {
-            ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
-
-            ResultInfo.UserMessage = TEXT("The selected CSV has invalid column names or column order. "
-                                          "Please use the downloadable template as a reference.");
-
-            ResultInfo.DebugMessage = FString::Printf(TEXT("CSV column %d is '%s'; expected '%s'."), ColumnIndex,
-                                                      *ActualColumnName, *ExpectedColumnName);
-
-            return ResultInfo;
-        }
-    }
-
-    TArray<FEVValidationFailedEntry> InvalidEntries;
-    TArray<FEVValidationFailedEntry> DuplicateEntries;
+    TArray<FEVValidationFailedEntry> RowProblems;
 
     TMap<FString, int32> FirstRowByNormalizedWord;
     TSet<FString> ReportedDuplicateWords;
@@ -613,27 +770,34 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
     for (int32 RowIndex = 1; RowIndex < ParsedRows.Num(); ++RowIndex)
     {
         const TArray<const TCHAR*>& Row = ParsedRows[RowIndex];
+
         const int32 CsvRowNumber = RowIndex + 1;
 
         if (Row.IsEmpty())
         {
-            InvalidEntries.Add({CsvRowNumber, TEXT("<empty row>")});
+            FEVValidationFailedEntry Problem;
+            Problem.Scope = EEVValidationProblemScope::Row;
+            Problem.RowNumber = CsvRowNumber;
+            Problem.Entry = TEXT("<empty row>");
+            Problem.Reason = TEXT("The row is empty.");
+
+            RowProblems.Add(MoveTemp(Problem));
 
             continue;
         }
 
         if (Row.Num() > ExpectedColumnNames.Num())
         {
-            ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
+            FEVValidationFailedEntry Problem;
+            Problem.Scope = EEVValidationProblemScope::Row;
+            Problem.RowNumber = CsvRowNumber;
+            Problem.Entry = FString::Printf(TEXT("%d columns"), Row.Num());
+            Problem.Reason = FString::Printf(TEXT("The row contains %d columns, but only %d columns are expected."),
+                                             Row.Num(), ExpectedColumnNames.Num());
 
-            ResultInfo.UserMessage = TEXT("The selected CSV contains a row with too many columns. "
-                                          "Please use the downloadable template as a reference.");
+            RowProblems.Add(MoveTemp(Problem));
 
-            ResultInfo.DebugMessage =
-                FString::Printf(TEXT("CSV row %d contains %d columns; the maximum supported count is %d."),
-                                CsvRowNumber, Row.Num(), ExpectedColumnNames.Num());
-
-            return ResultInfo;
+            continue;
         }
 
         const FString RawWord = FString(Row[0]);
@@ -646,17 +810,35 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
 
         if (WordValidationResult != EEVInputValidationResult::Valid)
         {
-            InvalidEntries.Add({CsvRowNumber, RawWord});
+            FEVValidationFailedEntry Problem;
+            Problem.Scope = EEVValidationProblemScope::Row;
+            Problem.RowNumber = CsvRowNumber;
+            Problem.ColumnName = TEXT("Word");
+            Problem.Entry = RawWord;
+            Problem.Reason = WordValidationError.ToString();
+
+            RowProblems.Add(MoveTemp(Problem));
 
             // Invalid words must not participate in duplicate detection.
             continue;
         }
 
-        if (FirstRowByNormalizedWord.Contains(NormalizedWord))
+        if (const int32* FirstRowNumber = FirstRowByNormalizedWord.Find(NormalizedWord))
         {
             if (!ReportedDuplicateWords.Contains(NormalizedWord))
             {
-                DuplicateEntries.Add({CsvRowNumber, RawWord});
+                FEVValidationFailedEntry Problem;
+                Problem.Scope = EEVValidationProblemScope::Row;
+
+                Problem.RowNumber = CsvRowNumber;
+                Problem.ColumnName = TEXT("Word");
+                Problem.Entry = RawWord;
+
+                Problem.Reason = FString::Printf(TEXT("Duplicate word inside the import file. "
+                                                      "The first occurrence is on row %d."),
+                                                 *FirstRowNumber);
+
+                RowProblems.Add(MoveTemp(Problem));
 
                 ReportedDuplicateWords.Add(NormalizedWord);
             }
@@ -692,78 +874,85 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
         ValidatedEntries.Add(MoveTemp(Entry));
     }
 
-    if (!InvalidEntries.IsEmpty())
+    if (!RowProblems.IsEmpty())
     {
         const FEVFileExchangeResultInfo ReportResult =
-            GenerateValidationReport(FileExtensionType, InvalidEntries, OutValidationReportBytes);
+            GenerateValidationReport(FileExtensionType, RowProblems, OutValidationReportBytes);
 
         if (!ReportResult.IsSuccess())
         {
             ResultInfo.Result = ReportResult.Result;
 
-            ResultInfo.UserMessage = TEXT("Invalid vocabulary entries were found, "
-                                          "but the validation report could not be generated.");
+            ResultInfo.UserMessage = TEXT("Import-file problems were found, but the validation "
+                                          "report could not be generated.");
 
-            ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d invalid entries. Report generation failed: %s"),
-                                                      InvalidEntries.Num(), *ReportResult.DebugMessage);
+            ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d row-level problems. "
+                                                           "Report generation failed: %s"),
+                                                      RowProblems.Num(), *ReportResult.DebugMessage);
 
             return ResultInfo;
         }
 
         ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
 
-        const FString EntryLabel = InvalidEntries.Num() == 1 ? TEXT("entry") : TEXT("entries");
-
-        ResultInfo.UserMessage = FString::Printf(TEXT("The selected CSV contains %d invalid word %s. "
+        ResultInfo.UserMessage = FString::Printf(TEXT("The selected CSV contains %d row-level problem%s. "
                                                       "Review the generated validation report."),
-                                                 InvalidEntries.Num(), *EntryLabel);
+                                                 RowProblems.Num(), RowProblems.Num() == 1 ? TEXT("") : TEXT("s"));
 
-        ResultInfo.DebugMessage = FString::Printf(TEXT("CSV validation found %d invalid word entries. "
-                                                       "Generated a validation report containing %lld bytes."),
-                                                  InvalidEntries.Num(), OutValidationReportBytes.Num());
+        ResultInfo.DebugMessage = FString::Printf(TEXT("CSV row validation found %d problems. "
+                                                       "Generated a validation report containing %d bytes."),
+                                                  RowProblems.Num(), OutValidationReportBytes.Num());
 
         return ResultInfo;
     }
 
-    if (!DuplicateEntries.IsEmpty())
+    if (OperationType == EEVFileOperationType::ImportDBAppend)
     {
-        const FEVFileExchangeResultInfo ReportResult =
-            GenerateValidationReport(FileExtensionType, DuplicateEntries, OutValidationReportBytes);
+        TArray<FEVValidationFailedEntry> DatabaseProblems;
 
-        if (!ReportResult.IsSuccess())
+        CollectAppendValidationProblems(ValidatedEntries, DatabaseProblems);
+
+        if (!DatabaseProblems.IsEmpty())
         {
-            ResultInfo.Result = ReportResult.Result;
-            ResultInfo.UserMessage =
-                TEXT("Duplicate words were found, but the duplicate report could not be generated.");
+            const FEVFileExchangeResultInfo ReportResult =
+                GenerateValidationReport(FileExtensionType, DatabaseProblems, OutValidationReportBytes);
 
-            ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d duplicated words. Report generation failed: %s"),
-                                                      DuplicateEntries.Num(), *ReportResult.DebugMessage);
+            if (!ReportResult.IsSuccess())
+            {
+                ResultInfo.Result = ReportResult.Result;
+
+                ResultInfo.UserMessage = TEXT("Database conflicts were found, but the validation "
+                                              "report could not be generated.");
+
+                ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d append database problems. "
+                                                               "Report generation failed: %s"),
+                                                          DatabaseProblems.Num(), *ReportResult.DebugMessage);
+
+                return ResultInfo;
+            }
+
+            ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
+
+            ResultInfo.UserMessage =
+                FString::Printf(TEXT("The selected CSV contains %d database conflict%s. "
+                                     "Review the generated validation report."),
+                                DatabaseProblems.Num(), DatabaseProblems.Num() == 1 ? TEXT("") : TEXT("s"));
+
+            ResultInfo.DebugMessage = FString::Printf(TEXT("Append validation found %d database problems. "
+                                                           "Generated a validation report containing %d bytes."),
+                                                      DatabaseProblems.Num(), OutValidationReportBytes.Num());
 
             return ResultInfo;
         }
-
-        const FString EntryLabel = DuplicateEntries.Num() == 1 ? TEXT("entry") : TEXT("entries");
-
-        ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
-
-        ResultInfo.UserMessage = FString::Printf(TEXT("The selected CSV contains %d duplicated word %s. "
-                                                      "Review the generated validation report."),
-                                                 DuplicateEntries.Num(), *EntryLabel);
-
-        ResultInfo.DebugMessage = FString::Printf(TEXT("CSV validation found %d duplicated normalized words. "
-                                                       "Generated a duplicate report containing %d bytes."),
-                                                  DuplicateEntries.Num(), OutValidationReportBytes.Num());
-
-        return ResultInfo;
     }
 
     OutValidatedEntries = MoveTemp(ValidatedEntries);
 
     ResultInfo.Result = EEVFileExchangeResult::Success;
-
     ResultInfo.UserMessage = TEXT("Import file passed validation.");
 
-    ResultInfo.DebugMessage = FString::Printf(TEXT("CSV validation succeeded and produced %d vocabulary entries."),
+    ResultInfo.DebugMessage = FString::Printf(TEXT("CSV validation succeeded and produced %d "
+                                                   "vocabulary entries."),
                                               OutValidatedEntries.Num());
 
     return ResultInfo;
@@ -873,13 +1062,9 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::OverwriteDatabase(const T
     return ResultInfo;
 }
 
-FEVFileExchangeResultInfo UEVVocabularyStorageService::AppendDatabase(EEVFileExtensionType FileExtensionType,
-                                                                      const TArray<FVocabularyEntry>& Entries,
-                                                                      TArray<uint8>& OutValidationReportBytes)
+FEVFileExchangeResultInfo UEVVocabularyStorageService::AppendDatabase(const TArray<FVocabularyEntry>& Entries)
 {
     FEVFileExchangeResultInfo ResultInfo;
-
-    OutValidationReportBytes.Reset();
 
     if (!Database.IsValid())
     {
@@ -899,103 +1084,6 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::AppendDatabase(EEVFileExt
         ResultInfo.UserMessage = TEXT("There are no vocabulary entries to append.");
 
         ResultInfo.DebugMessage = TEXT("AppendDatabase received an empty entry array.");
-
-        return ResultInfo;
-    }
-
-    /*
-     * Read every existing word from the current database.
-     */
-    FSQLitePreparedStatement Statement;
-
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntries,
-                          ESQLitePreparedStatementFlags::Persistent))
-    {
-        ResultInfo.Result = EEVFileExchangeResult::DatabaseQueryFailed;
-
-        ResultInfo.UserMessage = TEXT("The current database entries could not be checked.");
-
-        ResultInfo.DebugMessage = TEXT("AppendDatabase failed to create the existing-entries SELECT statement.");
-
-        return ResultInfo;
-    }
-
-    TSet<FString> ExistingNormalizedWords;
-
-    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
-    {
-        FString ExistingWord;
-
-        if (!Statement.GetColumnValueByIndex(0, ExistingWord))
-        {
-            ResultInfo.Result = EEVFileExchangeResult::DatabaseQueryFailed;
-
-            ResultInfo.UserMessage = TEXT("The current database entries could not be read.");
-
-            ResultInfo.DebugMessage = TEXT("AppendDatabase failed to read an existing Word value.");
-
-            return ResultInfo;
-        }
-
-        const FString NormalizedExistingWord = FEVWordInputValidator::NormalizeWordInput(ExistingWord);
-
-        ExistingNormalizedWords.Add(NormalizedExistingWord);
-    }
-
-    /*
-     * The entries came from a fully validated CSV, so their indexes
-     * correspond directly to CSV rows:
-     *
-     * Entries[0] -> CSV row 2
-     * Entries[1] -> CSV row 3
-     */
-    TArray<FEVValidationFailedEntry> DatabaseDuplicateEntries;
-
-    for (int32 EntryIndex = 0; EntryIndex < Entries.Num(); ++EntryIndex)
-    {
-        const FVocabularyEntry& Entry = Entries[EntryIndex];
-
-        const FString NormalizedImportedWord = FEVWordInputValidator::NormalizeWordInput(Entry.Word);
-
-        if (ExistingNormalizedWords.Contains(NormalizedImportedWord))
-        {
-            DatabaseDuplicateEntries.Add({EntryIndex + 2, Entry.Word});
-        }
-    }
-
-    if (!DatabaseDuplicateEntries.IsEmpty())
-    {
-        const FEVFileExchangeResultInfo ReportResult =
-            GenerateValidationReport(FileExtensionType, DatabaseDuplicateEntries, OutValidationReportBytes);
-
-        if (!ReportResult.IsSuccess())
-        {
-            ResultInfo.Result = ReportResult.Result;
-
-            ResultInfo.UserMessage = TEXT("Words already present in the database were found, "
-                                          "but the duplicate report could not be generated.");
-
-            ResultInfo.DebugMessage = FString::Printf(TEXT("Found %d imported words already present in the database. "
-                                                           "Report generation failed: %s"),
-                                                      DatabaseDuplicateEntries.Num(), *ReportResult.DebugMessage);
-
-            return ResultInfo;
-        }
-
-        const FString EntryLabel = DatabaseDuplicateEntries.Num() == 1 ? TEXT("entry") : TEXT("entries");
-
-        ResultInfo.Result = EEVFileExchangeResult::InvalidStructure;
-
-        const FString WordLabel = DatabaseDuplicateEntries.Num() == 1 ? TEXT("word") : TEXT("words");
-
-        ResultInfo.UserMessage =
-            FString::Printf(TEXT("The selected CSV contains %d %s already present in the current database. "
-                                 "Review the generated validation report."),
-                            DatabaseDuplicateEntries.Num(), *WordLabel);
-
-        ResultInfo.DebugMessage = FString::Printf(TEXT("Append validation found %d imported words already present "
-                                                       "in the database. Generated a report containing %d bytes."),
-                                                  DatabaseDuplicateEntries.Num(), OutValidationReportBytes.Num());
 
         return ResultInfo;
     }
@@ -1060,9 +1148,8 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::AppendDatabase(EEVFileExt
 
     ResultInfo.UserMessage = TEXT("The imported entries were appended successfully.");
 
-    ResultInfo.DebugMessage = FString::Printf(TEXT("Append transaction committed successfully with %d new entries. "
-                                                   "The database previously contained %d words."),
-                                              Entries.Num(), ExistingNormalizedWords.Num());
+    ResultInfo.DebugMessage =
+        FString::Printf(TEXT("Append transaction committed successfully with %d new entries."), Entries.Num());
 
     return ResultInfo;
 }
@@ -1080,7 +1167,7 @@ UEVVocabularyStorageService::GenerateValidationReport(EEVFileExtensionType FileE
     {
         ResultInfo.Result = EEVFileExchangeResult::InvalidExtension;
         ResultInfo.UserMessage = TEXT("The selected report format is not supported.");
-        ResultInfo.DebugMessage = TEXT("GenerateImportProblemReport received a non-CSV extension.");
+        ResultInfo.DebugMessage = TEXT("GenerateValidationReport received a non-CSV extension.");
 
         return ResultInfo;
     }
@@ -1089,25 +1176,14 @@ UEVVocabularyStorageService::GenerateValidationReport(EEVFileExtensionType FileE
     {
         ResultInfo.Result = EEVFileExchangeResult::EmptyFile;
         ResultInfo.UserMessage = TEXT("There are no problematic entries to report.");
-        ResultInfo.DebugMessage = TEXT("GenerateImportProblemReport received no entries.");
+        ResultInfo.DebugMessage = TEXT("GenerateValidationReport received no entries.");
 
         return ResultInfo;
     }
 
-    auto EscapeCsvField = [](const FString& Value) -> FString
-    {
-        FString Escaped = Value;
-        Escaped.ReplaceInline(TEXT("\""), TEXT("\"\""));
-
-        return FString::Printf(TEXT("\"%s\""), *Escaped);
-    };
-
-    FString CsvContent = TEXT("RowNumber,ProblematicEntry\r\n");
-
-    for (const FEVValidationFailedEntry& Entry : InvalidEntries)
-    {
-        CsvContent += FString::Printf(TEXT("%d,%s\r\n"), Entry.RowNumber, *EscapeCsvField(Entry.Entry));
-    }
+    const FString CsvContent =
+        FEVImportValidationReportFormatter::BuildCsvReport(FEVVocabularyDatabaseSchema::GetImportExportColumns(),
+                                                           FEVImportValidationRules::GetGeneralRules(), InvalidEntries);
 
     const FTCHARToUTF8 Utf8Converter(*CsvContent);
 
@@ -1155,4 +1231,73 @@ bool UEVVocabularyStorageService::InsertVocabularyEntryStrict(const FVocabularyE
     }
 
     return true;
+}
+
+void UEVVocabularyStorageService::CollectAppendValidationProblems(const TArray<FVocabularyEntry>& Entries,
+                                                                  TArray<FEVValidationFailedEntry>& OutProblems)
+{
+    OutProblems.Reset();
+
+    if (!Database.IsValid())
+    {
+        FEVValidationFailedEntry Problem;
+        Problem.Scope = EEVValidationProblemScope::Database;
+        Problem.Reason = TEXT("The current database is unavailable.");
+
+        OutProblems.Add(MoveTemp(Problem));
+        return;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntries,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        FEVValidationFailedEntry Problem;
+        Problem.Scope = EEVValidationProblemScope::Database;
+        Problem.Reason = TEXT("The current database entries could not be checked.");
+
+        OutProblems.Add(MoveTemp(Problem));
+        return;
+    }
+
+    TSet<FString> ExistingNormalizedWords;
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FString ExistingWord;
+
+        if (!Statement.GetColumnValueByIndex(0, ExistingWord))
+        {
+            FEVValidationFailedEntry Problem;
+            Problem.Scope = EEVValidationProblemScope::Database;
+            Problem.Reason = TEXT("An existing Word value could not be read from the database.");
+
+            OutProblems.Add(MoveTemp(Problem));
+            return;
+        }
+
+        ExistingNormalizedWords.Add(FEVWordInputValidator::NormalizeWordInput(ExistingWord));
+    }
+
+    for (int32 EntryIndex = 0; EntryIndex < Entries.Num(); ++EntryIndex)
+    {
+        const FVocabularyEntry& Entry = Entries[EntryIndex];
+
+        const FString NormalizedImportedWord = FEVWordInputValidator::NormalizeWordInput(Entry.Word);
+
+        if (!ExistingNormalizedWords.Contains(NormalizedImportedWord))
+        {
+            continue;
+        }
+
+        FEVValidationFailedEntry Problem;
+        Problem.Scope = EEVValidationProblemScope::Database;
+        Problem.RowNumber = EntryIndex + 2;
+        Problem.ColumnName = TEXT("Word");
+        Problem.Entry = Entry.Word;
+        Problem.Reason = TEXT("This word already exists in the current database.");
+
+        OutProblems.Add(MoveTemp(Problem));
+    }
 }

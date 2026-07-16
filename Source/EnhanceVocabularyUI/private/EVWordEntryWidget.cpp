@@ -2,6 +2,7 @@
 
 #include "EVWordEntryWidget.h"
 #include "EVEntryItem.h"
+#include "EVVocabularyUiStyle.h"
 
 void UEVWordEntryWidget::NativeOnInitialized()
 {
@@ -52,6 +53,12 @@ void UEVWordEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
             TextBlock_Word_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Word));
             TextBlock_Definition_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Definition));
             TextBlock_Usage_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Usage));
+
+            // Set the Usage color to Red if no usage was provided
+            TextBlock_Usage_Value->SetColorAndOpacity(WordEntryItem->EntryItem.bHasUsageExamples
+                                                          ? EVVocabularyUiStyle::GetNormalWrodEntryTextFontColor()
+                                                          : EVVocabularyUiStyle::GetMissingWrodEntryTextFontColor());
+
             TextBlock_TranslationRU_Value->SetText(FText::FromString(WordEntryItem->EntryItem.TranslationRu));
             TextBlock_TranslationUA_Value->SetText(FText::FromString(WordEntryItem->EntryItem.TranslationUa));
         }
