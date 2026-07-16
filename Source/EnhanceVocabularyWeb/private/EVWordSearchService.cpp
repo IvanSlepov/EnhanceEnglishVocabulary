@@ -130,6 +130,7 @@ void UEVWordSearchService::HandleDictionaryResponse(bool bSuccess, int32 Respons
     PendingResult.Word = ParsedResult.Word;
     PendingResult.Definition = ParsedResult.Definition;
     PendingResult.Usage = ParsedResult.Usage;
+    PendingResult.bHasUsageExamples = ParsedResult.bHasUsageExamples;
 
     bDictionaryCompleted = true;
 

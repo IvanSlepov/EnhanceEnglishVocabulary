@@ -47,5 +47,8 @@ struct FWordSearchResult
     bool bSuccess = false;
 
     UPROPERTY(BlueprintReadWrite)
+    bool bHasUsageExamples = false;
+
+    UPROPERTY(BlueprintReadWrite)
     FString ErrorMessage;
 };

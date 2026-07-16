@@ -167,6 +167,10 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
 
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::FromString(Result.Usage));
 
+        // Set the Usage color to Red if no usage was provided
+        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetColorAndOpacity(
+            Result.bHasUsageExamples ? FSlateColor(FLinearColor::Black) : FSlateColor(FLinearColor::Red));
+
         WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(
             FText::FromString(Result.TranslationRu));
 
