@@ -1,10 +1,14 @@
 #include "EVEditorFileExchangeService.h"
+
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+
+#if WITH_EDITOR
 #include "DesktopPlatformModule.h"
 #include "IDesktopPlatform.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
+#endif
 
 FString UEVEditorFileExchangeService::GetPlatformName() const
 {
