@@ -261,6 +261,8 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
         Statement.GetColumnValueByIndex(3, Entry.TranslationRu);
         Statement.GetColumnValueByIndex(4, Entry.TranslationUa);
 
+        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
+
         UE_LOG(LogTemp, Warning, TEXT("Loaded word: %s"), *Entry.Word);
 
         Entries.Add(Entry);

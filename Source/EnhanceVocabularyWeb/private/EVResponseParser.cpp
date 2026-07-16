@@ -70,7 +70,7 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     }
     else
     {
-        OutResult.Usage = TEXT("No usage examples provided.");
+        OutResult.Usage = EVVocabularyUsage::GetNoUsageExamplesText();
     }
 
     return true;

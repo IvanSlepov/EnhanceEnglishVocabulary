@@ -8,6 +8,7 @@
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "EVVocabularyUiStyle.h"
 
 void UEVAddWordWidget::NativeOnInitialized()
 {
@@ -169,7 +170,8 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
 
         // Set the Usage color to Red if no usage was provided
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetColorAndOpacity(
-            Result.bHasUsageExamples ? FSlateColor(FLinearColor::Black) : FSlateColor(FLinearColor::Red));
+            Result.bHasUsageExamples ? EVVocabularyUiStyle::GetNormalWrodEntryTextFontColor()
+                                     : EVVocabularyUiStyle::GetMissingWrodEntryTextFontColor());
 
         WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(
             FText::FromString(Result.TranslationRu));
