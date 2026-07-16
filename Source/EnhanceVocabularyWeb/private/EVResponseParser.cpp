@@ -48,11 +48,11 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     {
         for (const FEVFreeDictionaryDefinitionItem& Definition : Meaning.Definitions)
         {
-            DefinitionText += FString::Printf(TEXT("%d. %s\n"), Index, *Definition.Definition);
+            DefinitionText += FString::Printf(TEXT("%d. %s\n\n"), Index, *Definition.Definition);
 
             if (!Definition.Example.IsEmpty())
             {
-                UsageText += FString::Printf(TEXT("%d. %s\n"), Index, *Definition.Example);
+                UsageText += FString::Printf(TEXT("%d. %s\n\n"), Index, *Definition.Example);
 
                 bHasAnyUsageExample = true;
             }
