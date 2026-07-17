@@ -189,6 +189,43 @@ bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
     return true;
 }
 
+int32 UEVGameInstance::GetVocabularyEntryCount() const
+{
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntryCount: VocabularyStorageService is null"));
+
+        return 0;
+    }
+
+    return VocabularyStorageService->GetVocabularyEntryCount();
+}
+
+bool UEVGameInstance::GetVocabularyEntriesPage(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 Limit,
+                                               int32 Offset) const
+{
+    OutVocabularyEntries.Reset();
+
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntriesPage: VocabularyStorageService is null"));
+
+        return false;
+    }
+
+    if (Limit <= 0 || Offset < 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntriesPage received invalid arguments. Limit=%d | Offset=%d"), Limit,
+               Offset);
+
+        return false;
+    }
+
+    OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntriesPage(Limit, Offset);
+
+    return true;
+}
+
 bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber)
 {
     if (!VocabularyStorageService)

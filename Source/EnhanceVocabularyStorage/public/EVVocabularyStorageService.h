@@ -40,8 +40,15 @@ public:
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry);
+
+    int32 GetVocabularyEntryCount();
+
+    TArray<FVocabularyEntry> GetVocabularyEntriesPage(int32 Limit, int32 Offset);
+
     TArray<FVocabularyEntry> GetVocabularyEntries(int32 EntryNumber = 5);
+
     void ShutdownStorage();
+
     EEVWordLookupResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
     FEVFileExchangeResultInfo GenerateDatabaseExportTemplate(EEVFileExtensionType FileExtensionType,

@@ -75,6 +75,12 @@ public:
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    int32 GetVocabularyEntryCount() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntriesPage(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 Limit, int32 Offset) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber = 5);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Fake/Debugging Search")

@@ -7,6 +7,10 @@
 #include "Components/ListView.h"
 #include "EVEntryItem.h"
 #include "EVWordEntryActionTypes.h"
+#include "Components/ComboBoxString.h"
+#include "Components/Button.h"
+#include "Components/TextBlock.h"
+#include "Components/EditableText.h"
 #include "EVReviewWordsWidget.generated.h"
 
 class UEVWordEntryWidget;
@@ -28,15 +32,47 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UListView* ListView_ReviewWords;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_PreviousPage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_NextPage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* Text_CurrentPage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UComboBoxString* ComboBoxString_EntriesPerPage;
+
     class UEVGameInstance* EVGameInstance;
 
-    void DisplayWords();
+    void DisplayCurrentPage();
+    void RefreshReview();
 
     void UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry);
     void RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry);
+    void UpdatePaginationControls();
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 NumberOfWordsToDisplay = 1000;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pagination")
+    int32 EntriesPerPage = 10;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Pagination")
+    int32 CurrentPage = 1;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Pagination")
+    int32 TotalEntries = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Pagination")
+    int32 TotalPages = 1;
+
+    UFUNCTION(BlueprintCallable, Category = "Pagination")
+    void GoToPage(int32 PageNumber);
+
+    UFUNCTION(BlueprintCallable, Category = "Pagination")
+    void GoToNextPage();
+
+    UFUNCTION(BlueprintCallable, Category = "Pagination")
+    void GoToPreviousPage();
 
     UPROPERTY(BlueprintAssignable)
     FOnWordEntryWidgetControlsButtonPressed OnWordEntryWidgetControlsButtonPressed;
@@ -56,4 +92,13 @@ private:
 
     UFUNCTION()
     void HandleWordEntryViewButtonPressed(UEVWordEntryWidget* CurrentWordEntryWidget);
+
+    void PopulateEntriesPerPageComboBox();
+
+    UFUNCTION()
+    void SetNumberOfEntriesPerPage(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+    static constexpr int32 DefaultEntriesPerPage = 10;
+
+    static const TArray<int32> SupportedEntriesPerPageValues;
 };

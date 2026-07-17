@@ -194,7 +194,7 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
     else if (bIsReviewWordsActivated)
     {
         WidgetSwitcher_Main->SetActiveWidget(ReviewWords);
-        ReviewWords->DisplayWords();
+        ReviewWords->RefreshReview();
         MenuSwitcherCount = 0;
     }
 
@@ -365,7 +365,7 @@ void UEVRootWidget::HandleReviewWordsRefresh()
         return;
     }
 
-    ReviewWords->DisplayWords();
+    ReviewWords->RefreshReview();
 }
 
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,

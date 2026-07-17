@@ -225,6 +225,111 @@ bool UEVVocabularyStorageService::GetVocabularyEntryByWord(const FString& Word, 
     return true;
 }
 
+int32 UEVVocabularyStorageService::GetVocabularyEntryCount()
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot count vocabulary entries: database is invalid"));
+
+        return 0;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::CountVocabularyEntries,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create vocabulary COUNT statement"));
+
+        return 0;
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary COUNT query returned no row"));
+
+        return 0;
+    }
+
+    int32 EntryCount = 0;
+
+    if (!Statement.GetColumnValueByIndex(0, EntryCount))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to read vocabulary entry count"));
+
+        return 0;
+    }
+
+    return EntryCount;
+}
+
+TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntriesPage(int32 Limit, int32 Offset)
+{
+    TArray<FVocabularyEntry> Entries;
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot load vocabulary page: database is invalid"));
+
+        return Entries;
+    }
+
+    if (Limit <= 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary page limit must be greater than zero"));
+
+        return Entries;
+    }
+
+    if (Offset < 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary page offset cannot be negative"));
+
+        return Entries;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntriesPage,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create paginated vocabulary SELECT statement"));
+
+        return Entries;
+    }
+
+    // SQLite prepared-statement bindings are 1-based.
+    Statement.SetBindingValueByIndex(1, Limit);
+    Statement.SetBindingValueByIndex(2, Offset);
+
+    Entries.Reserve(Limit);
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FVocabularyEntry Entry;
+
+        if (!Statement.GetColumnValueByIndex(0, Entry.Word) || !Statement.GetColumnValueByIndex(1, Entry.Definition) ||
+            !Statement.GetColumnValueByIndex(2, Entry.Usage) ||
+            !Statement.GetColumnValueByIndex(3, Entry.TranslationRu) ||
+            !Statement.GetColumnValueByIndex(4, Entry.TranslationUa))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to read a paginated vocabulary row"));
+
+            Entries.Reset();
+            return Entries;
+        }
+
+        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
+
+        Entries.Add(MoveTemp(Entry));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Loaded vocabulary page: Limit=%d | Offset=%d | Returned=%d"), Limit, Offset,
+           Entries.Num());
+
+    return Entries;
+}
+
 TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32 EntryNumber)
 {
     TArray<FVocabularyEntry> Entries;

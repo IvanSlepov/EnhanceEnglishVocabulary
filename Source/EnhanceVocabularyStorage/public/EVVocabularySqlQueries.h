@@ -39,6 +39,12 @@ public:
              "FROM VocabularyEntries "
              "ORDER BY Word ASC;");
 
+    static constexpr const TCHAR* SelectVocabularyEntriesPage =
+        TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
+             "FROM VocabularyEntries "
+             "ORDER BY Word COLLATE NOCASE ASC "
+             "LIMIT ? OFFSET ?;");
+
     static constexpr const TCHAR* CountVocabularyEntries = TEXT("SELECT COUNT(*) FROM VocabularyEntries;");
 
     static constexpr const TCHAR* WordExists = TEXT("SELECT 1 FROM VocabularyEntries WHERE Word = ? LIMIT 1;");

@@ -7,6 +7,9 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "EVWordEntryWidget.h"
 
+// Amount of the entries we can display per page
+const TArray<int32> UEVReviewWordsWidget::SupportedEntriesPerPageValues = {5, 10, 25, 50};
+
 void UEVReviewWordsWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
@@ -22,53 +25,99 @@ void UEVReviewWordsWidget::NativeOnInitialized()
         ListView_ReviewWords->OnEntryWidgetGenerated().AddUObject(
             this, &UEVReviewWordsWidget::HandleListEntryWidgetGenerated);
     }
+
+    if (Button_PreviousPage)
+    {
+        Button_PreviousPage->OnPressed.AddUniqueDynamic(this, &ThisClass::GoToPreviousPage);
+    }
+
+    if (Button_NextPage)
+    {
+        Button_NextPage->OnPressed.AddUniqueDynamic(this, &ThisClass::GoToNextPage);
+    }
+
+    if (ComboBoxString_EntriesPerPage)
+    {
+        ComboBoxString_EntriesPerPage->OnSelectionChanged.AddDynamic(this, &ThisClass::SetNumberOfEntriesPerPage);
+    }
 }
 
-void UEVReviewWordsWidget::NativePreConstruct() {}
+void UEVReviewWordsWidget::NativePreConstruct()
+{
+    Super::NativePreConstruct();
+}
 
 void UEVReviewWordsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+
+    RefreshReview();
+    PopulateEntriesPerPageComboBox();
 }
 
-void UEVReviewWordsWidget::DisplayWords()
+void UEVReviewWordsWidget::DisplayCurrentPage()
 {
-    if (!EVGameInstance)
+    if (!EVGameInstance || !ListView_ReviewWords)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to cast to EVGameInstance"));
         return;
     }
 
-    if (!ListView_ReviewWords)
+    const int32 Offset = (CurrentPage - 1) * EntriesPerPage;
+
+    TArray<FVocabularyEntry> VocabularyEntries;
+
+    const bool bLoadedSuccessfully =
+        EVGameInstance->GetVocabularyEntriesPage(VocabularyEntries, EntriesPerPage, Offset);
+
+    if (!bLoadedSuccessfully)
     {
-        UE_LOG(LogTemp, Error, TEXT("Missing ListView_ReviewWords"));
+        UE_LOG(LogTemp, Error, TEXT("Failed to load vocabulary page %d."), CurrentPage);
+
         return;
     }
 
     ListView_ReviewWords->ClearListItems();
 
-    TArray<FVocabularyEntry> VocabularyEntries;
-    EVGameInstance->GetVocabularyEntries(VocabularyEntries, NumberOfWordsToDisplay);
-
-    if (VocabularyEntries.IsEmpty())
+    for (const FVocabularyEntry& Entry : VocabularyEntries)
     {
-        UE_LOG(LogTemp, Error, TEXT("Vocabulary is empty!!!"));
+        UEVEntryItem* EntryItem = NewObject<UEVEntryItem>(this);
+
+        if (!EntryItem)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create review entry item."));
+            continue;
+        }
+
+        EntryItem->EntryItem = Entry;
+        ListView_ReviewWords->AddItem(EntryItem);
     }
 
-    for (auto Entry : VocabularyEntries)
-    {
-        UEVEntryItem* EVEntryItem = NewObject<UEVEntryItem>(this, UEVEntryItem::StaticClass());
-        if (EVEntryItem)
-        {
-            EVEntryItem->EntryItem = Entry;
+    ListView_ReviewWords->ScrollToTop();
+}
 
-            ListView_ReviewWords->AddItem(EVEntryItem);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create the EVEntryItem object"));
-        }
+void UEVReviewWordsWidget::RefreshReview()
+{
+    if (!EVGameInstance || !ListView_ReviewWords)
+    {
+        return;
     }
+
+    TotalEntries = EVGameInstance->GetVocabularyEntryCount();
+
+    if (!SupportedEntriesPerPageValues.Contains(EntriesPerPage))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Unsupported EntriesPerPage value: %d. Falling back to default (%d)."),
+               EntriesPerPage, DefaultEntriesPerPage);
+
+        EntriesPerPage = DefaultEntriesPerPage;
+    }
+
+    TotalPages = TotalEntries > 0 ? (TotalEntries + EntriesPerPage - 1) / EntriesPerPage : 1;
+
+    CurrentPage = FMath::Clamp(CurrentPage, 1, TotalPages);
+
+    DisplayCurrentPage();
+    UpdatePaginationControls();
 }
 
 void UEVReviewWordsWidget::HandleListEntryWidgetGenerated(UUserWidget& Widget)
@@ -122,63 +171,105 @@ void UEVReviewWordsWidget::HandleWordEntryViewButtonPressed(UEVWordEntryWidget* 
     OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
 }
 
-void UEVReviewWordsWidget::UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry)
+void UEVReviewWordsWidget::PopulateEntriesPerPageComboBox()
 {
-    if (!ListView_ReviewWords)
+    if (!ComboBoxString_EntriesPerPage)
     {
-        UE_LOG(LogTemp, Error, TEXT("Missing ListView_ReviewWords"));
+        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_EntriesPerPage is nullptr in EVReviewWordsWidget.cpp"));
         return;
     }
 
-    const TArray<UObject*> ListItems = ListView_ReviewWords->GetListItems();
+    ComboBoxString_EntriesPerPage->ClearOptions();
 
-    for (UObject* ItemObject : ListItems)
+    for (int32 NumberOfEntry : SupportedEntriesPerPageValues)
     {
-        UEVEntryItem* EntryItem = Cast<UEVEntryItem>(ItemObject);
-
-        if (!EntryItem)
-        {
-            continue;
-        }
-
-        if (EntryItem->EntryItem.Word == UpdatedEntry.Word)
-        {
-            EntryItem->EntryItem = UpdatedEntry;
-            ListView_ReviewWords->RequestRefresh();
-            ListView_ReviewWords->RegenerateAllEntries();
-            return;
-        }
+        FString NumberOfEntriesToString = FString::FromInt(NumberOfEntry);
+        ComboBoxString_EntriesPerPage->AddOption(NumberOfEntriesToString);
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Failed to update displayed word entry: %s"), *UpdatedEntry.Word);
+    ComboBoxString_EntriesPerPage->SetSelectedOption(FString::FromInt(EntriesPerPage));
+}
+
+void UEVReviewWordsWidget::SetNumberOfEntriesPerPage(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+    const int32 SelectedEntriesPerPage = FCString::Atoi(*SelectedItem);
+
+    if (!SupportedEntriesPerPageValues.Contains(SelectedEntriesPerPage))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Unsupported entries-per-page value: %s"), *SelectedItem);
+
+        return;
+    }
+
+    if (EntriesPerPage == SelectedEntriesPerPage)
+    {
+        return;
+    }
+
+    EntriesPerPage = SelectedEntriesPerPage;
+
+    // Usually best UX when page size changes.
+    CurrentPage = 1;
+
+    RefreshReview();
+}
+
+void UEVReviewWordsWidget::UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry)
+{
+    UE_LOG(LogTemp, Log, TEXT("Refreshing review after updating word: %s"), *UpdatedEntry.Word);
+
+    RefreshReview();
 }
 
 void UEVReviewWordsWidget::RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry)
 {
-    if (!ListView_ReviewWords)
+    UE_LOG(LogTemp, Log, TEXT("Refreshing review after deleting word: %s"), *DeletedEntry.Word);
+
+    RefreshReview();
+}
+
+void UEVReviewWordsWidget::UpdatePaginationControls()
+{
+    if (Text_CurrentPage)
     {
-        UE_LOG(LogTemp, Error, TEXT("Missing ListView_ReviewWords"));
+        Text_CurrentPage->SetText(FText::Format(NSLOCTEXT("EVReviewWordsWidget", "PageIndicator", "Page {0} of {1}"),
+                                                FText::AsNumber(CurrentPage), FText::AsNumber(TotalPages)));
+    }
+
+    if (Button_PreviousPage)
+    {
+        Button_PreviousPage->SetIsEnabled(CurrentPage > 1);
+    }
+
+    if (Button_NextPage)
+    {
+        Button_NextPage->SetIsEnabled(CurrentPage < TotalPages);
+    }
+}
+
+void UEVReviewWordsWidget::GoToPage(int32 PageNumber)
+{
+    const int32 ClampedPage = FMath::Clamp(PageNumber, 1, TotalPages);
+
+    if (ClampedPage == CurrentPage)
+    {
         return;
     }
 
-    const TArray<UObject*> ListItems = ListView_ReviewWords->GetListItems();
+    UE_LOG(LogTemp, Log, TEXT("Changing review page: %d -> %d"), CurrentPage, ClampedPage);
 
-    for (UObject* ItemObject : ListItems)
-    {
-        UEVEntryItem* EntryItem = Cast<UEVEntryItem>(ItemObject);
+    CurrentPage = ClampedPage;
 
-        if (!EntryItem)
-        {
-            continue;
-        }
+    DisplayCurrentPage();
+    UpdatePaginationControls();
+}
 
-        if (EntryItem->EntryItem.Word == DeletedEntry.Word)
-        {
-            ListView_ReviewWords->RemoveItem(ItemObject);
-            ListView_ReviewWords->RequestRefresh();
-            return;
-        }
-    }
+void UEVReviewWordsWidget::GoToNextPage()
+{
+    GoToPage(CurrentPage + 1);
+}
 
-    UE_LOG(LogTemp, Warning, TEXT("Failed to remove displayed word entry: %s"), *DeletedEntry.Word);
+void UEVReviewWordsWidget::GoToPreviousPage()
+{
+    GoToPage(CurrentPage - 1);
 }
