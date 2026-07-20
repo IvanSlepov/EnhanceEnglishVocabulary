@@ -10,7 +10,7 @@
 #include "Components/ComboBoxString.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
-#include "Components/EditableText.h"
+#include "Components/EditableTextBox.h"
 #include "EVReviewWordsWidget.generated.h"
 
 class UEVWordEntryWidget;
@@ -43,6 +43,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UComboBoxString* ComboBoxString_EntriesPerPage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UEditableTextBox* EditableTextBox_Search;
 
     class UEVGameInstance* EVGameInstance;
 
