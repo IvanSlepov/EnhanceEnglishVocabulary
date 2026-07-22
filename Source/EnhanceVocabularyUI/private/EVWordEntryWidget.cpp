@@ -50,7 +50,17 @@ void UEVWordEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
             CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.TranslationRu = WordEntryItem->EntryItem.TranslationRu;
             CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.TranslationUa = WordEntryItem->EntryItem.TranslationUa;
 
-            TextBlock_Word_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Word));
+            // We need this adjustment since the long word without interruptions will not be auto-wrapped
+            //---start
+            const FString& OriginalWord = WordEntryItem->EntryItem.Word;
+
+            TextBlock_Word_Value->SetText(
+                FText::FromString(EVVocabularyUiStyle::BuildWrappedWordForDisplay(OriginalWord)));
+
+            // here we set a tooltip containing the whole world
+            TextBlock_Word_Value->SetToolTipText(FText::FromString(OriginalWord));
+            // --end
+
             TextBlock_Definition_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Definition));
             TextBlock_Usage_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Usage));
 

@@ -116,4 +116,6 @@ private:
 
     UFUNCTION()
     void HandleDeletePressed();
+
+    FString CurrentOriginalWord;
 };
