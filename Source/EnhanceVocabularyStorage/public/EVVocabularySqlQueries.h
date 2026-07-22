@@ -48,4 +48,14 @@ public:
     static constexpr const TCHAR* CountVocabularyEntries = TEXT("SELECT COUNT(*) FROM VocabularyEntries;");
 
     static constexpr const TCHAR* WordExists = TEXT("SELECT 1 FROM VocabularyEntries WHERE Word = ? LIMIT 1;");
+
+    static constexpr const TCHAR* GetVocabularyEntryCountByPrefixQuery = TEXT("SELECT COUNT(*) "
+                                                                              "FROM VocabularyEntries "
+                                                                              "WHERE Word LIKE ? COLLATE NOCASE;");
+    static constexpr const TCHAR* SelectVocabularyEntriesPageByPrefix =
+        TEXT("SELECT Word, Definition, Usage, TranslationRu, TranslationUa "
+             "FROM VocabularyEntries "
+             "WHERE Word LIKE ? COLLATE NOCASE "
+             "ORDER BY Word COLLATE NOCASE ASC "
+             "LIMIT ? OFFSET ?;");
 };

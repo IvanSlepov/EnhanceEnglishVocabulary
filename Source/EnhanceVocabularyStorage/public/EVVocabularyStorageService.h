@@ -71,6 +71,10 @@ public:
                                                        const TArray<FEVValidationFailedEntry>& InvalidEntries,
                                                        TArray<uint8>& OutBytes);
 
+    int32 GetVocabularyEntryCountByPrefix(const FString& SearchPrefix);
+
+    TArray<FVocabularyEntry> GetVocabularyEntriesPageByPrefix(const FString& SearchPrefix, int32 Limit, int32 Offset);
+
 private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();

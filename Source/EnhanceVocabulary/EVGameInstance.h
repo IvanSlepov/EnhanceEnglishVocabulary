@@ -83,6 +83,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber = 5);
 
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    int32 GetVocabularyEntryCountByPrefix(const FString& SearchPrefix) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>& OutVocabularyEntries, const FString& SearchPrefix,
+                                          int32 Limit, int32 Offset) const;
+
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Fake/Debugging Search")
     FWordSearchResult SearchWordFake(const FString& Word);
 

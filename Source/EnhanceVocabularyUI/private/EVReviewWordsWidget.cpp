@@ -6,6 +6,7 @@
 #include "EnhanceVocabularyCore/public/EVVocabularyTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "EVWordEntryWidget.h"
+#include "EVWordInputValidator.h"
 
 // Amount of the entries we can display per page
 const TArray<int32> UEVReviewWordsWidget::SupportedEntriesPerPageValues = {5, 10, 25, 50};
@@ -40,6 +41,16 @@ void UEVReviewWordsWidget::NativeOnInitialized()
     {
         ComboBoxString_EntriesPerPage->OnSelectionChanged.AddDynamic(this, &ThisClass::SetNumberOfEntriesPerPage);
     }
+
+    if (EditableTextBox_Search)
+    {
+        EditableTextBox_Search->OnTextChanged.AddDynamic(this, &ThisClass::HandleSearchTextChanged);
+    }
+
+    if (Button_ClearSearch)
+    {
+        Button_ClearSearch->OnPressed.AddUniqueDynamic(this, &ThisClass::ClearSearch);
+    }
 }
 
 void UEVReviewWordsWidget::NativePreConstruct()
@@ -50,6 +61,12 @@ void UEVReviewWordsWidget::NativePreConstruct()
 void UEVReviewWordsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+
+    NormalPaginationState.CurrentPage = CurrentPage;
+    NormalPaginationState.EntriesPerPage = EntriesPerPage;
+
+    SearchPaginationState.CurrentPage = 1;
+    SearchPaginationState.EntriesPerPage = DefaultEntriesPerPage;
 
     RefreshReview();
     PopulateEntriesPerPageComboBox();
@@ -64,10 +81,26 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
 
     const int32 Offset = (CurrentPage - 1) * EntriesPerPage;
 
+    FString SearchPrefix;
+    FText SearchError;
+
+    const bool bSearchEmpty = IsSearchInputEmpty();
+
+    const bool bSearchValid = !bSearchEmpty && TryGetValidatedSearchInput(SearchPrefix, SearchError);
+
     TArray<FVocabularyEntry> VocabularyEntries;
 
-    const bool bLoadedSuccessfully =
-        EVGameInstance->GetVocabularyEntriesPage(VocabularyEntries, EntriesPerPage, Offset);
+    bool bLoadedSuccessfully = false;
+
+    if (bSearchEmpty)
+    {
+        bLoadedSuccessfully = EVGameInstance->GetVocabularyEntriesPage(VocabularyEntries, EntriesPerPage, Offset);
+    }
+    else if (bSearchValid)
+    {
+        bLoadedSuccessfully =
+            EVGameInstance->GetVocabularyEntriesPageByPrefix(VocabularyEntries, SearchPrefix, EntriesPerPage, Offset);
+    }
 
     if (!bLoadedSuccessfully)
     {
@@ -102,7 +135,34 @@ void UEVReviewWordsWidget::RefreshReview()
         return;
     }
 
-    TotalEntries = EVGameInstance->GetVocabularyEntryCount();
+    FReviewPaginationState& ActivePaginationState = GetActivePaginationState();
+
+    CurrentPage = ActivePaginationState.CurrentPage;
+    EntriesPerPage = ActivePaginationState.EntriesPerPage;
+
+    if (ComboBoxString_EntriesPerPage)
+    {
+        ComboBoxString_EntriesPerPage->SetSelectedOption(FString::FromInt(EntriesPerPage));
+    }
+
+    FString SearchPrefix;
+    FText SearchError;
+
+    const bool bSearchEmpty = IsSearchInputEmpty();
+    const bool bSearchValid = !bSearchEmpty && TryGetValidatedSearchInput(SearchPrefix, SearchError);
+
+    if (bSearchEmpty)
+    {
+        TotalEntries = EVGameInstance->GetVocabularyEntryCount();
+    }
+    else if (bSearchValid)
+    {
+        TotalEntries = EVGameInstance->GetVocabularyEntryCountByPrefix(SearchPrefix);
+    }
+    else
+    {
+        return;
+    }
 
     if (!SupportedEntriesPerPageValues.Contains(EntriesPerPage))
     {
@@ -115,6 +175,9 @@ void UEVReviewWordsWidget::RefreshReview()
     TotalPages = TotalEntries > 0 ? (TotalEntries + EntriesPerPage - 1) / EntriesPerPage : 1;
 
     CurrentPage = FMath::Clamp(CurrentPage, 1, TotalPages);
+
+    ActivePaginationState.CurrentPage = CurrentPage;
+    ActivePaginationState.EntriesPerPage = EntriesPerPage;
 
     DisplayCurrentPage();
     UpdatePaginationControls();
@@ -201,17 +264,72 @@ void UEVReviewWordsWidget::SetNumberOfEntriesPerPage(FString SelectedItem, ESele
         return;
     }
 
-    if (EntriesPerPage == SelectedEntriesPerPage)
+    FReviewPaginationState& ActivePaginationState = GetActivePaginationState();
+
+    if (ActivePaginationState.EntriesPerPage == SelectedEntriesPerPage)
     {
         return;
     }
 
-    EntriesPerPage = SelectedEntriesPerPage;
-
-    // Usually best UX when page size changes.
-    CurrentPage = 1;
+    ActivePaginationState.EntriesPerPage = SelectedEntriesPerPage;
+    ActivePaginationState.CurrentPage = 1;
 
     RefreshReview();
+}
+
+void UEVReviewWordsWidget::HandleSearchTextChanged(const FText& NewText)
+{
+    RefreshReview();
+}
+
+void UEVReviewWordsWidget::ClearSearch()
+{
+    if (!EditableTextBox_Search)
+    {
+        return;
+    }
+
+    EditableTextBox_Search->SetText(FText::GetEmpty());
+
+    HandleSearchTextChanged(FText::GetEmpty());
+}
+
+bool UEVReviewWordsWidget::TryGetValidatedSearchInput(FString& OutNormalizedSearch, FText& OutErrorMessage) const
+{
+    OutNormalizedSearch.Empty();
+    OutErrorMessage = FText::GetEmpty();
+
+    if (!EditableTextBox_Search)
+    {
+        return false;
+    }
+
+    const FString RawInput = EditableTextBox_Search->GetText().ToString();
+
+    const EEVInputValidationResult ValidationResult =
+        FEVWordInputValidator::ValidateSearchInput(RawInput, OutNormalizedSearch, OutErrorMessage);
+
+    return ValidationResult == EEVInputValidationResult::Valid;
+}
+
+bool UEVReviewWordsWidget::IsSearchInputEmpty() const
+{
+    if (!EditableTextBox_Search)
+    {
+        return true;
+    }
+
+    return EditableTextBox_Search->GetText().ToString().TrimStartAndEnd().IsEmpty();
+}
+
+UEVReviewWordsWidget::FReviewPaginationState& UEVReviewWordsWidget::GetActivePaginationState()
+{
+    return IsSearchInputEmpty() ? NormalPaginationState : SearchPaginationState;
+}
+
+const UEVReviewWordsWidget::FReviewPaginationState& UEVReviewWordsWidget::GetActivePaginationState() const
+{
+    return IsSearchInputEmpty() ? NormalPaginationState : SearchPaginationState;
 }
 
 void UEVReviewWordsWidget::UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry)
@@ -249,27 +367,32 @@ void UEVReviewWordsWidget::UpdatePaginationControls()
 
 void UEVReviewWordsWidget::GoToPage(int32 PageNumber)
 {
+    FReviewPaginationState& ActivePaginationState = GetActivePaginationState();
+
     const int32 ClampedPage = FMath::Clamp(PageNumber, 1, TotalPages);
 
-    if (ClampedPage == CurrentPage)
+    if (ClampedPage == ActivePaginationState.CurrentPage)
     {
         return;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Changing review page: %d -> %d"), CurrentPage, ClampedPage);
+    UE_LOG(LogTemp, Log, TEXT("Changing review page: %d -> %d"), ActivePaginationState.CurrentPage, ClampedPage);
 
-    CurrentPage = ClampedPage;
+    ActivePaginationState.CurrentPage = ClampedPage;
 
-    DisplayCurrentPage();
-    UpdatePaginationControls();
+    RefreshReview();
 }
 
 void UEVReviewWordsWidget::GoToNextPage()
 {
-    GoToPage(CurrentPage + 1);
+    const FReviewPaginationState& ActivePaginationState = GetActivePaginationState();
+
+    GoToPage(ActivePaginationState.CurrentPage + 1);
 }
 
 void UEVReviewWordsWidget::GoToPreviousPage()
 {
-    GoToPage(CurrentPage - 1);
+    const FReviewPaginationState& ActivePaginationState = GetActivePaginationState();
+
+    GoToPage(ActivePaginationState.CurrentPage - 1);
 }

@@ -1303,6 +1303,127 @@ UEVVocabularyStorageService::GenerateValidationReport(EEVFileExtensionType FileE
     return ResultInfo;
 }
 
+int32 UEVVocabularyStorageService::GetVocabularyEntryCountByPrefix(const FString& SearchPrefix)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot count filtered vocabulary entries: database is invalid"));
+
+        return 0;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::GetVocabularyEntryCountByPrefixQuery,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create filtered vocabulary COUNT statement"));
+
+        return 0;
+    }
+
+    const FString SearchPattern = SearchPrefix + TEXT("%");
+
+    if (!Statement.SetBindingValueByIndex(1, SearchPattern))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to bind vocabulary search pattern: %s"), *SearchPattern);
+
+        return 0;
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Filtered vocabulary COUNT query returned no row"));
+
+        return 0;
+    }
+
+    int32 EntryCount = 0;
+
+    if (!Statement.GetColumnValueByIndex(0, EntryCount))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to read filtered vocabulary entry count"));
+
+        return 0;
+    }
+
+    return EntryCount;
+}
+
+TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntriesPageByPrefix(const FString& SearchPrefix,
+                                                                                       int32 Limit, int32 Offset)
+{
+    TArray<FVocabularyEntry> Entries;
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot load filtered vocabulary page: database is invalid"));
+
+        return Entries;
+    }
+
+    if (Limit <= 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Filtered vocabulary page limit must be greater than zero"));
+
+        return Entries;
+    }
+
+    if (Offset < 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Filtered vocabulary page offset cannot be negative"));
+
+        return Entries;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntriesPageByPrefix,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create filtered paginated vocabulary SELECT statement"));
+
+        return Entries;
+    }
+
+    const FString SearchPattern = SearchPrefix + TEXT("%");
+
+    if (!Statement.SetBindingValueByIndex(1, SearchPattern) || !Statement.SetBindingValueByIndex(2, Limit) ||
+        !Statement.SetBindingValueByIndex(3, Offset))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to bind filtered vocabulary page parameters"));
+
+        return Entries;
+    }
+
+    Entries.Reserve(Limit);
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FVocabularyEntry Entry;
+
+        if (!Statement.GetColumnValueByIndex(0, Entry.Word) || !Statement.GetColumnValueByIndex(1, Entry.Definition) ||
+            !Statement.GetColumnValueByIndex(2, Entry.Usage) ||
+            !Statement.GetColumnValueByIndex(3, Entry.TranslationRu) ||
+            !Statement.GetColumnValueByIndex(4, Entry.TranslationUa))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to read a filtered vocabulary row"));
+
+            Entries.Reset();
+            return Entries;
+        }
+
+        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
+
+        Entries.Add(MoveTemp(Entry));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Loaded filtered vocabulary page: Prefix=%s | Limit=%d | Offset=%d | Returned=%d"),
+           *SearchPrefix, Limit, Offset, Entries.Num());
+
+    return Entries;
+}
+
 bool UEVVocabularyStorageService::InsertVocabularyEntryStrict(const FVocabularyEntry& Entry)
 {
     if (!Database.IsValid())

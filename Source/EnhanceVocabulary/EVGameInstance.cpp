@@ -240,6 +240,31 @@ bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabula
     return true;
 }
 
+int32 UEVGameInstance::GetVocabularyEntryCountByPrefix(const FString& SearchPrefix) const
+{
+    if (!VocabularyStorageService)
+    {
+        return 0;
+    }
+
+    return VocabularyStorageService->GetVocabularyEntryCountByPrefix(SearchPrefix);
+}
+
+bool UEVGameInstance::GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>& OutVocabularyEntries,
+                                                       const FString& SearchPrefix, int32 Limit, int32 Offset) const
+{
+    OutVocabularyEntries.Reset();
+
+    if (!VocabularyStorageService)
+    {
+        return false;
+    }
+
+    OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntriesPageByPrefix(SearchPrefix, Limit, Offset);
+
+    return true;
+}
+
 FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
 {
     if (!WordSearchService)

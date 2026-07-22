@@ -47,6 +47,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UEditableTextBox* EditableTextBox_Search;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UButton* Button_ClearSearch;
+
     class UEVGameInstance* EVGameInstance;
 
     void DisplayCurrentPage();
@@ -101,7 +104,29 @@ private:
     UFUNCTION()
     void SetNumberOfEntriesPerPage(FString SelectedItem, ESelectInfo::Type SelectionType);
 
+    UFUNCTION()
+    void HandleSearchTextChanged(const FText& NewText);
+
+    UFUNCTION()
+    void ClearSearch();
+
     static constexpr int32 DefaultEntriesPerPage = 10;
 
     static const TArray<int32> SupportedEntriesPerPageValues;
+
+    bool TryGetValidatedSearchInput(FString& OutNormalizedSearch, FText& OutErrorMessage) const;
+
+    bool IsSearchInputEmpty() const;
+
+    struct FReviewPaginationState
+    {
+        int32 CurrentPage = 1;
+        int32 EntriesPerPage = 10;
+    };
+
+    FReviewPaginationState NormalPaginationState;
+    FReviewPaginationState SearchPaginationState;
+
+    FReviewPaginationState& GetActivePaginationState();
+    const FReviewPaginationState& GetActivePaginationState() const;
 };
