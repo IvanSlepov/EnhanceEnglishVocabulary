@@ -8,8 +8,8 @@ void UEVWordEntryWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
-    if (TextBlock_Word_Value && TextBlock_Definition_Value && TextBlock_Usage_Value && TextBlock_TranslationUA_Value &&
-        TextBlock_TranslationRU_Value)
+    if (TextBlock_Word_Value && TextBlock_Transcription_Value && TextBlock_Definition_Value && TextBlock_Usage_Value &&
+        TextBlock_TranslationUA_Value && TextBlock_TranslationRU_Value)
     {
         bAreTextFieldsCreated = true;
     }
@@ -44,11 +44,8 @@ void UEVWordEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
             // to broadcast them via the OnWordEntryButtonPressed so that the Player Controller
             // would be able to render the relevant enntry info if user presses a particular's WordEntryWidget View
             // Button
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.Word = WordEntryItem->EntryItem.Word;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.Definition = WordEntryItem->EntryItem.Definition;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.Usage = WordEntryItem->EntryItem.Usage;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.TranslationRu = WordEntryItem->EntryItem.TranslationRu;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.TranslationUa = WordEntryItem->EntryItem.TranslationUa;
+            // Copy the complete entry so newly added data fields are not silently dropped.
+            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry = WordEntryItem->EntryItem;
 
             // We need this adjustment since the long word without interruptions will not be auto-wrapped
             //---start
@@ -61,6 +58,7 @@ void UEVWordEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
             TextBlock_Word_Value->SetToolTipText(FText::FromString(OriginalWord));
             // --end
 
+            TextBlock_Transcription_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Transcription));
             TextBlock_Definition_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Definition));
             TextBlock_Usage_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Usage));
 

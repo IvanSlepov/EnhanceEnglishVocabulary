@@ -164,6 +164,8 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
 
         WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Visible);
 
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranscription->SetText(FText::FromString(Result.Transcription));
+
         WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::FromString(Result.Definition));
 
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::FromString(Result.Usage));
@@ -272,6 +274,7 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         Button_Clear->SetIsEnabled(true);
         EnableEditableTextBox(true);
 
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranscription->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
@@ -299,6 +302,7 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         Button_Clear->SetIsEnabled(false);
         EnableEditableTextBox(true);
         EditableText_WordInput->SetText(FText::GetEmpty());
+        WBP_SearchResultsPanel->TextBlock_SearchResultsTranscription->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
         WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());

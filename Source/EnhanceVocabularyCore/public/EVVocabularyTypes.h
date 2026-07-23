@@ -25,6 +25,9 @@ struct FVocabularyEntry
     FString Word;
 
     UPROPERTY(BlueprintReadWrite)
+    FString Transcription;
+
+    UPROPERTY(BlueprintReadWrite)
     FString Definition;
 
     UPROPERTY(BlueprintReadWrite)
@@ -48,6 +51,9 @@ struct FWordSearchResult
 
     UPROPERTY(BlueprintReadWrite)
     FString Word;
+
+    UPROPERTY(BlueprintReadWrite)
+    FString Transcription;
 
     UPROPERTY(BlueprintReadWrite)
     FString Definition;

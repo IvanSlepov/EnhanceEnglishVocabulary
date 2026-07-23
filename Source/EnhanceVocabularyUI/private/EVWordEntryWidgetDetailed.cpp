@@ -70,6 +70,7 @@ void UEVWordEntryWidgetDetailed::ShowWordEntry(const FVocabularyEntry& Entry)
     TextBlock_Word_Value->SetToolTipText(FText::FromString(CurrentOriginalWord));
     // ---end
 
+    MultiLineEditableTextBox_Transcription_Value->SetText(FText::FromString(Entry.Transcription));
     MultiLineEditableTextBox_Definition_Value->SetText(FText::FromString(Entry.Definition));
     MultiLineEditableTextBox_Usage_Value->SetText(FText::FromString(Entry.Usage));
     MultiLineEditableTextBox_TranslationRU_Value->SetText(FText::FromString(Entry.TranslationRu));
@@ -143,6 +144,7 @@ void UEVWordEntryWidgetDetailed::SetButtonsDisabled(bool bIsViewButtonDisabled, 
 void UEVWordEntryWidgetDetailed::SetEditableFieldsReadOnly(bool bSetReadOnly)
 {
 
+    MultiLineEditableTextBox_Transcription_Value->SetIsReadOnly(bSetReadOnly);
     MultiLineEditableTextBox_Definition_Value->SetIsReadOnly(bSetReadOnly);
     MultiLineEditableTextBox_Usage_Value->SetIsReadOnly(bSetReadOnly);
     MultiLineEditableTextBox_TranslationUA_Value->SetIsReadOnly(bSetReadOnly);
@@ -164,6 +166,7 @@ void UEVWordEntryWidgetDetailed::HandleSaveChangesPressed()
     FVocabularyEntry EditedVocabularyEntry;
 
     EditedVocabularyEntry.Word = CurrentOriginalWord;
+    EditedVocabularyEntry.Transcription = MultiLineEditableTextBox_Transcription_Value->GetText().ToString();
     EditedVocabularyEntry.Definition = MultiLineEditableTextBox_Definition_Value->GetText().ToString();
     EditedVocabularyEntry.Usage = MultiLineEditableTextBox_Usage_Value->GetText().ToString();
     EditedVocabularyEntry.TranslationRu = MultiLineEditableTextBox_TranslationRU_Value->GetText().ToString();

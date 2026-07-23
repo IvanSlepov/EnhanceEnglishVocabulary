@@ -24,6 +24,9 @@ class ENHANCEVOCABULARYUI_API UEVSearchResultsPanel : public UUserWidget
 public:
     // Widget elements
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* TextBlock_SearchResultsTranscription;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* TextBlock_SearchResultsDefinition;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))

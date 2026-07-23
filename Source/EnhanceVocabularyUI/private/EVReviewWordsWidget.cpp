@@ -7,6 +7,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "EVWordEntryWidget.h"
 #include "EVWordInputValidator.h"
+#include "Widgets/Views/STableViewBase.h"
 
 // Amount of the entries we can display per page
 const TArray<int32> UEVReviewWordsWidget::SupportedEntriesPerPageValues = {5, 10, 25, 50};
@@ -61,6 +62,11 @@ void UEVReviewWordsWidget::NativePreConstruct()
 void UEVReviewWordsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+
+    if (ListView_ReviewWords)
+    {
+        ListView_ReviewWords->SetScrollIntoViewAlignment(EScrollIntoViewAlignment::TopOrLeft);
+    }
 
     NormalPaginationState.CurrentPage = CurrentPage;
     NormalPaginationState.EntriesPerPage = EntriesPerPage;
@@ -125,7 +131,13 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
         ListView_ReviewWords->AddItem(EntryItem);
     }
 
-    ListView_ReviewWords->ScrollToTop();
+    if (!VocabularyEntries.IsEmpty())
+    {
+        ListView_ReviewWords->SetScrollIntoViewAlignment(EScrollIntoViewAlignment::TopOrLeft);
+
+        ListView_ReviewWords->ScrollToTop();
+        ListView_ReviewWords->ScrollIndexIntoView(0);
+    }
 }
 
 void UEVReviewWordsWidget::RefreshReview()

@@ -16,6 +16,7 @@ FWordSearchResult UEVWordSearchService::SearchWordFake(const FString& Word)
     FWordSearchResult Result;
 
     Result.Word = Word;
+    Result.Transcription = TEXT("/fake/");
     Result.Definition = FString::Printf(TEXT("Fake definition for: %s"), *Word);
     Result.Usage = FString::Printf(TEXT("Fake usage example for: %s"), *Word);
     Result.TranslationRu = TEXT("Fake Russian translation");
@@ -128,6 +129,7 @@ void UEVWordSearchService::HandleDictionaryResponse(bool bSuccess, int32 Respons
     }
 
     PendingResult.Word = ParsedResult.Word;
+    PendingResult.Transcription = ParsedResult.Transcription;
     PendingResult.Definition = ParsedResult.Definition;
     PendingResult.Usage = ParsedResult.Usage;
     PendingResult.bHasUsageExamples = ParsedResult.bHasUsageExamples;

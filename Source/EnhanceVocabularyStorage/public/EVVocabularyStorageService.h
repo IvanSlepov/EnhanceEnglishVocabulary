@@ -78,6 +78,7 @@ public:
 private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
+    bool EnsureVocabularyTableColumns();
     bool InsertVocabularyEntryStrict(const FVocabularyEntry& Entry);
     void CollectAppendValidationProblems(const TArray<FVocabularyEntry>& Entries,
                                          TArray<FEVValidationFailedEntry>& OutProblems);

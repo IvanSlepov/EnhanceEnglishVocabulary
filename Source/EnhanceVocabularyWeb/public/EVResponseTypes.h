@@ -51,12 +51,30 @@ struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryMeaningGroup
 };
 
 USTRUCT(BlueprintType)
+struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryPhonetic
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadWrite)
+    FString Text;
+
+    UPROPERTY(BlueprintReadWrite)
+    FString Audio;
+};
+
+USTRUCT(BlueprintType)
 struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryResponse
 {
     GENERATED_BODY()
 
     UPROPERTY(BlueprintReadWrite)
     FString Word;
+
+    UPROPERTY(BlueprintReadWrite)
+    FString Phonetic;
+
+    UPROPERTY(BlueprintReadWrite)
+    TArray<FEVFreeDictionaryPhonetic> Phonetics;
 
     UPROPERTY(BlueprintReadWrite)
     TArray<FEVFreeDictionaryMeaningGroup> Meanings;

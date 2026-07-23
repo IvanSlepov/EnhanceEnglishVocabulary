@@ -1,29 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-enum class EEVDatabaseColumnRole : uint8
-{
-    Internal,
-    ImportExport
-};
-
-enum class EEVImportRequirement : uint8
-{
-    None,
-    Required,
-    Optional
-};
-
-struct FEVDatabaseColumnDefinition
-{
-    FString Name;
-    FString SqlDefinition;
-    EEVDatabaseColumnRole Role;
-
-    EEVImportRequirement ImportRequirement;
-    FString ImportGuidance;
-};
+#include "EVVocabularyFieldRegistry.h"
 
 class ENHANCEVOCABULARYSTORAGE_API FEVVocabularyDatabaseSchema
 {

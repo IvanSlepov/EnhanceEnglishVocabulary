@@ -141,6 +141,7 @@ bool UEVGameInstance::SaveVocabularyEntry(const FWordSearchResult& WordSearchRes
 
     FVocabularyEntry Entry;
     Entry.Word = WordSearchResult.Word;
+    Entry.Transcription = WordSearchResult.Transcription;
     Entry.Definition = WordSearchResult.Definition;
     Entry.Usage = WordSearchResult.Usage;
     Entry.TranslationRu = WordSearchResult.TranslationRu;
