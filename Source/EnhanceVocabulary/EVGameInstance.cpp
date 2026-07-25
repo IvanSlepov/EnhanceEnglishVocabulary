@@ -70,6 +70,8 @@ void UEVGameInstance::Init()
         DeviceService->OnFileSaved().AddUObject(this, &ThisClass::HandleFileSaved);
 
         DeviceService->OnImportFilePicked().AddUObject(this, &ThisClass::HandleImportFilePicked);
+
+        DeviceService->OnPopUpTimerExpired.AddUObject(this, &ThisClass::HandlePopUpTimerExpired);
     }
     else
     {
@@ -266,6 +268,34 @@ bool UEVGameInstance::GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>&
     return true;
 }
 
+bool UEVGameInstance::GetRandomlySelectedWord(FString& OutWord)
+{
+    OutWord.Reset();
+
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot retrieve random word: vocabulary storage service is invalid."));
+
+        return false;
+    }
+
+    return VocabularyStorageService->GetRandomlySelectedWord(OutWord);
+}
+
+bool UEVGameInstance::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettings)
+{
+    CurrentPopUpSettings = PopUpSettings;
+
+    const int32 IntervalSeconds = FEVPopUpSettingsInfo::GetIntervalSeconds(PopUpSettings.PopUpIntervals);
+
+    if (IntervalSeconds <= 0)
+    {
+        return DeviceService->StopPopUpTimer();
+    }
+
+    return DeviceService->StartPopUpTimer(IntervalSeconds);
+}
+
 FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
 {
     if (!WordSearchService)
@@ -350,6 +380,32 @@ void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
     const FWordSearchResult& SearchWordResultPassedByGameInstance)
 {
     OnEVWordSearchCompletedFromEVGameInstance.Broadcast(SearchWordResultPassedByGameInstance);
+}
+
+void UEVGameInstance::HandlePopUpTimerExpired()
+{
+    FString RandomWord;
+
+    if (!VocabularyStorageService->GetRandomlySelectedWord(RandomWord))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to retrieve a random word for the notification."));
+
+        return;
+    }
+
+    if (!DeviceService->ShowVocabularyNotification(RandomWord))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to show vocabulary notification."));
+
+        return;
+    }
+
+    const int32 IntervalSeconds = FEVPopUpSettingsInfo::GetIntervalSeconds(CurrentPopUpSettings.PopUpIntervals);
+
+    if (IntervalSeconds > 0)
+    {
+        DeviceService->StartPopUpTimer(IntervalSeconds);
+    }
 }
 
 void UEVGameInstance::HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo)

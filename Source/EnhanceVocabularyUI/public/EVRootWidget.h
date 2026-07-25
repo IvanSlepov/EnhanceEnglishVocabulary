@@ -17,6 +17,7 @@
 #include "EVReviewWordsWidget.h"
 #include "EVAppSettingsWidget.h"
 #include "EVImportExportDBWidget.h"
+#include "EVPopUpSettingsWidget.h"
 #include "EVErrorProvider.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
@@ -24,6 +25,7 @@
 #include "EVWidgetCommonEvents.h"
 #include "EVWordEntryActionTypes.h"
 #include "EVFileExchangeTypes.h"
+#include "EVPopUpSettingsTypes.h"
 #include "EVRootWidget.generated.h"
 
 /**
@@ -64,6 +66,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVImportExportDBWidget> ImportExportDB;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UEVPopUpSettingsWidget> PopUpSettings;
 
     class UEVGameInstance* EVGameInstance;
 
@@ -169,6 +174,9 @@ private:
 
     UFUNCTION()
     void HandleOnImportExportDownloadDBOperationIssued(const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget);
+
+    UFUNCTION()
+    void HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettingsFromWidget);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;

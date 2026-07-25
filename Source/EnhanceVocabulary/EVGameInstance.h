@@ -9,6 +9,7 @@
 #include "EVFileExchangeTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "EVFileExchangeDefaults.h"
+#include "EVPopUpSettingsTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -90,6 +91,12 @@ public:
     bool GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>& OutVocabularyEntries, const FString& SearchPrefix,
                                           int32 Limit, int32 Offset) const;
 
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetRandomlySelectedWord(FString& OutWord);
+
+    UFUNCTION(BlueprintCallable, Category = "Pop-up settings")
+    bool HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettings);
+
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Fake/Debugging Search")
     FWordSearchResult SearchWordFake(const FString& Word);
 
@@ -127,6 +134,9 @@ private:
 
     UFUNCTION()
     void HandleEVWordSearchCompletedFromEVGameInstance(const FWordSearchResult& SearchWordResultPassedByGameInstance);
+
+    UFUNCTION()
+    void HandlePopUpTimerExpired();
 
     // We need to assign local ENUM var (Cause unassigned enum type var takes the very first entry from that enum)
     // and we need to assign smth that differ from the Offline in this case, to address the issue when
@@ -169,4 +179,6 @@ private:
 
     FEVFileOperationInfo PendingImportFileOperationInfo;
     FEVFileExchangeResultInfo PendingImportValidationResult;
+
+    FEVPopUpSettingsInfo CurrentPopUpSettings;
 };

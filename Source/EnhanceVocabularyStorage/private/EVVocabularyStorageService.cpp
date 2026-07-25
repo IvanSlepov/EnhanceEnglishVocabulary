@@ -17,74 +17,74 @@
 
 namespace
 {
-FString QuoteCsvField(const FString& Value)
-{
-    FString EscapedValue = Value;
-
-    // A quote inside a quoted CSV field is represented by two quotes.
-    EscapedValue.ReplaceInline(TEXT("\""), TEXT("\"\""));
-
-    return FString::Printf(TEXT("\"%s\""), *EscapedValue);
-}
-
-bool BindEntryFields(FSQLitePreparedStatement& Statement, const FVocabularyEntry& Entry, int32 StartBindingIndex = 1)
-{
-    const TArray<FEVDatabaseColumnDefinition>& Fields = FEVVocabularyFieldRegistry::GetPersistentFields();
-
-    for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+    FString QuoteCsvField(const FString& Value)
     {
-        const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+        FString EscapedValue = Value;
 
-        if (!Field.EntryMember ||
-            !Statement.SetBindingValueByIndex(StartBindingIndex + FieldIndex, Entry.*Field.EntryMember))
-        {
-            UE_LOG(LogTemp, Error, TEXT("Failed to bind vocabulary field '%s'"), *Field.Name);
-            return false;
-        }
+        // A quote inside a quoted CSV field is represented by two quotes.
+        EscapedValue.ReplaceInline(TEXT("\""), TEXT("\"\""));
+
+        return FString::Printf(TEXT("\"%s\""), *EscapedValue);
     }
 
-    return true;
-}
-
-bool BindEditableEntryFields(FSQLitePreparedStatement& Statement, const FVocabularyEntry& Entry,
-                             int32 StartBindingIndex = 1)
-{
-    const TArray<FEVDatabaseColumnDefinition> Fields = FEVVocabularyFieldRegistry::GetEditablePersistentFields();
-
-    for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+    bool BindEntryFields(FSQLitePreparedStatement& Statement, const FVocabularyEntry& Entry, int32 StartBindingIndex = 1)
     {
-        const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+        const TArray<FEVDatabaseColumnDefinition>& Fields = FEVVocabularyFieldRegistry::GetPersistentFields();
 
-        if (!Field.EntryMember ||
-            !Statement.SetBindingValueByIndex(StartBindingIndex + FieldIndex, Entry.*Field.EntryMember))
+        for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
         {
-            UE_LOG(LogTemp, Error, TEXT("Failed to bind editable vocabulary field '%s'"), *Field.Name);
-            return false;
+            const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+
+            if (!Field.EntryMember ||
+                !Statement.SetBindingValueByIndex(StartBindingIndex + FieldIndex, Entry.*Field.EntryMember))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to bind vocabulary field '%s'"), *Field.Name);
+                return false;
+            }
         }
+
+        return true;
     }
 
-    return true;
-}
-
-bool ReadEntryFields(FSQLitePreparedStatement& Statement, FVocabularyEntry& OutEntry, int32 StartColumnIndex = 0)
-{
-    const TArray<FEVDatabaseColumnDefinition>& Fields = FEVVocabularyFieldRegistry::GetPersistentFields();
-
-    for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+    bool BindEditableEntryFields(FSQLitePreparedStatement& Statement, const FVocabularyEntry& Entry,
+                                 int32 StartBindingIndex = 1)
     {
-        const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+        const TArray<FEVDatabaseColumnDefinition> Fields = FEVVocabularyFieldRegistry::GetEditablePersistentFields();
 
-        if (!Field.EntryMember ||
-            !Statement.GetColumnValueByIndex(StartColumnIndex + FieldIndex, OutEntry.*Field.EntryMember))
+        for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
         {
-            UE_LOG(LogTemp, Error, TEXT("Failed to read vocabulary field '%s'"), *Field.Name);
-            return false;
+            const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+
+            if (!Field.EntryMember ||
+                !Statement.SetBindingValueByIndex(StartBindingIndex + FieldIndex, Entry.*Field.EntryMember))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to bind editable vocabulary field '%s'"), *Field.Name);
+                return false;
+            }
         }
+
+        return true;
     }
 
-    OutEntry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(OutEntry.Usage);
-    return true;
-}
+    bool ReadEntryFields(FSQLitePreparedStatement& Statement, FVocabularyEntry& OutEntry, int32 StartColumnIndex = 0)
+    {
+        const TArray<FEVDatabaseColumnDefinition>& Fields = FEVVocabularyFieldRegistry::GetPersistentFields();
+
+        for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+        {
+            const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+
+            if (!Field.EntryMember ||
+                !Statement.GetColumnValueByIndex(StartColumnIndex + FieldIndex, OutEntry.*Field.EntryMember))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to read vocabulary field '%s'"), *Field.Name);
+                return false;
+            }
+        }
+
+        OutEntry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(OutEntry.Usage);
+        return true;
+    }
 } // namespace
 
 bool UEVVocabularyStorageService::InitializeStorage()
@@ -330,6 +330,40 @@ bool UEVVocabularyStorageService::GetVocabularyEntryByWord(const FString& Word, 
     }
 
     return ReadEntryFields(Statement, OutEntry);
+}
+
+bool UEVVocabularyStorageService::GetRandomlySelectedWord(FString& OutWord)
+{
+    OutWord.Reset();
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot retrieve random word: database is invalid."));
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetRandomlySelectedWordQuery(),
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create random word SELECT statement."));
+        return false;
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Vocabulary is empty."));
+        return false;
+    }
+
+    if (!Statement.GetColumnValueByIndex(0, OutWord))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to read the random word."));
+        return false;
+    }
+
+    return true;
 }
 
 int32 UEVVocabularyStorageService::GetVocabularyEntryCount()

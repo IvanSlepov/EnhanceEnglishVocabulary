@@ -93,6 +93,11 @@ void UEVRootWidget::NativeOnInitialized()
             this, &ThisClass::HandleOnImportExportDownloadDBOperationIssued);
     }
 
+    if (PopUpSettings)
+    {
+        PopUpSettings->OnPopUpIntervalSelected.AddDynamic(this, &ThisClass::HandlePopUpIntervalSelected);
+    }
+
     if (Button_Menu)
     {
         Button_Menu->OnPressed.AddDynamic(this, &ThisClass::ButtonMenuPressed);
@@ -162,6 +167,12 @@ void UEVRootWidget::ButtonMenuPressed()
                 WidgetSwitcher_Main->SetActiveWidget(ImportExportDB);
                 MenuSwitcherCount = 0;
             }
+
+            else if (bIsPopupSettingsActivated_internal)
+            {
+                WidgetSwitcher_Main->SetActiveWidget(PopUpSettings);
+                MenuSwitcherCount = 0;
+            }
         }
 
         else
@@ -200,6 +211,8 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
 
     else if (bIsPopupSettingsActivated)
     {
+        WidgetSwitcher_Main->SetActiveWidget(PopUpSettings);
+        MenuSwitcherCount = 0;
     }
 
     else if (bIsAppSettingsActivated)
@@ -354,6 +367,17 @@ void UEVRootWidget::HandleOnImportExportDownloadDBOperationIssued(
     const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget)
 {
     OnImportExportDownloadDBOperationIssued.Broadcast(FileOperationInfoFromSelectorWidget);
+}
+
+void UEVRootWidget::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettingsFromWidget) 
+{
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in EVRootWidget.cpp"));
+        return;
+    }
+
+    EVGameInstance->HandlePopUpIntervalSelected(PopUpSettingsFromWidget);
 }
 
 void UEVRootWidget::HandleReviewWordsRefresh()

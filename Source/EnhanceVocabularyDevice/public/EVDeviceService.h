@@ -9,6 +9,10 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FEVDeviceImportFilePicked, const FEVFileExc
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVDeviceFileSaved, const FEVFileExchangeResultInfo&);
 
+DECLARE_MULTICAST_DELEGATE(FOnPopUpTimerExpired);
+
+DECLARE_MULTICAST_DELEGATE(FOnVocabularyPopUpClosed);
+
 UCLASS()
 class ENHANCEVOCABULARYDEVICE_API UEVDeviceService : public UObject
 {
@@ -25,6 +29,14 @@ public:
     FEVDeviceImportFilePicked& OnImportFilePicked();
     FEVDeviceFileSaved& OnFileSaved();
 
+    FOnPopUpTimerExpired OnPopUpTimerExpired; 
+    FOnVocabularyPopUpClosed OnVocabularyPopUpClosed;
+
+    bool StartPopUpTimer(int32 IntervalSeconds);
+    bool StopPopUpTimer();
+
+    bool ShowVocabularyNotification(const FString& Word);
+
 private:
     UPROPERTY()
     TObjectPtr<UObject> PlatformFileExchangeServiceObject;
@@ -33,6 +45,13 @@ private:
 
     void HandlePlatformFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
 
+    void HandlePopUpTimerExpired();
+
+    bool RequestNotificationPermission();
+
     FEVDeviceImportFilePicked ImportFilePickedDelegate;
     FEVDeviceFileSaved FileSavedDelegate;
+
+
+    FTimerHandle PopUpTimerHandle;
 };

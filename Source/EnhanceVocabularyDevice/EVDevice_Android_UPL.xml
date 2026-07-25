@@ -2,270 +2,559 @@
 
 <root xmlns:android="http://schemas.android.com/apk/res/android">
 
-  <gameActivityImportAdditions>
+	<!-- ============================================================= -->
+	<!-- Android permissions                                           -->
+	<!-- ============================================================= -->
 
-    <insert>
-      import android.app.Activity;
-      import android.content.Intent;
-      import android.net.Uri;
-      import android.provider.DocumentsContract;
-      import android.content.ContentResolver;
-      import android.os.ParcelFileDescriptor;
-      import java.io.InputStream;
-      import java.io.OutputStream;
-      import java.io.FileInputStream;
-      import java.io.FileOutputStream;
-      import java.io.ByteArrayOutputStream;
-      import android.database.Cursor;
-      import android.provider.OpenableColumns;
-    </insert>
+	<androidManifestUpdates>
+		<addPermission
+            android:name="android.permission.POST_NOTIFICATIONS"/>
+	</androidManifestUpdates>
 
-  </gameActivityImportAdditions>
 
-  <gameActivityClassAdditions>
+	<!-- ============================================================= -->
+	<!-- GameActivity imports                                          -->
+	<!-- ============================================================= -->
 
-    <insert>
+	<gameActivityImportAdditions>
+		<insert>
+			import android.Manifest;
+			import android.app.Activity;
+			import android.app.Notification;
+			import android.app.NotificationChannel;
+			import android.app.NotificationManager;
+			import android.app.PendingIntent;
+			import android.content.Context;
+			import android.content.Intent;
+			import android.content.pm.PackageManager;
+			import android.database.Cursor;
+			import android.net.Uri;
+			import android.os.Build;
+			import android.provider.OpenableColumns;
 
-      // =========================================================================
-      // EnhanceVocabulary - File Exchange
-      // =========================================================================
+			import java.io.ByteArrayOutputStream;
+			import java.io.InputStream;
+			import java.io.OutputStream;
+		</insert>
+	</gameActivityImportAdditions>
 
-      private static final int EV_REQUEST_OPEN_DOCUMENT = 7351;
-      private static final int EV_REQUEST_CREATE_DOCUMENT = 7352;
 
-      private byte[] EVFileExchangePendingSaveBytes = null;
-      private String EVFileExchangePendingSaveFileName = "";
-      private String EVFileExchangePendingSaveMimeType = "";
+	<!-- ============================================================= -->
+	<!-- GameActivity class additions                                  -->
+	<!-- ============================================================= -->
 
-      public void AndroidThunkJava_EV_SaveBytesToUserSelectedLocation(
-      String suggestedFileName,
-      String mimeType,
-      byte[] bytes)
-      {
-      EVFileExchangePendingSaveFileName = suggestedFileName;
-      EVFileExchangePendingSaveMimeType = mimeType;
-      EVFileExchangePendingSaveBytes = bytes;
+	<gameActivityClassAdditions>
+		<insert>
+			<![CDATA[
 
-      Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-      intent.addCategory(Intent.CATEGORY_OPENABLE);
-      intent.setType(mimeType);
-      intent.putExtra(Intent.EXTRA_TITLE, suggestedFileName);
+            // =========================================================
+            // Enhance Vocabulary - Request codes
+            // =========================================================
 
-      startActivityForResult(intent, EV_REQUEST_CREATE_DOCUMENT);
-      }
+            private static final int EV_REQUEST_OPEN_DOCUMENT = 7351;
+            private static final int EV_REQUEST_CREATE_DOCUMENT = 7352;
+            private static final int EV_REQUEST_NOTIFICATION_PERMISSION = 7354;
 
-      public native void nativeEVFileSaveCompleted(
-      boolean bSuccess,
-      boolean bCancelled,
-      String fileName,
-      String errorMessage);
 
-      public void AndroidThunkJava_EV_PickImportFile(String mimeType)
-      {
-      Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-      intent.addCategory(Intent.CATEGORY_OPENABLE);
-      intent.setType("*/*");
+            // =========================================================
+            // Enhance Vocabulary - File exchange state
+            // =========================================================
 
-      startActivityForResult(
-      intent,
-      EV_REQUEST_OPEN_DOCUMENT);
-      }
+            private byte[] EVFileExchangePendingSaveBytes = null;
 
-      public native void nativeEVImportFilePicked(
-      boolean bSuccess,
-      boolean bCancelled,
-      String fileName,
-      byte[] bytes,
-      String errorMessage);
+            private String EVFileExchangePendingSaveFileName = "";
 
-    </insert>
+            private String EVFileExchangePendingSaveMimeType = "";
 
-  </gameActivityClassAdditions>
-  <gameActivityOnActivityResultAdditions>
 
-    <insert>
-      <![CDATA[
-          if (requestCode == EV_REQUEST_OPEN_DOCUMENT)
-          {
-              boolean bEVImportSucceeded = false;
-              boolean bEVImportCancelled = resultCode != Activity.RESULT_OK;
+            // =========================================================
+            // Enhance Vocabulary - Notification configuration
+            // =========================================================
 
-              String EVImportFileName = "";
-              String EVImportErrorMessage = "";
-              byte[] EVImportBytes = null;
+            private static final String EV_VOCABULARY_CHANNEL_ID =
+                "ev_vocabulary_reminders";
 
-              try
-              {
-                  if (!bEVImportCancelled &&
-                      data != null &&
-                      data.getData() != null)
-                  {
-                      Uri sourceUri = data.getData();
+            private static final int EV_VOCABULARY_NOTIFICATION_ID = 7353;
 
-                      try (Cursor cursor = getContentResolver().query(
-                               sourceUri,
-                               null,
-                               null,
-                               null,
-                               null))
-                      {
-                          if (cursor != null &&
-                              cursor.moveToFirst())
-                          {
-                              int columnIndex =
-                                  cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
 
-                              if (columnIndex >= 0)
-                              {
-                                  String displayName =
-                                      cursor.getString(columnIndex);
+            // =========================================================
+            // Save file
+            // =========================================================
 
-                                  if (displayName != null)
-                                  {
-                                      EVImportFileName = displayName;
-                                  }
-                              }
-                          }
-                      }
+            public void AndroidThunkJava_EV_SaveBytesToUserSelectedLocation(
+                String suggestedFileName,
+                String mimeType,
+                byte[] bytes)
+            {
+                EVFileExchangePendingSaveFileName =
+                    suggestedFileName;
 
-                      if (EVImportFileName.isEmpty())
-                      {
-                          EVImportFileName =
-                              sourceUri.getLastPathSegment();
-                      }
+                EVFileExchangePendingSaveMimeType =
+                    mimeType;
 
-                      try (InputStream inputStream =
-                               getContentResolver().openInputStream(sourceUri))
-                      {
-                          if (inputStream != null)
-                          {
-                              ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+                EVFileExchangePendingSaveBytes =
+                    bytes;
 
-                              byte[] buffer = new byte[8192];
-                              int bytesRead;
+                Intent intent =
+                    new Intent(Intent.ACTION_CREATE_DOCUMENT);
 
-                              while ((bytesRead = inputStream.read(buffer)) != -1)
-                              {
-                                  byteStream.write(buffer, 0, bytesRead);
-                              }
+                intent.addCategory(
+                    Intent.CATEGORY_OPENABLE);
 
-                              EVImportBytes = byteStream.toByteArray();
+                intent.setType(
+                    mimeType);
 
-                              if (EVImportBytes.length > 0)
-                              {
-                                  bEVImportSucceeded = true;
-                              }
-                              else
-                              {
-                                  EVImportErrorMessage =
-                                      "The selected file is empty.";
-                              }
-                          }
-                          else
-                          {
-                              EVImportErrorMessage =
-                                  "ContentResolver returned a null InputStream.";
-                          }
-                      }
-                  }
-                  else if (!bEVImportCancelled)
-                  {
-                      EVImportErrorMessage =
-                          "Missing source URI.";
-                  }
-              }
-              catch (Exception exception)
-              {
-                  EVImportErrorMessage =
-                      exception.getClass().getSimpleName() +
-                      ": " +
-                      exception.getMessage();
+                intent.putExtra(
+                    Intent.EXTRA_TITLE,
+                    suggestedFileName);
 
-                  exception.printStackTrace();
-              }
+                startActivityForResult(
+                    intent,
+                    EV_REQUEST_CREATE_DOCUMENT);
+            }
 
-              if (EVImportBytes == null)
-              {
-                  EVImportBytes = new byte[0];
-              }
 
-              nativeEVImportFilePicked(
-                  bEVImportSucceeded,
-                  bEVImportCancelled,
-                  EVImportFileName,
-                  EVImportBytes,
-                  EVImportErrorMessage);
+            public native void nativeEVFileSaveCompleted(
+                boolean bSuccess,
+                boolean bCancelled,
+                String fileName,
+                String errorMessage);
 
-              return;
-          }
 
-          if (requestCode == EV_REQUEST_CREATE_DOCUMENT)
-          {
-              boolean bEVFileSavedSuccessfully = false;
-              boolean bEVFileSaveCancelled = resultCode != Activity.RESULT_OK;
-              String EVFileSaveErrorMessage = "";
-              
-              String completedFileName = EVFileExchangePendingSaveFileName;
-              
-              try
-              {
-                  if (!bEVFileSaveCancelled &&
-                      data != null &&
-                      data.getData() != null &&
-                      EVFileExchangePendingSaveBytes != null &&
-                      EVFileExchangePendingSaveBytes.length > 0)
-                  {
-                      Uri targetUri = data.getData();
+            // =========================================================
+            // Import file
+            // =========================================================
 
-                      try (OutputStream outputStream =
-                               getContentResolver().openOutputStream(targetUri))
-                      {
-                          if (outputStream != null)
-                          {
-                              outputStream.write(EVFileExchangePendingSaveBytes);
-                              outputStream.flush();
+            public void AndroidThunkJava_EV_PickImportFile(String mimeType)
+            {
+                Intent intent =
+                    new Intent(Intent.ACTION_OPEN_DOCUMENT);
 
-                              bEVFileSavedSuccessfully = true;
-                          }
-                          else
-                          {
-                              EVFileSaveErrorMessage =
-                                  "ContentResolver returned a null OutputStream.";
-                          }
-                      }
-                  }
-                  else if (!bEVFileSaveCancelled)
-                  {
-                      EVFileSaveErrorMessage =
-                          "Missing target URI or pending file data.";
-                  }
-              }
-              catch (Exception exception)
-              {
-                  EVFileSaveErrorMessage =
-                      exception.getClass().getSimpleName() + ": " + exception.getMessage();
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
 
-                  exception.printStackTrace();
-              }
-              finally
-              {
-                  EVFileExchangePendingSaveBytes = null;
-                  EVFileExchangePendingSaveFileName = "";
-                  EVFileExchangePendingSaveMimeType = "";
-              }
-              
-              nativeEVFileSaveCompleted(
-              bEVFileSavedSuccessfully,
-              bEVFileSaveCancelled,
-              completedFileName,
-              EVFileSaveErrorMessage);
+                startActivityForResult(
+                    intent,
+                    EV_REQUEST_OPEN_DOCUMENT);
+            }
 
-              return;
-          }
 
-      ]]>
-    </insert>
+            public native void nativeEVImportFilePicked(
+                boolean bSuccess,
+                boolean bCancelled,
+                String fileName,
+                byte[] bytes,
+                String errorMessage);
 
-  </gameActivityOnActivityResultAdditions>
+
+            // =========================================================
+            // Notification permission
+            // =========================================================
+
+            public void AndroidThunkJava_EV_RequestNotificationPermission()
+            {
+                if (Build.VERSION.SDK_INT < 33)
+                {
+                    return;
+                }
+
+                runOnUiThread(new Runnable()
+                {
+                    @Override
+                    public void run()
+                    {
+                        if (checkSelfPermission(
+                                Manifest.permission.POST_NOTIFICATIONS)
+                            == PackageManager.PERMISSION_GRANTED)
+                        {
+                            return;
+                        }
+
+                        requestPermissions(
+                            new String[]
+                            {
+                                Manifest.permission.POST_NOTIFICATIONS
+                            },
+                            EV_REQUEST_NOTIFICATION_PERMISSION);
+                    }
+                });
+            }
+
+
+            // =========================================================
+            // Vocabulary notification
+            // =========================================================
+
+            public void AndroidThunkJava_EV_ShowVocabularyNotification(
+                final String word)
+            {
+                if (word == null || word.isEmpty())
+                {
+                    return;
+                }
+
+                runOnUiThread(new Runnable()
+                {
+                    @Override
+                    public void run()
+                    {
+                        if (Build.VERSION.SDK_INT >= 33)
+                        {
+                            if (checkSelfPermission(
+                                    Manifest.permission.POST_NOTIFICATIONS)
+                                != PackageManager.PERMISSION_GRANTED)
+                            {
+                                return;
+                            }
+                        }
+
+                        NotificationManager notificationManager =
+                            (NotificationManager)getSystemService(
+                                Context.NOTIFICATION_SERVICE);
+
+                        if (notificationManager == null)
+                        {
+                            return;
+                        }
+
+                        if (Build.VERSION.SDK_INT >=
+                            Build.VERSION_CODES.O)
+                        {
+                            NotificationChannel channel =
+                                new NotificationChannel(
+                                    EV_VOCABULARY_CHANNEL_ID,
+                                    "Vocabulary reminders",
+                                    NotificationManager.IMPORTANCE_HIGH);
+
+                            channel.setDescription(
+                                "Periodic vocabulary word reminders");
+
+                            notificationManager.createNotificationChannel(
+                                channel);
+                        }
+
+                        Intent launchIntent =
+                            getPackageManager()
+                                .getLaunchIntentForPackage(
+                                    getPackageName());
+
+                        PendingIntent contentIntent = null;
+
+                        if (launchIntent != null)
+                        {
+                            launchIntent.addFlags(
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                                Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+                            int pendingIntentFlags =
+                                PendingIntent.FLAG_UPDATE_CURRENT;
+
+                            if (Build.VERSION.SDK_INT >=
+                                Build.VERSION_CODES.M)
+                            {
+                                pendingIntentFlags |=
+                                    PendingIntent.FLAG_IMMUTABLE;
+                            }
+
+                            contentIntent =
+                                PendingIntent.getActivity(
+                                    GameActivity.this,
+                                    0,
+                                    launchIntent,
+                                    pendingIntentFlags);
+                        }
+
+                        Notification.Builder builder;
+
+                        if (Build.VERSION.SDK_INT >=
+                            Build.VERSION_CODES.O)
+                        {
+                            builder =
+                                new Notification.Builder(
+                                    GameActivity.this,
+                                    EV_VOCABULARY_CHANNEL_ID);
+                        }
+                        else
+                        {
+                            builder =
+                                new Notification.Builder(
+                                    GameActivity.this);
+
+                            builder.setPriority(
+                                Notification.PRIORITY_HIGH);
+                        }
+
+                        builder
+                            .setSmallIcon(
+                                getApplicationInfo().icon)
+                            .setContentTitle(
+                                "Enhance Vocabulary")
+                            .setContentText(
+                                word)
+                            .setStyle(
+                                new Notification.BigTextStyle()
+                                    .bigText(word))
+                            .setCategory(
+                                Notification.CATEGORY_REMINDER)
+                            .setAutoCancel(true);
+
+                        if (contentIntent != null)
+                        {
+                            builder.setContentIntent(
+                                contentIntent);
+                        }
+
+                        notificationManager.notify(
+                            EV_VOCABULARY_NOTIFICATION_ID,
+                            builder.build());
+                    }
+                });
+            }
+
+        ]]>
+		</insert>
+	</gameActivityClassAdditions>
+
+
+	<!-- ============================================================= -->
+	<!-- Activity result handling                                      -->
+	<!-- ============================================================= -->
+
+	<gameActivityOnActivityResultAdditions>
+		<insert>
+			<![CDATA[
+
+            // =========================================================
+            // Import selected file
+            // =========================================================
+
+            if (requestCode == EV_REQUEST_OPEN_DOCUMENT)
+            {
+                boolean bEVImportSucceeded = false;
+
+                boolean bEVImportCancelled =
+                    resultCode != Activity.RESULT_OK;
+
+                String EVImportFileName = "";
+
+                String EVImportErrorMessage = "";
+
+                byte[] EVImportBytes = null;
+
+                try
+                {
+                    if (!bEVImportCancelled &&
+                        data != null &&
+                        data.getData() != null)
+                    {
+                        Uri sourceUri =
+                            data.getData();
+
+                        try (Cursor cursor =
+                            getContentResolver().query(
+                                sourceUri,
+                                null,
+                                null,
+                                null,
+                                null))
+                        {
+                            if (cursor != null &&
+                                cursor.moveToFirst())
+                            {
+                                int columnIndex =
+                                    cursor.getColumnIndex(
+                                        OpenableColumns.DISPLAY_NAME);
+
+                                if (columnIndex >= 0)
+                                {
+                                    String displayName =
+                                        cursor.getString(
+                                            columnIndex);
+
+                                    if (displayName != null)
+                                    {
+                                        EVImportFileName =
+                                            displayName;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (EVImportFileName.isEmpty())
+                        {
+                            String lastPathSegment =
+                                sourceUri.getLastPathSegment();
+
+                            if (lastPathSegment != null)
+                            {
+                                EVImportFileName =
+                                    lastPathSegment;
+                            }
+                        }
+
+                        try (InputStream inputStream =
+                            getContentResolver().openInputStream(
+                                sourceUri))
+                        {
+                            if (inputStream != null)
+                            {
+                                ByteArrayOutputStream byteStream =
+                                    new ByteArrayOutputStream();
+
+                                byte[] buffer =
+                                    new byte[8192];
+
+                                int bytesRead;
+
+                                while ((bytesRead =
+                                    inputStream.read(buffer)) != -1)
+                                {
+                                    byteStream.write(
+                                        buffer,
+                                        0,
+                                        bytesRead);
+                                }
+
+                                EVImportBytes =
+                                    byteStream.toByteArray();
+
+                                if (EVImportBytes.length > 0)
+                                {
+                                    bEVImportSucceeded =
+                                        true;
+                                }
+                                else
+                                {
+                                    EVImportErrorMessage =
+                                        "The selected file is empty.";
+                                }
+                            }
+                            else
+                            {
+                                EVImportErrorMessage =
+                                    "ContentResolver returned a null InputStream.";
+                            }
+                        }
+                    }
+                    else if (!bEVImportCancelled)
+                    {
+                        EVImportErrorMessage =
+                            "Missing source URI.";
+                    }
+                }
+                catch (Exception exception)
+                {
+                    EVImportErrorMessage =
+                        exception.getClass().getSimpleName() +
+                        ": " +
+                        String.valueOf(exception.getMessage());
+
+                    exception.printStackTrace();
+                }
+
+                if (EVImportBytes == null)
+                {
+                    EVImportBytes =
+                        new byte[0];
+                }
+
+                nativeEVImportFilePicked(
+                    bEVImportSucceeded,
+                    bEVImportCancelled,
+                    EVImportFileName,
+                    EVImportBytes,
+                    EVImportErrorMessage);
+
+                return;
+            }
+
+
+            // =========================================================
+            // Save file to selected location
+            // =========================================================
+
+            if (requestCode == EV_REQUEST_CREATE_DOCUMENT)
+            {
+                boolean bEVFileSavedSuccessfully = false;
+
+                boolean bEVFileSaveCancelled =
+                    resultCode != Activity.RESULT_OK;
+
+                String EVFileSaveErrorMessage = "";
+
+                String completedFileName =
+                    EVFileExchangePendingSaveFileName;
+
+                try
+                {
+                    if (!bEVFileSaveCancelled &&
+                        data != null &&
+                        data.getData() != null &&
+                        EVFileExchangePendingSaveBytes != null &&
+                        EVFileExchangePendingSaveBytes.length > 0)
+                    {
+                        Uri targetUri =
+                            data.getData();
+
+                        try (OutputStream outputStream =
+                            getContentResolver().openOutputStream(
+                                targetUri))
+                        {
+                            if (outputStream != null)
+                            {
+                                outputStream.write(
+                                    EVFileExchangePendingSaveBytes);
+
+                                outputStream.flush();
+
+                                bEVFileSavedSuccessfully =
+                                    true;
+                            }
+                            else
+                            {
+                                EVFileSaveErrorMessage =
+                                    "ContentResolver returned a null OutputStream.";
+                            }
+                        }
+                    }
+                    else if (!bEVFileSaveCancelled)
+                    {
+                        EVFileSaveErrorMessage =
+                            "Missing target URI or pending file data.";
+                    }
+                }
+                catch (Exception exception)
+                {
+                    EVFileSaveErrorMessage =
+                        exception.getClass().getSimpleName() +
+                        ": " +
+                        String.valueOf(exception.getMessage());
+
+                    exception.printStackTrace();
+                }
+                finally
+                {
+                    EVFileExchangePendingSaveBytes =
+                        null;
+
+                    EVFileExchangePendingSaveFileName =
+                        "";
+
+                    EVFileExchangePendingSaveMimeType =
+                        "";
+                }
+
+                nativeEVFileSaveCompleted(
+                    bEVFileSavedSuccessfully,
+                    bEVFileSaveCancelled,
+                    completedFileName,
+                    EVFileSaveErrorMessage);
+
+                return;
+            }
+
+        ]]>
+		</insert>
+	</gameActivityOnActivityResultAdditions>
 
 </root>

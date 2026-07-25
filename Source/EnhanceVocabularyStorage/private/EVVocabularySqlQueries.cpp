@@ -97,3 +97,12 @@ FString FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageByPrefixQuery()
         TEXT("SELECT %s FROM %s WHERE Word LIKE ? COLLATE NOCASE ORDER BY Word COLLATE NOCASE ASC LIMIT ? OFFSET ?;"),
         *BuildColumnList(), *FEVVocabularyDatabaseSchema::GetTableName());
 }
+
+FString FEVVocabularySqlQueries::GetRandomlySelectedWordQuery()
+{
+    const FString& TableName = FEVVocabularyDatabaseSchema::GetTableName();
+
+    return TEXT("SELECT Word FROM ") + TableName +
+           TEXT(" WHERE rowid >= (") TEXT("1 + ABS(RANDOM()) % (SELECT MAX(rowid) FROM ") + TableName +
+           TEXT(")) ORDER BY rowid LIMIT 1;");
+}

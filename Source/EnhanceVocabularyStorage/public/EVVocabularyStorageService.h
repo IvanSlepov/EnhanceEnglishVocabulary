@@ -40,6 +40,7 @@ public:
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry);
+    bool GetRandomlySelectedWord(FString& OutWord);
 
     int32 GetVocabularyEntryCount();
 

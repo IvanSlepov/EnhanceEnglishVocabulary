@@ -13,6 +13,7 @@ public:
     static FString GetSelectVocabularyEntriesQuery();
     static FString GetSelectVocabularyEntriesPageQuery();
     static FString GetSelectVocabularyEntriesPageByPrefixQuery();
+    static FString GetRandomlySelectedWordQuery();
 
     static constexpr const TCHAR* DeleteVocabularyEntry = TEXT("DELETE FROM VocabularyEntries WHERE Word = ?;");
 
