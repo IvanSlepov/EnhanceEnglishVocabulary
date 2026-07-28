@@ -8,6 +8,7 @@
 #include "EVRequestedActionTypes.h"
 #include "EVWordEntryActionTypes.h"
 #include "EVFileExchangeTypes.h"
+#include "EVPopUpSettingsTypes.h"
 
 #include "EVWidgetCommonEvents.generated.h"
 
@@ -23,6 +24,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryWidgetControlsActivated,
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnImportExportDownloadDBOperationIssued, const FEVFileOperationInfo&,
                                             FileOperationInfo);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPopUpIntervalSelectedFromSettings, const FEVPopUpSettingsInfo&,
+                                            PopUpSettingsInfo);
 
 UINTERFACE(BlueprintType)
 class ENHANCEVOCABULARYCORE_API UEVWidgetCommonEvents : public UInterface
@@ -80,7 +84,14 @@ public:
         return nullptr;
     }
 
+    virtual FOnPopUpIntervalSelectedFromSettings* GetSelectedPopUpInterval()
+    {
+        return nullptr;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) {}
 
     virtual void HandleReviewWordsRefresh() {}
+
+    virtual void HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& EVPopUpSettingsInfo) {}
 };

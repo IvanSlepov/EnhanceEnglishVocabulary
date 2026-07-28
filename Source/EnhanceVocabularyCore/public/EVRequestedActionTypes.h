@@ -11,6 +11,7 @@ enum class EEVRequestedActionSource : uint8
     AddWord,
     ReviewWords,
     ImportExport,
+    PopUpSettings,
     Settings,
     ConnectionModule
 };
@@ -25,7 +26,8 @@ enum class EEVRequestedActionType : uint8
     DownloadDBTemplate,
     ImportDBOverwrite,
     ImportDBAppend,
-    ExportDB
+    ExportDB,
+    EnableNotifications
 };
 
 UENUM(BlueprintType)

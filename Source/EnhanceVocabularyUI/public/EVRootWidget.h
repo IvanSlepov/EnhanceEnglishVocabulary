@@ -26,6 +26,7 @@
 #include "EVWordEntryActionTypes.h"
 #include "EVFileExchangeTypes.h"
 #include "EVPopUpSettingsTypes.h"
+
 #include "EVRootWidget.generated.h"
 
 /**
@@ -100,9 +101,20 @@ public:
         return &OnImportExportDownloadDBOperationIssued;
     }
 
+    virtual FOnPopUpIntervalSelectedFromSettings* GetSelectedPopUpInterval() override
+    {
+        return &OnPopUpIntervalSelectedFromSettings;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
     virtual void HandleReviewWordsRefresh() override;
+
+    // This method is getting called from the PC to
+    // confirm a user-selected Pop-up Interval. And it always forces the
+    // EEVPopUpIntervals::TurnedOff, regardless of WHAT user has selected other than this option
+    // IF the App's Notifications are disabled from within Android or later iOS
+    void HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& PopUpSettingsInfo) override;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -151,6 +163,9 @@ private:
 
     UPROPERTY(BlueprintAssignable)
     FOnImportExportDownloadDBOperationIssued OnImportExportDownloadDBOperationIssued;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnPopUpIntervalSelectedFromSettings OnPopUpIntervalSelectedFromSettings;
 
     UFUNCTION()
     void HandleOnConnectionErrorDetected();

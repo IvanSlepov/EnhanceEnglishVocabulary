@@ -72,6 +72,9 @@ void UEVGameInstance::Init()
         DeviceService->OnImportFilePicked().AddUObject(this, &ThisClass::HandleImportFilePicked);
 
         DeviceService->OnPopUpTimerExpired.AddUObject(this, &ThisClass::HandlePopUpTimerExpired);
+
+        DeviceService->OnNotificationPermissionResult().AddUObject(this,
+                                                                   &ThisClass::HandleNotificationPermissionResult);
     }
     else
     {
@@ -876,4 +879,57 @@ UEVGameInstance::ConvertFileExchangeResultToRequestedAction(const FEVFileExchang
     ActionInfo.GenerateColor();
 
     return ActionInfo;
+}
+
+bool UEVGameInstance::AreNotificationsEnabled() const
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot check notifications: DeviceService is nullptr."));
+
+        return false;
+    }
+
+    return DeviceService->AreNotificationsEnabled();
+}
+
+bool UEVGameInstance::HasRequestedNotificationPermission() const
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot check notification permission history: DeviceService is nullptr."));
+
+        return false;
+    }
+
+    return DeviceService->HasRequestedNotificationPermission();
+}
+
+bool UEVGameInstance::RequestNotificationPermission()
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot request notification permission: DeviceService is nullptr."));
+
+        return false;
+    }
+
+    return DeviceService->RequestNotificationPermission();
+}
+
+void UEVGameInstance::OpenNotificationSettings()
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: DeviceService is nullptr."));
+
+        return;
+    }
+
+    DeviceService->OpenNotificationSettings();
+}
+
+void UEVGameInstance::HandleNotificationPermissionResult(const bool bGranted)
+{
+    NotificationPermissionResultDelegate.Broadcast(bGranted);
 }

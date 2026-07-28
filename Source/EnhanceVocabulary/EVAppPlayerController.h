@@ -14,6 +14,7 @@
 #include "EVGameInstance.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVFileExchangeTypes.h"
+#include "EVPopUpSettingsTypes.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -83,9 +84,13 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     void InitEVAppPlayerController();
 
 private:
+    void HandleApplicationEnteredForeground();
+
+    FDelegateHandle ApplicationEnteredForegroundHandle;
     // Cache the data we receive from the the WordEntry
     // we decided to review
     FEVWordEntryActionInfo CachedWordEntryWidgetInfo;
@@ -98,6 +103,8 @@ private:
     FEVFileOperationInfo PendingFileOperationInfo;
 
     EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+
+    FEVPopUpSettingsInfo PendingPopUpSettings;
 
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
@@ -144,4 +151,19 @@ private:
 
     // Handle widget destruction
     void DestroyWidget(TObjectPtr<UUserWidget>& Widget);
+
+    // Handle PopUp settings & intervals
+    UFUNCTION()
+    void HandlePopUpIntervalSelectedFromSettingsWidget(const FEVPopUpSettingsInfo& EVPopUpSettingsFromWidget);
+
+    UFUNCTION()
+    void ApplyResolvedPopUpInterval(const FEVPopUpSettingsInfo& ResolvedPopUpSettingsFromWidget);
+
+    void CommitPendingPopUpInterval();
+    void RejectPendingPopUpInterval();
+
+    bool bHasPendingPopUpSettings = false;
+    bool bWaitingForNotificationSettings = false;
+
+    void HandleNotificationPermissionResult(const bool bGranted);
 };

@@ -26,6 +26,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnec
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVImportFilePickCompleted, const FEVFileExchangeResultInfo&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVNotificationPermissionResultFromGameInstance, bool /* bGranted */);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -124,6 +125,21 @@ public:
         return ImportFilePickCompletedDelegate;
     }
 
+    FEVNotificationPermissionResultFromGameInstance& OnNotificationPermissionResult()
+    {
+        return NotificationPermissionResultDelegate;
+    }
+
+public:
+    /*Notifications(Pop-ups) related functions*/
+    bool AreNotificationsEnabled() const;
+
+    bool HasRequestedNotificationPermission() const;
+
+    bool RequestNotificationPermission();
+
+    void OpenNotificationSettings();
+
 protected:
     virtual void Init() override;
     virtual void Shutdown() override;
@@ -181,4 +197,8 @@ private:
     FEVFileExchangeResultInfo PendingImportValidationResult;
 
     FEVPopUpSettingsInfo CurrentPopUpSettings;
+
+    FEVNotificationPermissionResultFromGameInstance NotificationPermissionResultDelegate;
+
+    void HandleNotificationPermissionResult(const bool bGranted);
 };

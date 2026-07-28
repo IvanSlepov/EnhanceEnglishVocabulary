@@ -4,10 +4,15 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 
+#include "Async/Async.h"
+
 #if PLATFORM_ANDROID
 #include "Android/AndroidApplication.h"
 #include "Android/AndroidJNI.h"
 #endif
+
+// Get access to the current GameInstance
+TWeakObjectPtr<UEVDeviceService> UEVDeviceService::ActiveInstance;
 
 bool UEVDeviceService::StartPopUpTimer(const int32 IntervalSeconds)
 {
@@ -26,13 +31,6 @@ bool UEVDeviceService::StartPopUpTimer(const int32 IntervalSeconds)
 
         return false;
     }
-
-#if PLATFORM_ANDROID
-    if (!RequestNotificationPermission())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Failed to request notification permission."));
-    }
-#endif
 
     FTimerManager& TimerManager = World->GetTimerManager();
 
@@ -62,6 +60,40 @@ bool UEVDeviceService::StopPopUpTimer()
     UE_LOG(LogTemp, Log, TEXT("Pop-up timer stopped."));
 
     return true;
+}
+
+void UEVDeviceService::OpenNotificationSettings()
+{
+#if PLATFORM_ANDROID
+
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: Java environment is invalid."));
+        return;
+    }
+
+    static jmethodID OpenNotificationSettingsMethod = FJavaWrapper::FindMethod(
+        Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_OpenNotificationSettings", "()V", false);
+
+    if (!OpenNotificationSettingsMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android notification settings method."));
+        return;
+    }
+
+    Env->CallVoidMethod(FJavaWrapper::GameActivityThis, OpenNotificationSettingsMethod);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while opening notification settings."));
+    }
+
+#endif
 }
 
 bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
@@ -136,6 +168,51 @@ void UEVDeviceService::HandlePopUpTimerExpired()
     OnPopUpTimerExpired.Broadcast();
 }
 
+bool UEVDeviceService::AreNotificationsEnabled() const
+{
+#if PLATFORM_ANDROID
+
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot check notifications: Java environment is invalid."));
+
+        return false;
+    }
+
+    static jmethodID AreNotificationsEnabledMethod = FJavaWrapper::FindMethod(
+        Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_AreNotificationsEnabled", "()Z", false);
+
+    if (!AreNotificationsEnabledMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android notification availability method."));
+
+        return false;
+    }
+
+    const jboolean bNotificationsEnabled =
+        Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, AreNotificationsEnabledMethod);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while checking notifications."));
+
+        return false;
+    }
+
+    return bNotificationsEnabled == JNI_TRUE;
+
+#else
+
+    return true;
+
+#endif
+}
+
 bool UEVDeviceService::RequestNotificationPermission()
 {
 #if PLATFORM_ANDROID
@@ -180,8 +257,86 @@ bool UEVDeviceService::RequestNotificationPermission()
 #endif
 }
 
+bool UEVDeviceService::HasRequestedNotificationPermission() const
+{
+#if PLATFORM_ANDROID
+
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot check notification permission history: Java environment is invalid."));
+
+        return false;
+    }
+
+    static jmethodID HasRequestedPermissionMethod = FJavaWrapper::FindMethod(
+        Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_HasRequestedNotificationPermission", "()Z", false);
+
+    if (!HasRequestedPermissionMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android notification permission history method."));
+
+        return false;
+    }
+
+    const jboolean bHasRequested = Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, HasRequestedPermissionMethod);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while checking notification permission history."));
+
+        return false;
+    }
+
+    return bHasRequested == JNI_TRUE;
+
+#else
+
+    return true;
+
+#endif
+}
+
+FEVNotificationPermissionResult& UEVDeviceService::OnNotificationPermissionResult()
+{
+    return NotificationPermissionResultDelegate;
+}
+
+void UEVDeviceService::HandleAndroidNotificationPermissionResult(const bool bGranted)
+{
+    AsyncTask(ENamedThreads::GameThread,
+              [bGranted]()
+              {
+                  UEVDeviceService* DeviceService = ActiveInstance.Get();
+
+                  if (!IsValid(DeviceService))
+                  {
+                      UE_LOG(LogTemp, Warning,
+                             TEXT("Notification permission result received, but no active DeviceService exists."));
+
+                      return;
+                  }
+
+                  DeviceService->HandleNotificationPermissionResult(bGranted);
+              });
+}
+
+void UEVDeviceService::HandleNotificationPermissionResult(const bool bIsGranted)
+{
+    UE_LOG(LogTemp, Log, TEXT("Notification permission result received: %s"),
+           bIsGranted ? TEXT("Granted") : TEXT("Denied"));
+
+    NotificationPermissionResultDelegate.Broadcast(bIsGranted);
+}
+
 void UEVDeviceService::InitializeDeviceService()
 {
+    ActiveInstance = this;
+
     PlatformFileExchangeServiceObject = UEVPlatformFileExchangeServiceFactory::Create(this);
 
     IEVPlatformFileExchangeService* PlatformService =
@@ -196,6 +351,16 @@ void UEVDeviceService::InitializeDeviceService()
     PlatformService->OnImportFilePicked().AddUObject(this, &ThisClass::HandlePlatformImportFilePicked);
 
     PlatformService->OnFileSaved().AddUObject(this, &ThisClass::HandlePlatformFileSaved);
+}
+
+void UEVDeviceService::BeginDestroy()
+{
+    if (ActiveInstance.Get() == this)
+    {
+        ActiveInstance.Reset();
+    }
+
+    Super::BeginDestroy();
 }
 
 void UEVDeviceService::PickImportFile(EEVFileExtensionType FileExtensionType)
@@ -265,3 +430,13 @@ void UEVDeviceService::HandlePlatformFileSaved(const FEVFileExchangeResultInfo& 
 {
     FileSavedDelegate.Broadcast(ResultInfo);
 }
+
+#if PLATFORM_ANDROID
+
+extern "C" JNIEXPORT void JNICALL Java_com_epicgames_unreal_GameActivity_nativeEVNotificationPermissionResult(
+    JNIEnv* Env, jobject Thiz, jboolean bGranted)
+{
+    UEVDeviceService::HandleAndroidNotificationPermissionResult(bGranted == JNI_TRUE);
+}
+
+#endif

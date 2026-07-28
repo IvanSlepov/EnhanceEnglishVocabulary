@@ -11,21 +11,21 @@
 #include "EVPopUpSettingsWidget.generated.h"
 
 /**
- * 
+ *
  */
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPopUpIntervalSelected, const FEVPopUpSettingsInfo&,
-                                            EVPopUpSettingsInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPopUpIntervalSelected, const FEVPopUpSettingsInfo&, EVPopUpSettingsInfo);
 
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVPopUpSettingsWidget : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UComboBoxString* ComboBoxString_PopUpIntervals;
 
+    void SetSelectedInterval(const FEVPopUpSettingsInfo& PopUpSettingsInfo);
 
     /*Events*/
     FOnPopUpIntervalSelected OnPopUpIntervalSelected;
@@ -36,6 +36,7 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
+    bool bApplyingIntervalFromController = false;
 
     void PopulatePopUpIntervals();
 

@@ -369,15 +369,9 @@ void UEVRootWidget::HandleOnImportExportDownloadDBOperationIssued(
     OnImportExportDownloadDBOperationIssued.Broadcast(FileOperationInfoFromSelectorWidget);
 }
 
-void UEVRootWidget::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettingsFromWidget) 
+void UEVRootWidget::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettingsFromWidget)
 {
-    if (!EVGameInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in EVRootWidget.cpp"));
-        return;
-    }
-
-    EVGameInstance->HandlePopUpIntervalSelected(PopUpSettingsFromWidget);
+    OnPopUpIntervalSelectedFromSettings.Broadcast(PopUpSettingsFromWidget);
 }
 
 void UEVRootWidget::HandleReviewWordsRefresh()
@@ -422,6 +416,18 @@ void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynam
         UE_LOG(LogTemp, Error,
                TEXT("TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic is nullptr in WBP_RootWidget"));
     }
+}
+
+void UEVRootWidget::HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& PopUpSettingsInfo)
+{
+    if (!PopUpSettings)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot apply resolved pop-up settings: PopUpSettings is null."));
+
+        return;
+    }
+
+    PopUpSettings->SetSelectedInterval(PopUpSettingsInfo);
 }
 
 void UEVRootWidget::HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo)

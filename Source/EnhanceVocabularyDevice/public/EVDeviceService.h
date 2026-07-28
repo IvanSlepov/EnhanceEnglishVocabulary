@@ -13,6 +13,9 @@ DECLARE_MULTICAST_DELEGATE(FOnPopUpTimerExpired);
 
 DECLARE_MULTICAST_DELEGATE(FOnVocabularyPopUpClosed);
 
+// In NOT DYNAMIC multicast delegate we don't have to separate types of vars from their names with commas
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVNotificationPermissionResult, bool bGranted);
+
 UCLASS()
 class ENHANCEVOCABULARYDEVICE_API UEVDeviceService : public UObject
 {
@@ -29,29 +32,47 @@ public:
     FEVDeviceImportFilePicked& OnImportFilePicked();
     FEVDeviceFileSaved& OnFileSaved();
 
-    FOnPopUpTimerExpired OnPopUpTimerExpired; 
+    FOnPopUpTimerExpired OnPopUpTimerExpired;
     FOnVocabularyPopUpClosed OnVocabularyPopUpClosed;
 
     bool StartPopUpTimer(int32 IntervalSeconds);
     bool StopPopUpTimer();
 
+    void OpenNotificationSettings();
+
     bool ShowVocabularyNotification(const FString& Word);
+
+    void HandlePopUpTimerExpired();
+
+    bool AreNotificationsEnabled() const;
+
+    bool RequestNotificationPermission();
+
+    bool HasRequestedNotificationPermission() const;
+
+    FEVNotificationPermissionResult& OnNotificationPermissionResult();
+
+    static void HandleAndroidNotificationPermissionResult(bool bGranted);
+
+    void HandleNotificationPermissionResult(bool bIsGranted);
+
+protected:
+    virtual void BeginDestroy() override;
 
 private:
     UPROPERTY()
     TObjectPtr<UObject> PlatformFileExchangeServiceObject;
 
+    static TWeakObjectPtr<UEVDeviceService> ActiveInstance;
+
     void HandlePlatformImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes);
 
     void HandlePlatformFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
 
-    void HandlePopUpTimerExpired();
-
-    bool RequestNotificationPermission();
-
     FEVDeviceImportFilePicked ImportFilePickedDelegate;
     FEVDeviceFileSaved FileSavedDelegate;
 
-
     FTimerHandle PopUpTimerHandle;
+
+    FEVNotificationPermissionResult NotificationPermissionResultDelegate;
 };
