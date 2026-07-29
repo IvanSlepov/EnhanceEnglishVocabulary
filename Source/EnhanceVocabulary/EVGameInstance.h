@@ -140,6 +140,8 @@ public:
 
     void OpenNotificationSettings();
 
+    void TestDeviceAlarm();
+
 protected:
     virtual void Init() override;
     virtual void Shutdown() override;

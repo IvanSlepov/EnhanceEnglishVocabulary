@@ -161,6 +161,93 @@ bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
 #endif
 }
 
+bool UEVDeviceService::ScheduleVocabularyNotifications(const int32 IntervalSeconds, const FString& SerializedWords)
+{
+    if (IntervalSeconds <= 0 || SerializedWords.IsEmpty())
+    {
+        UE_LOG(LogTemp, Warning,
+               TEXT("Cannot schedule vocabulary notifications: invalid interval or empty word payload."));
+        return false;
+    }
+
+#if PLATFORM_ANDROID
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot schedule vocabulary notifications: Java environment is invalid."));
+        return false;
+    }
+
+    static jmethodID ScheduleMethod = FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
+                                                               "AndroidThunkJava_EV_ScheduleVocabularyNotifications",
+                                                               "(ILjava/lang/String;)Z", false);
+
+    if (!ScheduleMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android vocabulary notification scheduling method."));
+        return false;
+    }
+
+    jstring JavaWords = Env->NewStringUTF(TCHAR_TO_UTF8(*SerializedWords));
+    if (!JavaWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to convert vocabulary notification payload to Java string."));
+        return false;
+    }
+
+    const jboolean bScheduled =
+        Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, ScheduleMethod, IntervalSeconds, JavaWords);
+    Env->DeleteLocalRef(JavaWords);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while scheduling vocabulary notifications."));
+        return false;
+    }
+
+    return bScheduled == JNI_TRUE;
+#else
+    return StartPopUpTimer(IntervalSeconds);
+#endif
+}
+
+bool UEVDeviceService::CancelVocabularyNotifications()
+{
+#if PLATFORM_ANDROID
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot cancel vocabulary notifications: Java environment is invalid."));
+        return false;
+    }
+
+    static jmethodID CancelMethod = FJavaWrapper::FindMethod(
+        Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_CancelVocabularyNotifications", "()Z", false);
+
+    if (!CancelMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android vocabulary notification cancellation method."));
+        return false;
+    }
+
+    const jboolean bCancelled = Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, CancelMethod);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while cancelling vocabulary notifications."));
+        return false;
+    }
+
+    return bCancelled == JNI_TRUE;
+#else
+    return StopPopUpTimer();
+#endif
+}
+
 void UEVDeviceService::HandlePopUpTimerExpired()
 {
     UE_LOG(LogTemp, Log, TEXT("Pop-up timer expired."));
@@ -331,6 +418,40 @@ void UEVDeviceService::HandleNotificationPermissionResult(const bool bIsGranted)
            bIsGranted ? TEXT("Granted") : TEXT("Denied"));
 
     NotificationPermissionResultDelegate.Broadcast(bIsGranted);
+}
+
+void UEVDeviceService::TestAlarm()
+{
+#if PLATFORM_ANDROID
+
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot schedule test alarm: Java environment is invalid."));
+        return;
+    }
+
+    static jmethodID TestAlarmMethod =
+        FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_TestAlarm", "()V", false);
+
+    if (!TestAlarmMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android test alarm method."));
+        return;
+    }
+
+    Env->CallVoidMethod(FJavaWrapper::GameActivityThis, TestAlarmMethod);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while scheduling the test alarm."));
+    }
+
+#endif
 }
 
 void UEVDeviceService::InitializeDeviceService()

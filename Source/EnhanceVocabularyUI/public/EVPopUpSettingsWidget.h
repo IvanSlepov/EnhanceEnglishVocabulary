@@ -14,7 +14,8 @@
  *
  */
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPopUpIntervalSelected, const FEVPopUpSettingsInfo&, EVPopUpSettingsInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNotificationSettingsChanged, const FEVPopUpSettingsInfo&,
+                                            EVPopUpSettingsInfo);
 
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVPopUpSettingsWidget : public UUserWidget
@@ -23,12 +24,15 @@ class ENHANCEVOCABULARYUI_API UEVPopUpSettingsWidget : public UUserWidget
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UComboBoxString* ComboBoxString_PopUpIntervals;
+    class UComboBoxString* ComboBoxString_NotificationIntervals;
 
-    void SetSelectedInterval(const FEVPopUpSettingsInfo& PopUpSettingsInfo);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UComboBoxString* ComboBoxString_NotificationModes;
+
+    void SetSelectedSettings(const FEVPopUpSettingsInfo& Settings);
 
     /*Events*/
-    FOnPopUpIntervalSelected OnPopUpIntervalSelected;
+    FOnNotificationSettingsChanged OnNotificationSettingsChanged;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -36,10 +40,18 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
-    bool bApplyingIntervalFromController = false;
+    bool bApplyingSettingsFromController = false;
 
-    void PopulatePopUpIntervals();
+    void PopulateNotificationIntervals();
+    void PopulateNotificationModes();
+
+    void BroadcastCurrentSettings();
+
+    FEVPopUpSettingsInfo EVNotificationSettingsInfo;
 
     UFUNCTION()
-    void HandleOnPopUpIntervalSelected(FString SelectedItem, ESelectInfo::Type SelectionType);
+    void HandleOnNotificationsIntervalSelected(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+    UFUNCTION()
+    void HandleOnNotificationsModeSelected(FString SelectedItem, ESelectInfo::Type SelectionType);
 };

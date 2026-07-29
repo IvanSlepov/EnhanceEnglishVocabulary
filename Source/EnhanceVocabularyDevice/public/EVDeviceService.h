@@ -42,6 +42,9 @@ public:
 
     bool ShowVocabularyNotification(const FString& Word);
 
+    bool ScheduleVocabularyNotifications(int32 IntervalSeconds, const FString& SerializedWords);
+    bool CancelVocabularyNotifications();
+
     void HandlePopUpTimerExpired();
 
     bool AreNotificationsEnabled() const;
@@ -55,6 +58,8 @@ public:
     static void HandleAndroidNotificationPermissionResult(bool bGranted);
 
     void HandleNotificationPermissionResult(bool bIsGranted);
+
+    void TestAlarm();
 
 protected:
     virtual void BeginDestroy() override;

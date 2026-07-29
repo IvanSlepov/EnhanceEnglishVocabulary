@@ -95,7 +95,7 @@ void UEVRootWidget::NativeOnInitialized()
 
     if (PopUpSettings)
     {
-        PopUpSettings->OnPopUpIntervalSelected.AddDynamic(this, &ThisClass::HandlePopUpIntervalSelected);
+        PopUpSettings->OnNotificationSettingsChanged.AddDynamic(this, &ThisClass::HandlePopUpIntervalSelected);
     }
 
     if (Button_Menu)
@@ -427,7 +427,7 @@ void UEVRootWidget::HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo&
         return;
     }
 
-    PopUpSettings->SetSelectedInterval(PopUpSettingsInfo);
+    PopUpSettings->SetSelectedSettings(PopUpSettingsInfo);
 }
 
 void UEVRootWidget::HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo)

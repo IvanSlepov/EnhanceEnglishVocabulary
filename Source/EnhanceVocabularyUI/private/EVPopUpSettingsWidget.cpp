@@ -6,13 +6,24 @@ void UEVPopUpSettingsWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
-    if (ComboBoxString_PopUpIntervals)
+    if (ComboBoxString_NotificationIntervals)
     {
-        ComboBoxString_PopUpIntervals->OnSelectionChanged.AddDynamic(this, &ThisClass::HandleOnPopUpIntervalSelected);
+        ComboBoxString_NotificationIntervals->OnSelectionChanged.AddDynamic(
+            this, &ThisClass::HandleOnNotificationsIntervalSelected);
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_PopUpIntervals is nullptr in EVPopUpSettingsWidget.cpp"));
+        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_NotificationIntervals is nullptr in EVPopUpSettingsWidget.cpp"));
+    }
+
+    if (ComboBoxString_NotificationModes)
+    {
+        ComboBoxString_NotificationModes->OnSelectionChanged.AddDynamic(this,
+                                                                        &ThisClass::HandleOnNotificationsModeSelected);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_NotificationModes is nullptr in EVPopUpSettingsWidget.cpp"));
     }
 }
 
@@ -25,73 +36,138 @@ void UEVPopUpSettingsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    PopulatePopUpIntervals();
+    bApplyingSettingsFromController = true;
+
+    PopulateNotificationIntervals();
+    PopulateNotificationModes();
+
+    bApplyingSettingsFromController = false;
 }
 
-void UEVPopUpSettingsWidget::PopulatePopUpIntervals()
+void UEVPopUpSettingsWidget::PopulateNotificationIntervals()
 {
-    if (!ComboBoxString_PopUpIntervals)
+    if (!ComboBoxString_NotificationIntervals)
     {
-        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_PopUpIntervals is nullptr in EVPopUpSettingsWidget.cpp"));
+        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_NotificationIntervals is nullptr in EVPopUpSettingsWidget.cpp"));
         return;
     }
 
-    FEVPopUpSettingsInfo EVPopUpSettingsInfo;
-
-    for (auto Interval : EVPopUpSettingsInfo.GetAllIntervalDisplayNames())
+    for (auto Interval : EVNotificationSettingsInfo.GetAllIntervalDisplayNames())
     {
         FString IntervalName = Interval.ToString();
-        ComboBoxString_PopUpIntervals->AddOption(IntervalName);
+        ComboBoxString_NotificationIntervals->AddOption(IntervalName);
     }
 
-    ComboBoxString_PopUpIntervals->SetSelectedOption(
-        EVPopUpSettingsInfo.GetIntervalDisplayName(EEVPopUpIntervals::TurnedOff).ToString());
+    ComboBoxString_NotificationIntervals->SetSelectedOption(
+        EVNotificationSettingsInfo.GetIntervalDisplayName(EEVPopUpIntervals::TurnedOff).ToString());
 }
 
-void UEVPopUpSettingsWidget::HandleOnPopUpIntervalSelected(FString SelectedItem, ESelectInfo::Type SelectionType)
+void UEVPopUpSettingsWidget::PopulateNotificationModes()
 {
-    if (bApplyingIntervalFromController)
+    if (!ComboBoxString_NotificationModes)
     {
+        UE_LOG(LogTemp, Error, TEXT("ComboBoxString_NotificationModes is nullptr in EVPopUpSettingsWidget.cpp"));
         return;
     }
+
+    for (auto NotificationMode : EVNotificationSettingsInfo.GetAllNotificationModesDisplayNames())
+    {
+        FString NotificationModeName = NotificationMode.ToString();
+        ComboBoxString_NotificationModes->AddOption(NotificationModeName);
+    }
+
+    ComboBoxString_NotificationModes->SetSelectedOption(
+        EVNotificationSettingsInfo.GetNotificationModesDisplayName(EEVNotificationMode::RandomWord).ToString());
+}
+
+void UEVPopUpSettingsWidget::BroadcastCurrentSettings()
+{
+    if (!ComboBoxString_NotificationIntervals || !ComboBoxString_NotificationModes)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot broadcast notification settings: one or more combo boxes are null."));
+
+        return;
+    }
+
+    const FString SelectedIntervalName = ComboBoxString_NotificationIntervals->GetSelectedOption();
+
+    const FString SelectedModeName = ComboBoxString_NotificationModes->GetSelectedOption();
 
     EEVPopUpIntervals SelectedInterval;
+    EEVNotificationMode SelectedMode;
 
-    if (!FEVPopUpSettingsInfo::TryGetIntervalFromDisplayName(SelectedItem, SelectedInterval))
+    if (!FEVPopUpSettingsInfo::TryGetIntervalFromDisplayName(SelectedIntervalName, SelectedInterval))
     {
-        UE_LOG(LogTemp, Warning, TEXT("Failed to resolve pop-up interval from '%s'."), *SelectedItem);
+        UE_LOG(LogTemp, Warning, TEXT("Failed to resolve notification interval from '%s'."), *SelectedIntervalName);
 
         return;
     }
 
-    FEVPopUpSettingsInfo PopUpSettings;
-    PopUpSettings.PopUpIntervals = SelectedInterval;
+    if (!FEVPopUpSettingsInfo::TryGetNotificationModeFromDisplayName(SelectedModeName, SelectedMode))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to resolve notification mode from '%s'."), *SelectedModeName);
 
-    OnPopUpIntervalSelected.Broadcast(PopUpSettings);
+        return;
+    }
+
+    EVNotificationSettingsInfo.PopUpIntervals = SelectedInterval;
+    EVNotificationSettingsInfo.NotificationMode = SelectedMode;
+
+    OnNotificationSettingsChanged.Broadcast(EVNotificationSettingsInfo);
 }
 
-void UEVPopUpSettingsWidget::SetSelectedInterval(const FEVPopUpSettingsInfo& PopUpSettingsInfo)
+void UEVPopUpSettingsWidget::HandleOnNotificationsIntervalSelected(FString SelectedItem,
+                                                                   ESelectInfo::Type SelectionType)
 {
-    if (!ComboBoxString_PopUpIntervals)
+    if (bApplyingSettingsFromController)
     {
-        UE_LOG(LogTemp, Error, TEXT("Cannot set pop-up interval: ComboBoxString_PopUpIntervals is null."));
+        return;
+    }
 
+    BroadcastCurrentSettings();
+}
+
+void UEVPopUpSettingsWidget::HandleOnNotificationsModeSelected(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+    if (bApplyingSettingsFromController)
+    {
+        return;
+    }
+
+    BroadcastCurrentSettings();
+}
+
+void UEVPopUpSettingsWidget::SetSelectedSettings(const FEVPopUpSettingsInfo& PopUpSettingsInfo)
+{
+    if (!ComboBoxString_NotificationIntervals || !ComboBoxString_NotificationModes)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot set notification settings: one or more combo boxes are null."));
         return;
     }
 
     const FString IntervalDisplayName =
-        PopUpSettingsInfo.GetIntervalDisplayName(PopUpSettingsInfo.PopUpIntervals).ToString();
+        FEVPopUpSettingsInfo::GetIntervalDisplayName(PopUpSettingsInfo.PopUpIntervals).ToString();
+    const FString ModeDisplayName =
+        FEVPopUpSettingsInfo::GetNotificationModesDisplayName(PopUpSettingsInfo.NotificationMode).ToString();
 
-    if (ComboBoxString_PopUpIntervals->FindOptionIndex(IntervalDisplayName) == INDEX_NONE)
+    if (ComboBoxString_NotificationIntervals->FindOptionIndex(IntervalDisplayName) == INDEX_NONE)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Cannot set pop-up interval: option '%s' was not found."), *IntervalDisplayName);
-
+        UE_LOG(LogTemp, Warning, TEXT("Cannot set notification interval: option '%s' was not found."),
+               *IntervalDisplayName);
         return;
     }
 
-    bApplyingIntervalFromController = true;
+    if (ComboBoxString_NotificationModes->FindOptionIndex(ModeDisplayName) == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot set notification mode: option '%s' was not found."), *ModeDisplayName);
+        return;
+    }
 
-    ComboBoxString_PopUpIntervals->SetSelectedOption(IntervalDisplayName);
+    bApplyingSettingsFromController = true;
 
-    bApplyingIntervalFromController = false;
+    ComboBoxString_NotificationIntervals->SetSelectedOption(IntervalDisplayName);
+    ComboBoxString_NotificationModes->SetSelectedOption(ModeDisplayName);
+    EVNotificationSettingsInfo = PopUpSettingsInfo;
+
+    bApplyingSettingsFromController = false;
 }

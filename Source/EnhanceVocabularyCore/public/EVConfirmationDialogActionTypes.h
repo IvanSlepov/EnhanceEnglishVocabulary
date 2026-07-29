@@ -13,6 +13,8 @@ enum class EEVConfirmationDialogType : uint8
     OverwriteDB UMETA(DisplayName = "Warning! You are about to overwrite your current DataBase. We strongly recommend "
                                     "to EXPORT it before proceeding!"),
     AppendDB UMETA(DisplayName = "Append imported data to the current DataBase?"),
+    ChangeNotificationMode UMETA(
+        DisplayName = "Changing the notification mode will turn off the current notification interval. Continue?"),
     EnableAndroidNotifications UMETA(DisplayName =
                                          "Notifications for the app are disabled. Would you like to Enable them?")
 };
@@ -86,6 +88,13 @@ private:
             DiscardButtonText = FText::FromString(TEXT("CANCEL"));
             break;
 
+        case EEVConfirmationDialogType::ChangeNotificationMode:
+            DialogText = FText::FromString(
+                TEXT("Changing the notification mode will turn off the current notification interval. Continue?"));
+            ConfirmButtonText = FText::FromString(TEXT("CHANGE"));
+            DiscardButtonText = FText::FromString(TEXT("CANCEL"));
+            break;
+
         case EEVConfirmationDialogType::EnableAndroidNotifications:
             DialogText =
                 FText::FromString(TEXT("Notifications for the app are disabled. Would you like to Enable them?"));
@@ -130,6 +139,12 @@ private:
             break;
 
         case EEVConfirmationDialogType::AppendDB:
+            DialogTextColor = FLinearColor(1.00f, 0.60f, 0.00f);
+            ConfirmButtonColor = FLinearColor(1.00f, 0.60f, 0.00f);
+            DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
+            break;
+
+        case EEVConfirmationDialogType::ChangeNotificationMode:
             DialogTextColor = FLinearColor(1.00f, 0.60f, 0.00f);
             ConfirmButtonColor = FLinearColor(1.00f, 0.60f, 0.00f);
             DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);

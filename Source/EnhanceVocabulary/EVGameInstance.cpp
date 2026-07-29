@@ -287,16 +287,56 @@ bool UEVGameInstance::GetRandomlySelectedWord(FString& OutWord)
 
 bool UEVGameInstance::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettings)
 {
+    if (!DeviceService || !VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot apply notification settings: required service is invalid."));
+        return false;
+    }
+
     CurrentPopUpSettings = PopUpSettings;
 
     const int32 IntervalSeconds = FEVPopUpSettingsInfo::GetIntervalSeconds(PopUpSettings.PopUpIntervals);
 
     if (IntervalSeconds <= 0)
     {
-        return DeviceService->StopPopUpTimer();
+        return DeviceService->CancelVocabularyNotifications();
     }
 
+#if PLATFORM_ANDROID
+    const int32 EntryCount = VocabularyStorageService->GetVocabularyEntryCount();
+    if (EntryCount <= 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot schedule vocabulary notifications: vocabulary database is empty."));
+        return false;
+    }
+
+    const TArray<FVocabularyEntry> Entries = VocabularyStorageService->GetVocabularyEntries(EntryCount);
+    TArray<FString> Words;
+    Words.Reserve(Entries.Num());
+
+    for (const FVocabularyEntry& Entry : Entries)
+    {
+        FString Word = Entry.Word;
+        Word.ReplaceInline(TEXT("\r"), TEXT(" "));
+        Word.ReplaceInline(TEXT("\n"), TEXT(" "));
+        Word.TrimStartAndEndInline();
+
+        if (!Word.IsEmpty())
+        {
+            Words.Add(MoveTemp(Word));
+        }
+    }
+
+    if (Words.IsEmpty())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot schedule vocabulary notifications: no valid vocabulary words exist."));
+        return false;
+    }
+
+    return DeviceService->ScheduleVocabularyNotifications(IntervalSeconds, FString::Join(Words, TEXT("\n")));
+#else
     return DeviceService->StartPopUpTimer(IntervalSeconds);
+#endif
 }
 
 FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
@@ -927,6 +967,18 @@ void UEVGameInstance::OpenNotificationSettings()
     }
 
     DeviceService->OpenNotificationSettings();
+}
+
+void UEVGameInstance::TestDeviceAlarm()
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: DeviceService is nullptr."));
+
+        return;
+    }
+
+    DeviceService->TestAlarm();
 }
 
 void UEVGameInstance::HandleNotificationPermissionResult(const bool bGranted)

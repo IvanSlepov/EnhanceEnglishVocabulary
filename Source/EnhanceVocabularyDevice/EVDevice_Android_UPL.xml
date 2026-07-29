@@ -9,7 +9,26 @@
   <androidManifestUpdates>
     <addPermission
             android:name="android.permission.POST_NOTIFICATIONS"/>
+    <addElements tag="application">
+
+      <receiver
+          android:name="com.epicgames.unreal.EVVocabularyAlarmReceiver"
+          android:exported="false"/>
+
+    </addElements>
   </androidManifestUpdates>
+
+  <gradleCopies>
+
+    <log text="EV PluginDir = $S(PluginDir)"/>
+    <log text="EV BuildDir = $S(BuildDir)"/>
+
+    <copyFile
+        src="$S(PluginDir)/EVVocabularyAlarmReceiver.java"
+        dst="$S(BuildDir)/gradle/app/src/main/java/com/epicgames/unreal/EVVocabularyAlarmReceiver.java"
+        force="true"/>
+
+  </gradleCopies>
 
 
   <!-- ============================================================= -->
@@ -41,6 +60,9 @@
       import android.content.pm.PackageManager;
       import android.os.Build;
       import android.provider.Settings;
+
+      import android.app.AlarmManager;
+
     </insert>
   </gameActivityImportAdditions>
 
@@ -257,7 +279,30 @@
             // =========================================================
             // Vocabulary notification
             // =========================================================
+            
+            public void AndroidThunkJava_EV_TestAlarm()
+            {
+                EVVocabularyAlarmReceiver.schedule(
+                    this,
+                    60,
+                    "Alarm fired!");
+            }
 
+            public boolean AndroidThunkJava_EV_ScheduleVocabularyNotifications(
+                int intervalSeconds,
+                String serializedWords)
+            {
+                return EVVocabularyAlarmReceiver.schedule(
+                    this,
+                    intervalSeconds,
+                    serializedWords);
+            }
+
+            public boolean AndroidThunkJava_EV_CancelVocabularyNotifications()
+            {
+                return EVVocabularyAlarmReceiver.cancel(this);
+            }
+            
             public void AndroidThunkJava_EV_ShowVocabularyNotification(
                 final String word)
             {
@@ -369,7 +414,20 @@
                                     .bigText(word))
                             .setCategory(
                                 Notification.CATEGORY_REMINDER)
-                            .setAutoCancel(true);
+                            .setAutoCancel(true)
+                            .addAction(
+                                0,
+                                "CANCEL",
+                                PendingIntent.getBroadcast(
+                                    GameActivity.this,
+                                    7356,
+                                    new Intent(
+                                        GameActivity.this,
+                                        EVVocabularyAlarmReceiver.class)
+                                        .setAction(
+                                            EVVocabularyAlarmReceiver.ACTION_CANCEL),
+                                    PendingIntent.FLAG_UPDATE_CURRENT |
+                                    PendingIntent.FLAG_IMMUTABLE));
 
                         if (contentIntent != null)
                         {

@@ -23,6 +23,13 @@ enum class EEVPopUpIntervals : uint8
     Sixty_Minutes UMETA(DisplayName = "60 minutes")
 };
 
+UENUM(BlueprintType)
+enum class EEVNotificationMode : uint8
+{
+    RandomWord UMETA(DisplayName = "Random Word")
+    // More modes later...
+};
+
 USTRUCT(BlueprintType)
 struct FEVPopUpSettingsInfo
 {
@@ -31,8 +38,11 @@ struct FEVPopUpSettingsInfo
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pop-Up")
     EEVPopUpIntervals PopUpIntervals = EEVPopUpIntervals::TurnedOff;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pop-Up")
+    EEVNotificationMode NotificationMode = EEVNotificationMode::RandomWord;
+
     /**
-     * Returns all visible enum DisplayNames.
+     * Returns all visible EEVPopUpIntervals enum DisplayNames.
      */
     static FText GetIntervalDisplayName(const EEVPopUpIntervals Interval)
     {
@@ -91,24 +101,14 @@ struct FEVPopUpSettingsInfo
 
     static TArray<EEVPopUpIntervals> GetAllIntervals()
     {
-        return
-        {
-            EEVPopUpIntervals::TurnedOff,
-            EEVPopUpIntervals::One_Minute,
-            EEVPopUpIntervals::Two_Minutes,
-            EEVPopUpIntervals::Five_Minutes,
-            EEVPopUpIntervals::Ten_Minutes,
-            EEVPopUpIntervals::Fifteen_Minutes,
-            EEVPopUpIntervals::Twenty_Minutes,
-            EEVPopUpIntervals::TwentyFive_Minutes,
-            EEVPopUpIntervals::Thirty_Minutes,
-            EEVPopUpIntervals::ThirtyFive_Minutes,
-            EEVPopUpIntervals::Forty_Minutes,
-            EEVPopUpIntervals::FortyFive_Minutes,
-            EEVPopUpIntervals::Fifty_Minutes,
-            EEVPopUpIntervals::FiftyFive_Minutes,
-            EEVPopUpIntervals::Sixty_Minutes
-        };
+        return {EEVPopUpIntervals::TurnedOff,      EEVPopUpIntervals::One_Minute,
+                EEVPopUpIntervals::Two_Minutes,    EEVPopUpIntervals::Five_Minutes,
+                EEVPopUpIntervals::Ten_Minutes,    EEVPopUpIntervals::Fifteen_Minutes,
+                EEVPopUpIntervals::Twenty_Minutes, EEVPopUpIntervals::TwentyFive_Minutes,
+                EEVPopUpIntervals::Thirty_Minutes, EEVPopUpIntervals::ThirtyFive_Minutes,
+                EEVPopUpIntervals::Forty_Minutes,  EEVPopUpIntervals::FortyFive_Minutes,
+                EEVPopUpIntervals::Fifty_Minutes,  EEVPopUpIntervals::FiftyFive_Minutes,
+                EEVPopUpIntervals::Sixty_Minutes};
     }
 
     static TArray<FText> GetAllIntervalDisplayNames()
@@ -183,5 +183,59 @@ struct FEVPopUpSettingsInfo
             ensureMsgf(false, TEXT("Invalid pop-up interval value."));
             return 0;
         }
+    }
+
+    /**
+     * Returns all visible EEVNotificationMode enum DisplayNames.
+     */
+    static FText GetNotificationModesDisplayName(const EEVNotificationMode NotificationMode)
+    {
+        switch (NotificationMode)
+        {
+        case EEVNotificationMode::RandomWord:
+            return NSLOCTEXT("EEVNotificationMode", "RandomWord", "Random Word");
+        default:
+            ensureMsgf(false, TEXT("Invalid notification mode value."));
+            return FText::GetEmpty();
+        }
+    }
+
+    static TArray<EEVNotificationMode> GetAllNotificationModes()
+    {
+        return {EEVNotificationMode::RandomWord};
+    }
+
+    static TArray<FText> GetAllNotificationModesDisplayNames()
+    {
+        TArray<FText> Result;
+
+        for (const EEVNotificationMode NotificationMode : GetAllNotificationModes())
+        {
+            Result.Add(GetNotificationModesDisplayName(NotificationMode));
+        }
+
+        return Result;
+    }
+
+    /**
+     * Finds an enum value by its DisplayName.
+     *
+     * Returns true when a matching entry is found.
+     */
+    static bool TryGetNotificationModeFromDisplayName(const FString& DisplayName,
+                                                      EEVNotificationMode& OutNotificationMode)
+    {
+        for (const EEVNotificationMode NotificationMode : GetAllNotificationModes())
+        {
+            if (GetNotificationModesDisplayName(NotificationMode)
+                    .ToString()
+                    .Equals(DisplayName, ESearchCase::IgnoreCase))
+            {
+                OutNotificationMode = NotificationMode;
+                return true;
+            }
+        }
+
+        return false;
     }
 };

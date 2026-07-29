@@ -104,7 +104,21 @@ private:
 
     EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
 
-    FEVPopUpSettingsInfo PendingPopUpSettings;
+    // ======== Notification settings and transitions ===========
+    // Settings that are currently accepted by the controller.
+    FEVPopUpSettingsInfo CurrentAcceptedSettings;
+
+    // Complete settings snapshot most recently requested by the widget.
+    FEVPopUpSettingsInfo PendingRequestedSettings;
+
+    // Settings waiting specifically for Android permission/settings resolution.
+    FEVPopUpSettingsInfo PendingPermissionSettings;
+
+    bool bHasPendingRequestedSettings = false;
+    bool bHasPendingPermissionSettings = false;
+    bool bWaitingForNotificationSettings = false;
+    bool bNotificationTransitionInProgress = false;
+    //============================================================
 
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
@@ -152,18 +166,27 @@ private:
     // Handle widget destruction
     void DestroyWidget(TObjectPtr<UUserWidget>& Widget);
 
-    // Handle PopUp settings & intervals
+    // Handle complete notification settings emitted by the settings widget.
     UFUNCTION()
-    void HandlePopUpIntervalSelectedFromSettingsWidget(const FEVPopUpSettingsInfo& EVPopUpSettingsFromWidget);
+    void HandleNotificationSettingsChanged(const FEVPopUpSettingsInfo& RequestedSettings);
+
+    void EvaluateNotificationSettingsChange();
+    void HandleNotificationIntervalChange();
+    void RequestNotificationModeChange();
+    void CommitPendingModeChange();
+    void RejectPendingModeChange();
+    void ProcessNotificationSettingsRequest(const FEVPopUpSettingsInfo& RequestedSettings);
 
     UFUNCTION()
-    void ApplyResolvedPopUpInterval(const FEVPopUpSettingsInfo& ResolvedPopUpSettingsFromWidget);
+    void ApplyResolvedNotificationSettings(const FEVPopUpSettingsInfo& ResolvedSettings);
 
-    void CommitPendingPopUpInterval();
-    void RejectPendingPopUpInterval();
+    void CommitPendingPermissionSettings();
+    void RejectPendingNotificationRequest();
+    void ClearPendingNotificationRequest();
 
-    bool bHasPendingPopUpSettings = false;
-    bool bWaitingForNotificationSettings = false;
+    bool HasActiveNotificationSchedule() const;
+    bool HasNotificationIntervalChanged() const;
+    bool HasNotificationModeChanged() const;
 
-    void HandleNotificationPermissionResult(const bool bGranted);
+    void HandleNotificationPermissionResult(bool bGranted);
 };
