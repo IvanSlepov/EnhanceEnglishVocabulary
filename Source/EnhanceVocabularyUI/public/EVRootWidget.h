@@ -109,6 +109,7 @@ public:
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
     virtual void HandleReviewWordsRefresh() override;
+    virtual void HandleOpenReviewWordsForNotification(const FString& Word) override;
 
     // This method is getting called from the PC to
     // confirm a user-selected Pop-up Interval. And it always forces the

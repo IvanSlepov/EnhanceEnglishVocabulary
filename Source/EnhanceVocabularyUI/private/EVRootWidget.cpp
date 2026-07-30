@@ -386,6 +386,26 @@ void UEVRootWidget::HandleReviewWordsRefresh()
     ReviewWords->RefreshReview();
 }
 
+void UEVRootWidget::HandleOpenReviewWordsForNotification(const FString& Word)
+{
+    if (!WidgetSwitcher_Main || !ReviewWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open Review Words from notification: required widget is null."));
+        return;
+    }
+
+    bIsAnyMenuActivated = true;
+    bIsAddWordActivated_internal = false;
+    bIsReviewWordsActivated_internal = true;
+    bIsPopupSettingsActivated_internal = false;
+    bIsImportExportActivated_internal = false;
+    bIsAppSettingsActivated_internal = false;
+    MenuSwitcherCount = 0;
+
+    WidgetSwitcher_Main->SetActiveWidget(ReviewWords);
+    ReviewWords->SetSearchWord(Word);
+}
+
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
                                                EEVConnectionState ConnectionState)
 {

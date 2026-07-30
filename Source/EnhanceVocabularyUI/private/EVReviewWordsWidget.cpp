@@ -78,6 +78,19 @@ void UEVReviewWordsWidget::NativeConstruct()
     PopulateEntriesPerPageComboBox();
 }
 
+void UEVReviewWordsWidget::SetSearchWord(const FString& Word)
+{
+    if (!EditableTextBox_Search)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot set notification word search: search box is null."));
+        return;
+    }
+
+    SearchPaginationState.CurrentPage = 1;
+    EditableTextBox_Search->SetText(FText::FromString(Word));
+    RefreshReview();
+}
+
 void UEVReviewWordsWidget::DisplayCurrentPage()
 {
     if (!EVGameInstance || !ListView_ReviewWords)

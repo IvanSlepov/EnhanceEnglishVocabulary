@@ -77,6 +77,9 @@ public:
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     int32 GetVocabularyEntryCount() const;
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
@@ -133,6 +136,9 @@ public:
 public:
     /*Notifications(Pop-ups) related functions*/
     bool AreNotificationsEnabled() const;
+
+    bool GetStoredNotificationSettings(FEVPopUpSettingsInfo& OutSettings) const;
+    bool ConsumePendingNotificationWord(FString& OutWord) const;
 
     bool HasRequestedNotificationPermission() const;
 

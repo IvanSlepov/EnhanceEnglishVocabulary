@@ -7,6 +7,7 @@
 #include "EVErrorDisplayWidget.h"
 #include "EVDisplayStatusProvider.h"
 #include "Misc/CoreDelegates.h"
+#include "TimerManager.h"
 
 AEVAppPlayerController::AEVAppPlayerController()
 {
@@ -21,14 +22,19 @@ void AEVAppPlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
-    InitEVAppPlayerController();
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+    InitEVAppPlayerController();
     if (EVGameInstance)
     {
         EVGameInstance->OnFileOperationCompleted().AddUObject(this, &ThisClass::HandleFileOperationCompleted);
         EVGameInstance->OnImportFilePickCompleted().AddUObject(this, &ThisClass::HandleImportFilePickCompleted);
         EVGameInstance->OnNotificationPermissionResult().AddUObject(this,
                                                                     &ThisClass::HandleNotificationPermissionResult);
+        SynchronizeNotificationSettingsFromDevice();
+        HandlePendingNotificationWord();
+
+        GetWorldTimerManager().SetTimer(NotificationStatePollTimerHandle, this, &ThisClass::PollNotificationState, 0.5f,
+                                        true);
     }
     ApplicationEnteredForegroundHandle = FCoreDelegates::ApplicationHasEnteredForegroundDelegate.AddUObject(
         this, &ThisClass::HandleApplicationEnteredForeground);
@@ -36,6 +42,8 @@ void AEVAppPlayerController::BeginPlay()
 
 void AEVAppPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    GetWorldTimerManager().ClearTimer(NotificationStatePollTimerHandle);
+
     if (EVGameInstance)
     {
         EVGameInstance->OnNotificationPermissionResult().RemoveAll(this);
@@ -814,11 +822,34 @@ void AEVAppPlayerController::EvaluateNotificationSettingsChange()
 
     if (bModeChanged)
     {
-        RequestNotificationModeChange();
-        return;
+        switch (PendingRequestedSettings.NotificationMode)
+        {
+        case EEVNotificationMode::RandomWord:
+            EvaluateRandomWordModeChange();
+            return;
+
+        case EEVNotificationMode::TestMode:
+            EvaluateTestModeChange();
+            return;
+
+        default:
+            ensureMsgf(false, TEXT("Unsupported notification mode."));
+            RejectPendingModeChange();
+            return;
+        }
     }
 
     HandleNotificationIntervalChange();
+}
+
+void AEVAppPlayerController::EvaluateRandomWordModeChange()
+{
+    RequestNotificationModeChange();
+}
+
+void AEVAppPlayerController::EvaluateTestModeChange()
+{
+    RequestNotificationModeChange();
 }
 
 void AEVAppPlayerController::HandleNotificationIntervalChange()
@@ -1060,6 +1091,9 @@ void AEVAppPlayerController::HandleNotificationPermissionResult(bool bGranted)
 
 void AEVAppPlayerController::HandleApplicationEnteredForeground()
 {
+    SynchronizeNotificationSettingsFromDevice();
+    HandlePendingNotificationWord();
+
     if (!bWaitingForNotificationSettings || !bHasPendingPermissionSettings)
     {
         return;
@@ -1076,4 +1110,62 @@ void AEVAppPlayerController::HandleApplicationEnteredForeground()
     }
 
     RejectPendingNotificationRequest();
+}
+
+void AEVAppPlayerController::PollNotificationState()
+{
+    if (bNotificationTransitionInProgress)
+    {
+        return;
+    }
+
+    SynchronizeNotificationSettingsFromDevice();
+    HandlePendingNotificationWord();
+}
+
+void AEVAppPlayerController::HandlePendingNotificationWord()
+{
+    if (!EVGameInstance || !WidgetCommonEvents)
+    {
+        return;
+    }
+
+    if (CurrentAcceptedSettings.NotificationMode != EEVNotificationMode::RandomWord)
+    {
+        return;
+    }
+
+    FString NotificationWord;
+
+    if (!EVGameInstance->ConsumePendingNotificationWord(NotificationWord) || NotificationWord.IsEmpty())
+    {
+        return;
+    }
+
+    WidgetCommonEvents->HandleOpenReviewWordsForNotification(NotificationWord);
+}
+
+void AEVAppPlayerController::SynchronizeNotificationSettingsFromDevice()
+{
+    if (!EVGameInstance || !WidgetCommonEvents)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot synchronize notification settings: controller is not initialized."));
+        return;
+    }
+
+    FEVPopUpSettingsInfo StoredSettings;
+    if (!EVGameInstance->GetStoredNotificationSettings(StoredSettings))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to read stored notification settings from the device."));
+        return;
+    }
+
+    if (StoredSettings.PopUpIntervals == CurrentAcceptedSettings.PopUpIntervals &&
+        StoredSettings.NotificationMode == CurrentAcceptedSettings.NotificationMode)
+    {
+        return;
+    }
+
+    CurrentAcceptedSettings = StoredSettings;
+    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
 }

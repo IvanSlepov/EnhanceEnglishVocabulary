@@ -83,6 +83,14 @@
             private static final int EV_REQUEST_CREATE_DOCUMENT = 7352;
             private static final int EV_REQUEST_NOTIFICATION_PERMISSION = 7354;
 
+            private static final String EV_NOTIFICATION_WORD_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_WORD";
+
+            private static final String EV_PENDING_NOTIFICATION_WORD =
+                "PendingNotificationWord";
+
+            private String EVPendingNotificationWord = "";
+
 
             // =========================================================
             // Enhance Vocabulary - File exchange state
@@ -109,6 +117,15 @@
 
             private static final String EV_NOTIFICATION_PERMISSION_REQUESTED =
                     "NotificationPermissionRequested";
+
+            private static final String EV_NOTIFICATION_ENABLED =
+                    "VocabularyAlarmEnabled";
+
+            private static final String EV_NOTIFICATION_INTERVAL_MILLISECONDS =
+                    "VocabularyAlarmIntervalMilliseconds";
+
+            private static final String EV_NOTIFICATION_MODE =
+                    "VocabularyAlarmMode";
 
             // =========================================================
             // Save file
@@ -223,35 +240,51 @@
             
             public void AndroidThunkJava_EV_RequestNotificationPermission()
             {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+                runOnUiThread(new Runnable()
                 {
-                    return;
-                }
-
-                if (androidx.core.content.ContextCompat.checkSelfPermission(
-                        this,
-                        android.Manifest.permission.POST_NOTIFICATIONS)
-                    == android.content.pm.PackageManager.PERMISSION_GRANTED)
-                {
-                    return;
-                }
-
-                getSharedPreferences(
-                        EV_NOTIFICATION_PREFERENCES,
-                        android.content.Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(
-                        EV_NOTIFICATION_PERMISSION_REQUESTED,
-                        true)
-                    .apply();
-
-                androidx.core.app.ActivityCompat.requestPermissions(
-                    this,
-                    new String[]
+                    @Override
+                    public void run()
                     {
-                        android.Manifest.permission.POST_NOTIFICATIONS
-                    },
-                    EV_REQUEST_NOTIFICATION_PERMISSION);
+                        /*
+                         * Android versions below 13 do not require the
+                         * POST_NOTIFICATIONS runtime permission. Resolve the
+                         * pending Unreal request immediately instead of leaving
+                         * the controller waiting for a callback that cannot occur.
+                         */
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+                        {
+                            nativeEVNotificationPermissionResult(true);
+                            return;
+                        }
+
+                        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                            == PackageManager.PERMISSION_GRANTED)
+                        {
+                            nativeEVNotificationPermissionResult(true);
+                            return;
+                        }
+
+                        getSharedPreferences(
+                                EV_NOTIFICATION_PREFERENCES,
+                                Context.MODE_PRIVATE)
+                            .edit()
+                            .putBoolean(
+                                EV_NOTIFICATION_PERMISSION_REQUESTED,
+                                true)
+                            .apply();
+
+                        /*
+                         * Use GameActivity's Activity API directly, matching the
+                         * working file-exchange startActivityForResult flow.
+                         */
+                        requestPermissions(
+                            new String[]
+                            {
+                                Manifest.permission.POST_NOTIFICATIONS
+                            },
+                            EV_REQUEST_NOTIFICATION_PERMISSION);
+                    }
+                });
             }
 
             public boolean AndroidThunkJava_EV_HasRequestedNotificationPermission()
@@ -285,23 +318,77 @@
                 EVVocabularyAlarmReceiver.schedule(
                     this,
                     60,
-                    "Alarm fired!");
+                    "Alarm fired!",
+                    0);
             }
 
             public boolean AndroidThunkJava_EV_ScheduleVocabularyNotifications(
                 int intervalSeconds,
-                String serializedWords)
+                String serializedWords,
+                int notificationMode)
             {
                 return EVVocabularyAlarmReceiver.schedule(
                     this,
                     intervalSeconds,
-                    serializedWords);
+                    serializedWords,
+                    notificationMode);
             }
 
             public boolean AndroidThunkJava_EV_CancelVocabularyNotifications()
             {
                 return EVVocabularyAlarmReceiver.cancel(this);
             }
+            public boolean AndroidThunkJava_EV_IsVocabularyNotificationScheduleEnabled()
+            {
+                return getSharedPreferences(EV_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
+                    .getBoolean(EV_NOTIFICATION_ENABLED, false);
+            }
+
+            public int AndroidThunkJava_EV_GetVocabularyNotificationIntervalSeconds()
+            {
+                long intervalMilliseconds =
+                    getSharedPreferences(EV_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
+                        .getLong(EV_NOTIFICATION_INTERVAL_MILLISECONDS, 0L);
+
+                return intervalMilliseconds > 0L
+                    ? (int)(intervalMilliseconds / 1000L)
+                    : 0;
+            }
+
+            public int AndroidThunkJava_EV_GetVocabularyNotificationMode()
+            {
+                return getSharedPreferences(EV_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
+                    .getInt(EV_NOTIFICATION_MODE, 0);
+            }
+
+            public String AndroidThunkJava_EV_ConsumePendingNotificationWord()
+            {
+                String pendingWord = EVPendingNotificationWord;
+                EVPendingNotificationWord = "";
+
+                if (pendingWord == null || pendingWord.isEmpty())
+                {
+                    android.content.SharedPreferences preferences =
+                        getSharedPreferences(EV_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE);
+
+                    pendingWord = preferences.getString(EV_PENDING_NOTIFICATION_WORD, "");
+
+                    if (pendingWord != null && !pendingWord.isEmpty())
+                    {
+                        preferences.edit().remove(EV_PENDING_NOTIFICATION_WORD).apply();
+                    }
+                }
+
+                Intent currentIntent = getIntent();
+                if ((pendingWord == null || pendingWord.isEmpty()) && currentIntent != null)
+                {
+                    pendingWord = currentIntent.getStringExtra(EV_NOTIFICATION_WORD_EXTRA);
+                    currentIntent.removeExtra(EV_NOTIFICATION_WORD_EXTRA);
+                }
+
+                return pendingWord != null ? pendingWord : "";
+            }
+
             
             public void AndroidThunkJava_EV_ShowVocabularyNotification(
                 final String word)
@@ -351,36 +438,23 @@
                                 channel);
                         }
 
-                        Intent launchIntent =
-                            getPackageManager()
-                                .getLaunchIntentForPackage(
-                                    getPackageName());
+                        Intent openWordIntent =
+                            new Intent(GameActivity.this, EVVocabularyAlarmReceiver.class)
+                                .setAction(EVVocabularyAlarmReceiver.ACTION_OPEN_WORD)
+                                .putExtra(EV_NOTIFICATION_WORD_EXTRA, word);
 
-                        PendingIntent contentIntent = null;
+                        int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT;
 
-                        if (launchIntent != null)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                         {
-                            launchIntent.addFlags(
-                                Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                                Intent.FLAG_ACTIVITY_SINGLE_TOP);
-
-                            int pendingIntentFlags =
-                                PendingIntent.FLAG_UPDATE_CURRENT;
-
-                            if (Build.VERSION.SDK_INT >=
-                                Build.VERSION_CODES.M)
-                            {
-                                pendingIntentFlags |=
-                                    PendingIntent.FLAG_IMMUTABLE;
-                            }
-
-                            contentIntent =
-                                PendingIntent.getActivity(
-                                    GameActivity.this,
-                                    0,
-                                    launchIntent,
-                                    pendingIntentFlags);
+                            pendingIntentFlags |= PendingIntent.FLAG_IMMUTABLE;
                         }
+
+                        PendingIntent contentIntent = PendingIntent.getBroadcast(
+                            GameActivity.this,
+                            EV_VOCABULARY_NOTIFICATION_ID,
+                            openWordIntent,
+                            pendingIntentFlags);
 
                         Notification.Builder builder;
 
@@ -445,6 +519,29 @@
         ]]>
     </insert>
   </gameActivityClassAdditions>
+
+
+  <!-- ============================================================= -->
+  <!-- Notification tap while GameActivity is already running        -->
+  <!-- ============================================================= -->
+
+  <gameActivityOnNewIntentAdditions>
+    <insert>
+      <![CDATA[
+        if (newIntent != null)
+        {
+            String notificationWord =
+                newIntent.getStringExtra(EV_NOTIFICATION_WORD_EXTRA);
+
+            if (notificationWord != null && !notificationWord.isEmpty())
+            {
+                EVPendingNotificationWord = notificationWord;
+                newIntent.removeExtra(EV_NOTIFICATION_WORD_EXTRA);
+            }
+        }
+      ]]>
+    </insert>
+  </gameActivityOnNewIntentAdditions>
 
 
   <!-- ============================================================= -->

@@ -161,7 +161,8 @@ bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
 #endif
 }
 
-bool UEVDeviceService::ScheduleVocabularyNotifications(const int32 IntervalSeconds, const FString& SerializedWords)
+bool UEVDeviceService::ScheduleVocabularyNotifications(const int32 IntervalSeconds, const FString& SerializedWords,
+                                                       const int32 NotificationMode)
 {
     if (IntervalSeconds <= 0 || SerializedWords.IsEmpty())
     {
@@ -180,7 +181,7 @@ bool UEVDeviceService::ScheduleVocabularyNotifications(const int32 IntervalSecon
 
     static jmethodID ScheduleMethod = FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
                                                                "AndroidThunkJava_EV_ScheduleVocabularyNotifications",
-                                                               "(ILjava/lang/String;)Z", false);
+                                                               "(ILjava/lang/String;I)Z", false);
 
     if (!ScheduleMethod)
     {
@@ -195,8 +196,8 @@ bool UEVDeviceService::ScheduleVocabularyNotifications(const int32 IntervalSecon
         return false;
     }
 
-    const jboolean bScheduled =
-        Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, ScheduleMethod, IntervalSeconds, JavaWords);
+    const jboolean bScheduled = Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, ScheduleMethod, IntervalSeconds,
+                                                       JavaWords, NotificationMode);
     Env->DeleteLocalRef(JavaWords);
 
     if (Env->ExceptionCheck())
@@ -210,6 +211,104 @@ bool UEVDeviceService::ScheduleVocabularyNotifications(const int32 IntervalSecon
     return bScheduled == JNI_TRUE;
 #else
     return StartPopUpTimer(IntervalSeconds);
+#endif
+}
+
+bool UEVDeviceService::GetStoredVocabularyNotificationSettings(bool& bOutEnabled, int32& OutIntervalSeconds,
+                                                               int32& OutNotificationMode) const
+{
+    bOutEnabled = false;
+    OutIntervalSeconds = 0;
+    OutNotificationMode = 0;
+
+#if PLATFORM_ANDROID
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot read notification settings: Java environment is invalid."));
+        return false;
+    }
+
+    static jmethodID IsEnabledMethod =
+        FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
+                                 "AndroidThunkJava_EV_IsVocabularyNotificationScheduleEnabled", "()Z", false);
+    static jmethodID GetIntervalMethod =
+        FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
+                                 "AndroidThunkJava_EV_GetVocabularyNotificationIntervalSeconds", "()I", false);
+    static jmethodID GetModeMethod = FJavaWrapper::FindMethod(
+        Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_GetVocabularyNotificationMode", "()I", false);
+
+    if (!IsEnabledMethod || !GetIntervalMethod || !GetModeMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find one or more Android notification settings read methods."));
+        return false;
+    }
+
+    bOutEnabled = Env->CallBooleanMethod(FJavaWrapper::GameActivityThis, IsEnabledMethod) == JNI_TRUE;
+    OutIntervalSeconds = Env->CallIntMethod(FJavaWrapper::GameActivityThis, GetIntervalMethod);
+    OutNotificationMode = Env->CallIntMethod(FJavaWrapper::GameActivityThis, GetModeMethod);
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while reading notification settings."));
+        return false;
+    }
+
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool UEVDeviceService::ConsumePendingNotificationWord(FString& OutWord) const
+{
+    OutWord.Empty();
+
+#if PLATFORM_ANDROID
+    JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+    if (!Env)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot consume notification word: Java environment is invalid."));
+        return false;
+    }
+
+    static jmethodID ConsumeMethod =
+        FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
+                                 "AndroidThunkJava_EV_ConsumePendingNotificationWord", "()Ljava/lang/String;", false);
+
+    if (!ConsumeMethod)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot find Android notification word consume method."));
+        return false;
+    }
+
+    jstring JavaWord = static_cast<jstring>(Env->CallObjectMethod(FJavaWrapper::GameActivityThis, ConsumeMethod));
+
+    if (Env->ExceptionCheck())
+    {
+        Env->ExceptionDescribe();
+        Env->ExceptionClear();
+        UE_LOG(LogTemp, Error, TEXT("Java exception occurred while consuming notification word."));
+        return false;
+    }
+
+    if (JavaWord)
+    {
+        const char* UtfWord = Env->GetStringUTFChars(JavaWord, nullptr);
+        if (UtfWord)
+        {
+            OutWord = UTF8_TO_TCHAR(UtfWord);
+            Env->ReleaseStringUTFChars(JavaWord, UtfWord);
+        }
+        Env->DeleteLocalRef(JavaWord);
+    }
+
+    OutWord.TrimStartAndEndInline();
+    return true;
+#else
+    return true;
 #endif
 }
 

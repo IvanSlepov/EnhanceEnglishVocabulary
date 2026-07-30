@@ -26,7 +26,8 @@ enum class EEVPopUpIntervals : uint8
 UENUM(BlueprintType)
 enum class EEVNotificationMode : uint8
 {
-    RandomWord UMETA(DisplayName = "Random Word")
+    RandomWord UMETA(DisplayName = "Random Word"),
+    TestMode UMETA(DisplayName = "Test Mode") // -- debugging mode
     // More modes later...
 };
 
@@ -194,6 +195,8 @@ struct FEVPopUpSettingsInfo
         {
         case EEVNotificationMode::RandomWord:
             return NSLOCTEXT("EEVNotificationMode", "RandomWord", "Random Word");
+        case EEVNotificationMode::TestMode:
+            return NSLOCTEXT("EEVNotificationMode", "TestMode", "Test Mode");
         default:
             ensureMsgf(false, TEXT("Invalid notification mode value."));
             return FText::GetEmpty();
@@ -202,7 +205,7 @@ struct FEVPopUpSettingsInfo
 
     static TArray<EEVNotificationMode> GetAllNotificationModes()
     {
-        return {EEVNotificationMode::RandomWord};
+        return {EEVNotificationMode::RandomWord, EEVNotificationMode::TestMode};
     }
 
     static TArray<FText> GetAllNotificationModesDisplayNames()

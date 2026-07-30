@@ -41,6 +41,8 @@ void UEVPopUpSettingsWidget::NativeConstruct()
     PopulateNotificationIntervals();
     PopulateNotificationModes();
 
+    SetSelectedSettings(EVNotificationSettingsInfo);
+
     bApplyingSettingsFromController = false;
 }
 
@@ -52,14 +54,12 @@ void UEVPopUpSettingsWidget::PopulateNotificationIntervals()
         return;
     }
 
-    for (auto Interval : EVNotificationSettingsInfo.GetAllIntervalDisplayNames())
-    {
-        FString IntervalName = Interval.ToString();
-        ComboBoxString_NotificationIntervals->AddOption(IntervalName);
-    }
+    ComboBoxString_NotificationIntervals->ClearOptions();
 
-    ComboBoxString_NotificationIntervals->SetSelectedOption(
-        EVNotificationSettingsInfo.GetIntervalDisplayName(EEVPopUpIntervals::TurnedOff).ToString());
+    for (const FText& Interval : FEVPopUpSettingsInfo::GetAllIntervalDisplayNames())
+    {
+        ComboBoxString_NotificationIntervals->AddOption(Interval.ToString());
+    }
 }
 
 void UEVPopUpSettingsWidget::PopulateNotificationModes()
@@ -70,14 +70,12 @@ void UEVPopUpSettingsWidget::PopulateNotificationModes()
         return;
     }
 
-    for (auto NotificationMode : EVNotificationSettingsInfo.GetAllNotificationModesDisplayNames())
-    {
-        FString NotificationModeName = NotificationMode.ToString();
-        ComboBoxString_NotificationModes->AddOption(NotificationModeName);
-    }
+    ComboBoxString_NotificationModes->ClearOptions();
 
-    ComboBoxString_NotificationModes->SetSelectedOption(
-        EVNotificationSettingsInfo.GetNotificationModesDisplayName(EEVNotificationMode::RandomWord).ToString());
+    for (const FText& Mode : FEVPopUpSettingsInfo::GetAllNotificationModesDisplayNames())
+    {
+        ComboBoxString_NotificationModes->AddOption(Mode.ToString());
+    }
 }
 
 void UEVPopUpSettingsWidget::BroadcastCurrentSettings()

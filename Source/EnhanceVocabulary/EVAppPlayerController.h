@@ -89,8 +89,12 @@ protected:
 
 private:
     void HandleApplicationEnteredForeground();
+    void PollNotificationState();
+    void SynchronizeNotificationSettingsFromDevice();
+    void HandlePendingNotificationWord();
 
     FDelegateHandle ApplicationEnteredForegroundHandle;
+    FTimerHandle NotificationStatePollTimerHandle;
     // Cache the data we receive from the the WordEntry
     // we decided to review
     FEVWordEntryActionInfo CachedWordEntryWidgetInfo;
@@ -171,6 +175,8 @@ private:
     void HandleNotificationSettingsChanged(const FEVPopUpSettingsInfo& RequestedSettings);
 
     void EvaluateNotificationSettingsChange();
+    void EvaluateRandomWordModeChange();
+    void EvaluateTestModeChange();
     void HandleNotificationIntervalChange();
     void RequestNotificationModeChange();
     void CommitPendingModeChange();

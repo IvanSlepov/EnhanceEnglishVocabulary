@@ -176,6 +176,12 @@ bool UEVGameInstance::UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVoca
     return VocabularyStorageService->GetVocabularyEntryByWord(Entry.Word, OutEntry);
 }
 
+bool UEVGameInstance::GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry) const
+{
+    OutEntry = FVocabularyEntry();
+    return VocabularyStorageService && VocabularyStorageService->GetVocabularyEntryByWord(Word, OutEntry);
+}
+
 bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
 {
     if (!VocabularyStorageService)
@@ -287,9 +293,9 @@ bool UEVGameInstance::GetRandomlySelectedWord(FString& OutWord)
 
 bool UEVGameInstance::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettings)
 {
-    if (!DeviceService || !VocabularyStorageService)
+    if (!DeviceService)
     {
-        UE_LOG(LogTemp, Error, TEXT("Cannot apply notification settings: required service is invalid."));
+        UE_LOG(LogTemp, Error, TEXT("Cannot apply notification settings: DeviceService is invalid."));
         return false;
     }
 
@@ -303,37 +309,58 @@ bool UEVGameInstance::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& Po
     }
 
 #if PLATFORM_ANDROID
-    const int32 EntryCount = VocabularyStorageService->GetVocabularyEntryCount();
-    if (EntryCount <= 0)
+    switch (PopUpSettings.NotificationMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Cannot schedule vocabulary notifications: vocabulary database is empty."));
-        return false;
-    }
-
-    const TArray<FVocabularyEntry> Entries = VocabularyStorageService->GetVocabularyEntries(EntryCount);
-    TArray<FString> Words;
-    Words.Reserve(Entries.Num());
-
-    for (const FVocabularyEntry& Entry : Entries)
+    case EEVNotificationMode::RandomWord:
     {
-        FString Word = Entry.Word;
-        Word.ReplaceInline(TEXT("\r"), TEXT(" "));
-        Word.ReplaceInline(TEXT("\n"), TEXT(" "));
-        Word.TrimStartAndEndInline();
-
-        if (!Word.IsEmpty())
+        if (!VocabularyStorageService)
         {
-            Words.Add(MoveTemp(Word));
+            UE_LOG(LogTemp, Error, TEXT("Cannot schedule RandomWord notifications: vocabulary storage is invalid."));
+            return false;
         }
+
+        const int32 EntryCount = VocabularyStorageService->GetVocabularyEntryCount();
+        if (EntryCount <= 0)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Cannot schedule RandomWord notifications: vocabulary database is empty."));
+            return false;
+        }
+
+        const TArray<FVocabularyEntry> Entries = VocabularyStorageService->GetVocabularyEntries(EntryCount);
+        TArray<FString> Words;
+        Words.Reserve(Entries.Num());
+
+        for (const FVocabularyEntry& Entry : Entries)
+        {
+            FString Word = Entry.Word;
+            Word.ReplaceInline(TEXT("\r"), TEXT(" "));
+            Word.ReplaceInline(TEXT("\n"), TEXT(" "));
+            Word.TrimStartAndEndInline();
+
+            if (!Word.IsEmpty())
+            {
+                Words.Add(MoveTemp(Word));
+            }
+        }
+
+        if (Words.IsEmpty())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Cannot schedule RandomWord notifications: no valid words exist."));
+            return false;
+        }
+
+        return DeviceService->ScheduleVocabularyNotifications(IntervalSeconds, FString::Join(Words, TEXT("\n")),
+                                                              static_cast<int32>(PopUpSettings.NotificationMode));
     }
 
-    if (Words.IsEmpty())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Cannot schedule vocabulary notifications: no valid vocabulary words exist."));
+    case EEVNotificationMode::TestMode:
+        return DeviceService->ScheduleVocabularyNotifications(IntervalSeconds, TEXT(""),
+                                                              static_cast<int32>(PopUpSettings.NotificationMode));
+
+    default:
+        ensureMsgf(false, TEXT("Unsupported notification mode."));
         return false;
     }
-
-    return DeviceService->ScheduleVocabularyNotifications(IntervalSeconds, FString::Join(Words, TEXT("\n")));
 #else
     return DeviceService->StartPopUpTimer(IntervalSeconds);
 #endif
@@ -919,6 +946,70 @@ UEVGameInstance::ConvertFileExchangeResultToRequestedAction(const FEVFileExchang
     ActionInfo.GenerateColor();
 
     return ActionInfo;
+}
+
+bool UEVGameInstance::GetStoredNotificationSettings(FEVPopUpSettingsInfo& OutSettings) const
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot read stored notification settings: DeviceService is nullptr."));
+        return false;
+    }
+
+    bool bEnabled = false;
+    int32 IntervalSeconds = 0;
+    int32 NotificationModeValue = 0;
+
+    if (!DeviceService->GetStoredVocabularyNotificationSettings(bEnabled, IntervalSeconds, NotificationModeValue))
+    {
+        return false;
+    }
+
+    OutSettings = FEVPopUpSettingsInfo();
+
+    if (bEnabled)
+    {
+        bool bFoundInterval = false;
+        for (const EEVPopUpIntervals Interval : FEVPopUpSettingsInfo::GetAllIntervals())
+        {
+            if (FEVPopUpSettingsInfo::GetIntervalSeconds(Interval) == IntervalSeconds)
+            {
+                OutSettings.PopUpIntervals = Interval;
+                bFoundInterval = true;
+                break;
+            }
+        }
+
+        if (!bFoundInterval)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Stored notification interval %d seconds is unsupported."), IntervalSeconds);
+            OutSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
+        }
+    }
+
+    bool bFoundMode = false;
+    for (const EEVNotificationMode Mode : FEVPopUpSettingsInfo::GetAllNotificationModes())
+    {
+        if (static_cast<int32>(Mode) == NotificationModeValue)
+        {
+            OutSettings.NotificationMode = Mode;
+            bFoundMode = true;
+            break;
+        }
+    }
+
+    if (!bFoundMode)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Stored notification mode %d is unsupported."), NotificationModeValue);
+    }
+
+    return true;
+}
+
+bool UEVGameInstance::ConsumePendingNotificationWord(FString& OutWord) const
+{
+    OutWord.Empty();
+    return DeviceService && DeviceService->ConsumePendingNotificationWord(OutWord);
 }
 
 bool UEVGameInstance::AreNotificationsEnabled() const

@@ -54,6 +54,7 @@ public:
 
     void DisplayCurrentPage();
     void RefreshReview();
+    void SetSearchWord(const FString& Word);
 
     void UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry);
     void RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry);

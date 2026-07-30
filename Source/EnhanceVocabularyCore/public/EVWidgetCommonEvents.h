@@ -93,5 +93,7 @@ public:
 
     virtual void HandleReviewWordsRefresh() {}
 
+    virtual void HandleOpenReviewWordsForNotification(const FString& Word) {}
+
     virtual void HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& EVPopUpSettingsInfo) {}
 };

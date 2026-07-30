@@ -26,6 +26,9 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
     public static final String ACTION_CANCEL =
         "com.epicgames.unreal.EV_VOCABULARY_ALARM_CANCEL";
 
+    public static final String ACTION_OPEN_WORD =
+        "com.epicgames.unreal.EV_VOCABULARY_OPEN_WORD";
+
     private static final String CHANNEL_ID = "ev_vocabulary_reminders";
     private static final int NOTIFICATION_ID = 7353;
     private static final int ALARM_REQUEST_CODE = 7355;
@@ -35,6 +38,11 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
     private static final String KEY_ENABLED = "VocabularyAlarmEnabled";
     private static final String KEY_INTERVAL_MILLISECONDS = "VocabularyAlarmIntervalMilliseconds";
     private static final String KEY_WORDS = "VocabularyAlarmWords";
+    private static final String KEY_MODE = "VocabularyAlarmMode";
+    private static final String KEY_PENDING_NOTIFICATION_WORD = "PendingNotificationWord";
+
+    public static final String EXTRA_NOTIFICATION_WORD =
+        "com.epicgames.unreal.EV_NOTIFICATION_WORD";
 
     @Override
     public void onReceive(Context context, Intent intent)
@@ -44,6 +52,36 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
         if (ACTION_CANCEL.equals(action))
         {
             cancel(context);
+            return;
+        }
+
+        if (ACTION_OPEN_WORD.equals(action))
+        {
+            final String word = intent != null
+                ? intent.getStringExtra(EXTRA_NOTIFICATION_WORD)
+                : null;
+
+            if (word != null && !word.isEmpty())
+            {
+                context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_PENDING_NOTIFICATION_WORD, word)
+                    .apply();
+            }
+
+            Intent launchIntent =
+                context.getPackageManager().getLaunchIntentForPackage(
+                    context.getPackageName());
+
+            if (launchIntent != null)
+            {
+                launchIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK |
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                context.startActivity(launchIntent);
+            }
+
             return;
         }
 
@@ -58,7 +96,22 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
 
         try
         {
-            showNotification(context, preferences.getString(KEY_WORDS, ""));
+            final int notificationMode = preferences.getInt(KEY_MODE, 0);
+
+            switch (notificationMode)
+            {
+                case 0: // EEVNotificationMode::RandomWord
+                    showNotification(context, preferences.getString(KEY_WORDS, ""));
+                    break;
+
+                case 1: // EEVNotificationMode::TestMode
+                    Log.i("EVAlarm", "TestMode alarm fired. No notification action is assigned.");
+                    break;
+
+                default:
+                    Log.w("EVAlarm", "Unsupported notification mode: " + notificationMode);
+                    break;
+            }
         }
         catch (Exception exception)
         {
@@ -80,7 +133,8 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
     public static boolean schedule(
         Context context,
         int intervalSeconds,
-        String serializedWords)
+        String serializedWords,
+        int notificationMode)
     {
         if (context == null || intervalSeconds <= 0 ||
             serializedWords == null || serializedWords.trim().isEmpty())
@@ -95,6 +149,7 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
             .putBoolean(KEY_ENABLED, true)
             .putLong(KEY_INTERVAL_MILLISECONDS, intervalMilliseconds)
             .putString(KEY_WORDS, serializedWords)
+            .putInt(KEY_MODE, notificationMode)
             .apply();
 
         return scheduleNext(context, intervalMilliseconds);
@@ -230,24 +285,16 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
             notificationManager.createNotificationChannel(channel);
         }
 
-        Intent launchIntent =
-            context.getPackageManager().getLaunchIntentForPackage(
-                context.getPackageName());
+        Intent openWordIntent =
+            new Intent(context, EVVocabularyAlarmReceiver.class)
+                .setAction(ACTION_OPEN_WORD)
+                .putExtra(EXTRA_NOTIFICATION_WORD, word);
 
-        PendingIntent contentIntent = null;
-
-        if (launchIntent != null)
-        {
-            launchIntent.addFlags(
-                Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                Intent.FLAG_ACTIVITY_SINGLE_TOP);
-
-            contentIntent = PendingIntent.getActivity(
-                context,
-                0,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        }
+        PendingIntent contentIntent = PendingIntent.getBroadcast(
+            context,
+            NOTIFICATION_ID,
+            openWordIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification.Builder builder =
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -268,7 +315,7 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
             .setAutoCancel(true)
             .addAction(
                 0,
-                "CANCEL",
+                "Turn Off",
                 createCancelPendingIntent(context));
 
         if (contentIntent != null)
