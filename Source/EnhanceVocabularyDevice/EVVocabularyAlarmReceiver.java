@@ -26,9 +26,6 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
     public static final String ACTION_CANCEL =
         "com.epicgames.unreal.EV_VOCABULARY_ALARM_CANCEL";
 
-    public static final String ACTION_OPEN_WORD =
-        "com.epicgames.unreal.EV_VOCABULARY_OPEN_WORD";
-
     private static final String CHANNEL_ID = "ev_vocabulary_reminders";
     private static final int NOTIFICATION_ID = 7353;
     private static final int ALARM_REQUEST_CODE = 7355;
@@ -39,8 +36,6 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
     private static final String KEY_INTERVAL_MILLISECONDS = "VocabularyAlarmIntervalMilliseconds";
     private static final String KEY_WORDS = "VocabularyAlarmWords";
     private static final String KEY_MODE = "VocabularyAlarmMode";
-    private static final String KEY_PENDING_NOTIFICATION_WORD = "PendingNotificationWord";
-
     public static final String EXTRA_NOTIFICATION_WORD =
         "com.epicgames.unreal.EV_NOTIFICATION_WORD";
 
@@ -52,36 +47,6 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
         if (ACTION_CANCEL.equals(action))
         {
             cancel(context);
-            return;
-        }
-
-        if (ACTION_OPEN_WORD.equals(action))
-        {
-            final String word = intent != null
-                ? intent.getStringExtra(EXTRA_NOTIFICATION_WORD)
-                : null;
-
-            if (word != null && !word.isEmpty())
-            {
-                context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_PENDING_NOTIFICATION_WORD, word)
-                    .apply();
-            }
-
-            Intent launchIntent =
-                context.getPackageManager().getLaunchIntentForPackage(
-                    context.getPackageName());
-
-            if (launchIntent != null)
-            {
-                launchIntent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK |
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                context.startActivity(launchIntent);
-            }
-
             return;
         }
 
@@ -285,12 +250,13 @@ public class EVVocabularyAlarmReceiver extends BroadcastReceiver
             notificationManager.createNotificationChannel(channel);
         }
 
-        Intent openWordIntent =
-            new Intent(context, EVVocabularyAlarmReceiver.class)
-                .setAction(ACTION_OPEN_WORD)
-                .putExtra(EXTRA_NOTIFICATION_WORD, word);
+        Intent openWordIntent = new Intent(context, GameActivity.class)
+            .putExtra(EXTRA_NOTIFICATION_WORD, word)
+            .addFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
-        PendingIntent contentIntent = PendingIntent.getBroadcast(
+        PendingIntent contentIntent = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,
             openWordIntent,
