@@ -32,6 +32,12 @@ public:
     class UTextBlock* TextBlock_Word_Value;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* TextBlock_Transcription_Key;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* TextBlock_Transcription_Value;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* TextBlock_Definition_Key;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))

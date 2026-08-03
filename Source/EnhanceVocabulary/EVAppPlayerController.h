@@ -14,6 +14,7 @@
 #include "EVGameInstance.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVFileExchangeTypes.h"
+#include "EVPopUpSettingsTypes.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -83,9 +84,17 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     void InitEVAppPlayerController();
 
 private:
+    void HandleApplicationEnteredForeground();
+    void PollNotificationState();
+    void SynchronizeNotificationSettingsFromDevice();
+    void HandlePendingNotificationWord();
+
+    FDelegateHandle ApplicationEnteredForegroundHandle;
+    FTimerHandle NotificationStatePollTimerHandle;
     // Cache the data we receive from the the WordEntry
     // we decided to review
     FEVWordEntryActionInfo CachedWordEntryWidgetInfo;
@@ -98,6 +107,22 @@ private:
     FEVFileOperationInfo PendingFileOperationInfo;
 
     EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+
+    // ======== Notification settings and transitions ===========
+    // Settings that are currently accepted by the controller.
+    FEVPopUpSettingsInfo CurrentAcceptedSettings;
+
+    // Complete settings snapshot most recently requested by the widget.
+    FEVPopUpSettingsInfo PendingRequestedSettings;
+
+    // Settings waiting specifically for Android permission/settings resolution.
+    FEVPopUpSettingsInfo PendingPermissionSettings;
+
+    bool bHasPendingRequestedSettings = false;
+    bool bHasPendingPermissionSettings = false;
+    bool bWaitingForNotificationSettings = false;
+    bool bNotificationTransitionInProgress = false;
+    //============================================================
 
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
@@ -144,4 +169,30 @@ private:
 
     // Handle widget destruction
     void DestroyWidget(TObjectPtr<UUserWidget>& Widget);
+
+    // Handle complete notification settings emitted by the settings widget.
+    UFUNCTION()
+    void HandleNotificationSettingsChanged(const FEVPopUpSettingsInfo& RequestedSettings);
+
+    void EvaluateNotificationSettingsChange();
+    void EvaluateRandomWordModeChange();
+    void EvaluateTestModeChange();
+    void HandleNotificationIntervalChange();
+    void RequestNotificationModeChange();
+    void CommitPendingModeChange();
+    void RejectPendingModeChange();
+    void ProcessNotificationSettingsRequest(const FEVPopUpSettingsInfo& RequestedSettings);
+
+    UFUNCTION()
+    void ApplyResolvedNotificationSettings(const FEVPopUpSettingsInfo& ResolvedSettings);
+
+    void CommitPendingPermissionSettings();
+    void RejectPendingNotificationRequest();
+    void ClearPendingNotificationRequest();
+
+    bool HasActiveNotificationSchedule() const;
+    bool HasNotificationIntervalChanged() const;
+    bool HasNotificationModeChanged() const;
+
+    void HandleNotificationPermissionResult(bool bGranted);
 };

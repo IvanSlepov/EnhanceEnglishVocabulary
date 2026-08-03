@@ -9,6 +9,7 @@
 #include "EVFileExchangeTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "EVFileExchangeDefaults.h"
+#include "EVPopUpSettingsTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -25,6 +26,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnec
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVImportFilePickCompleted, const FEVFileExchangeResultInfo&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVNotificationPermissionResultFromGameInstance, bool /* bGranted */);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -75,7 +77,29 @@ public:
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    int32 GetVocabularyEntryCount() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntriesPage(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 Limit, int32 Offset) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber = 5);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    int32 GetVocabularyEntryCountByPrefix(const FString& SearchPrefix) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>& OutVocabularyEntries, const FString& SearchPrefix,
+                                          int32 Limit, int32 Offset) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetRandomlySelectedWord(FString& OutWord);
+
+    UFUNCTION(BlueprintCallable, Category = "Pop-up settings")
+    bool HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettings);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Fake/Debugging Search")
     FWordSearchResult SearchWordFake(const FString& Word);
@@ -104,6 +128,26 @@ public:
         return ImportFilePickCompletedDelegate;
     }
 
+    FEVNotificationPermissionResultFromGameInstance& OnNotificationPermissionResult()
+    {
+        return NotificationPermissionResultDelegate;
+    }
+
+public:
+    /*Notifications(Pop-ups) related functions*/
+    bool AreNotificationsEnabled() const;
+
+    bool GetStoredNotificationSettings(FEVPopUpSettingsInfo& OutSettings) const;
+    bool ConsumePendingNotificationWord(FString& OutWord) const;
+
+    bool HasRequestedNotificationPermission() const;
+
+    bool RequestNotificationPermission();
+
+    void OpenNotificationSettings();
+
+    void TestDeviceAlarm();
+
 protected:
     virtual void Init() override;
     virtual void Shutdown() override;
@@ -114,6 +158,9 @@ private:
 
     UFUNCTION()
     void HandleEVWordSearchCompletedFromEVGameInstance(const FWordSearchResult& SearchWordResultPassedByGameInstance);
+
+    UFUNCTION()
+    void HandlePopUpTimerExpired();
 
     // We need to assign local ENUM var (Cause unassigned enum type var takes the very first entry from that enum)
     // and we need to assign smth that differ from the Offline in this case, to address the issue when
@@ -156,4 +203,10 @@ private:
 
     FEVFileOperationInfo PendingImportFileOperationInfo;
     FEVFileExchangeResultInfo PendingImportValidationResult;
+
+    FEVPopUpSettingsInfo CurrentPopUpSettings;
+
+    FEVNotificationPermissionResultFromGameInstance NotificationPermissionResultDelegate;
+
+    void HandleNotificationPermissionResult(const bool bGranted);
 };

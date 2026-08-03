@@ -17,6 +17,7 @@
 #include "EVReviewWordsWidget.h"
 #include "EVAppSettingsWidget.h"
 #include "EVImportExportDBWidget.h"
+#include "EVPopUpSettingsWidget.h"
 #include "EVErrorProvider.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
@@ -24,6 +25,8 @@
 #include "EVWidgetCommonEvents.h"
 #include "EVWordEntryActionTypes.h"
 #include "EVFileExchangeTypes.h"
+#include "EVPopUpSettingsTypes.h"
+
 #include "EVRootWidget.generated.h"
 
 /**
@@ -65,6 +68,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVImportExportDBWidget> ImportExportDB;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UEVPopUpSettingsWidget> PopUpSettings;
+
     class UEVGameInstance* EVGameInstance;
 
     /*Events*/
@@ -95,9 +101,21 @@ public:
         return &OnImportExportDownloadDBOperationIssued;
     }
 
+    virtual FOnPopUpIntervalSelectedFromSettings* GetSelectedPopUpInterval() override
+    {
+        return &OnPopUpIntervalSelectedFromSettings;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
     virtual void HandleReviewWordsRefresh() override;
+    virtual void HandleOpenReviewWordsForNotification(const FString& Word) override;
+
+    // This method is getting called from the PC to
+    // confirm a user-selected Pop-up Interval. And it always forces the
+    // EEVPopUpIntervals::TurnedOff, regardless of WHAT user has selected other than this option
+    // IF the App's Notifications are disabled from within Android or later iOS
+    void HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& PopUpSettingsInfo) override;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -147,6 +165,9 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnImportExportDownloadDBOperationIssued OnImportExportDownloadDBOperationIssued;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnPopUpIntervalSelectedFromSettings OnPopUpIntervalSelectedFromSettings;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -169,6 +190,9 @@ private:
 
     UFUNCTION()
     void HandleOnImportExportDownloadDBOperationIssued(const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget);
+
+    UFUNCTION()
+    void HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettingsFromWidget);
 
     bool bIsAnyMenuActivated;
     int32 MenuSwitcherCount;

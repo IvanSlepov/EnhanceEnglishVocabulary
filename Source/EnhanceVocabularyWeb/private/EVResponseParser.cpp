@@ -37,6 +37,21 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
     }
 
     OutResult.Word = Response.Word;
+    OutResult.Transcription = Response.Phonetic.TrimStartAndEnd();
+
+    if (OutResult.Transcription.IsEmpty())
+    {
+        for (const FEVFreeDictionaryPhonetic& Phonetic : Response.Phonetics)
+        {
+            const FString Candidate = Phonetic.Text.TrimStartAndEnd();
+
+            if (!Candidate.IsEmpty())
+            {
+                OutResult.Transcription = Candidate;
+                break;
+            }
+        }
+    }
 
     FString DefinitionText;
     FString UsageText;

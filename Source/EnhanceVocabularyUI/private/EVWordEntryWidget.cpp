@@ -8,8 +8,8 @@ void UEVWordEntryWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
-    if (TextBlock_Word_Value && TextBlock_Definition_Value && TextBlock_Usage_Value && TextBlock_TranslationUA_Value &&
-        TextBlock_TranslationRU_Value)
+    if (TextBlock_Word_Value && TextBlock_Transcription_Value && TextBlock_Definition_Value && TextBlock_Usage_Value &&
+        TextBlock_TranslationUA_Value && TextBlock_TranslationRU_Value)
     {
         bAreTextFieldsCreated = true;
     }
@@ -44,13 +44,21 @@ void UEVWordEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
             // to broadcast them via the OnWordEntryButtonPressed so that the Player Controller
             // would be able to render the relevant enntry info if user presses a particular's WordEntryWidget View
             // Button
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.Word = WordEntryItem->EntryItem.Word;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.Definition = WordEntryItem->EntryItem.Definition;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.Usage = WordEntryItem->EntryItem.Usage;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.TranslationRu = WordEntryItem->EntryItem.TranslationRu;
-            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry.TranslationUa = WordEntryItem->EntryItem.TranslationUa;
+            // Copy the complete entry so newly added data fields are not silently dropped.
+            CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry = WordEntryItem->EntryItem;
 
-            TextBlock_Word_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Word));
+            // We need this adjustment since the long word without interruptions will not be auto-wrapped
+            //---start
+            const FString& OriginalWord = WordEntryItem->EntryItem.Word;
+
+            TextBlock_Word_Value->SetText(
+                FText::FromString(EVVocabularyUiStyle::BuildWrappedWordForDisplay(OriginalWord)));
+
+            // here we set a tooltip containing the whole world
+            TextBlock_Word_Value->SetToolTipText(FText::FromString(OriginalWord));
+            // --end
+
+            TextBlock_Transcription_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Transcription));
             TextBlock_Definition_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Definition));
             TextBlock_Usage_Value->SetText(FText::FromString(WordEntryItem->EntryItem.Usage));
 

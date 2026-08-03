@@ -14,7 +14,7 @@ FString FEVWordInputValidator::NormalizeWordInput(const FString& RawInput)
     return Result.ToLower();
 }
 
-bool FEVWordInputValidator::ContainsOnlyLettersSpacesAndInternalApostrophes(const FString& Value)
+bool FEVWordInputValidator::ContainsOnlyAllowedCharacters(const FString& Value)
 {
     for (int32 Index = 0; Index < Value.Len(); ++Index)
     {
@@ -49,6 +49,23 @@ bool FEVWordInputValidator::ContainsOnlyLettersSpacesAndInternalApostrophes(cons
             continue;
         }
 
+        if (Character == TEXT('-'))
+        {
+            // Hyphens cannot begin or end a word.
+            if (Index == 0 || Index == Value.Len() - 1)
+            {
+                return false;
+            }
+
+            // Hyphens must be surrounded by letters.
+            if (!FChar::IsAlpha(Value[Index - 1]) || !FChar::IsAlpha(Value[Index + 1]))
+            {
+                return false;
+            }
+
+            continue;
+        }
+
         return false;
     }
 
@@ -68,9 +85,10 @@ EEVInputValidationResult FEVWordInputValidator::ValidateSearchInput(const FStrin
         return EEVInputValidationResult::EmptyInput;
     }
 
-    if (!ContainsOnlyLettersSpacesAndInternalApostrophes(OutNormalizedWord))
+    if (!ContainsOnlyAllowedCharacters(OutNormalizedWord))
     {
-        OutErrorMessage = FText::FromString(TEXT("Only letters, spaces, and internal apostrophes are allowed."));
+        OutErrorMessage =
+            FText::FromString(TEXT("Only letters, spaces, apostrophes, and internal hyphens are allowed."));
 
         return EEVInputValidationResult::InvalidCharacters;
     }

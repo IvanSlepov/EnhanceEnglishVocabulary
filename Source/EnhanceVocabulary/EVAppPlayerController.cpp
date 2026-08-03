@@ -6,6 +6,8 @@
 #include "EVGameInstance.h"
 #include "EVErrorDisplayWidget.h"
 #include "EVDisplayStatusProvider.h"
+#include "Misc/CoreDelegates.h"
+#include "TimerManager.h"
 
 AEVAppPlayerController::AEVAppPlayerController()
 {
@@ -20,13 +22,43 @@ void AEVAppPlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
-    InitEVAppPlayerController();
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+    InitEVAppPlayerController();
     if (EVGameInstance)
     {
         EVGameInstance->OnFileOperationCompleted().AddUObject(this, &ThisClass::HandleFileOperationCompleted);
         EVGameInstance->OnImportFilePickCompleted().AddUObject(this, &ThisClass::HandleImportFilePickCompleted);
+        EVGameInstance->OnNotificationPermissionResult().AddUObject(this,
+                                                                    &ThisClass::HandleNotificationPermissionResult);
+        SynchronizeNotificationSettingsFromDevice();
+        HandlePendingNotificationWord();
+
+        GetWorldTimerManager().SetTimer(NotificationStatePollTimerHandle, this, &ThisClass::PollNotificationState, 0.5f,
+                                        true);
     }
+    ApplicationEnteredForegroundHandle = FCoreDelegates::ApplicationHasEnteredForegroundDelegate.AddUObject(
+        this, &ThisClass::HandleApplicationEnteredForeground);
+}
+
+void AEVAppPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    GetWorldTimerManager().ClearTimer(NotificationStatePollTimerHandle);
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnNotificationPermissionResult().RemoveAll(this);
+
+        EVGameInstance->OnFileOperationCompleted().RemoveAll(this);
+
+        EVGameInstance->OnImportFilePickCompleted().RemoveAll(this);
+    }
+
+    if (ApplicationEnteredForegroundHandle.IsValid())
+    {
+        FCoreDelegates::ApplicationHasEnteredForegroundDelegate.Remove(ApplicationEnteredForegroundHandle);
+    }
+
+    Super::EndPlay(EndPlayReason);
 }
 
 void AEVAppPlayerController::InitEVAppPlayerController()
@@ -91,6 +123,17 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                         WidgetCommonEvents->GetIssuedFileOperationInfo())
                 {
                     ImportExportDownloadDBOperationIssued->AddDynamic(this, &ThisClass::HandleIssuedFileOperation);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnImportExportDownloadDBOperationIssued in EVAppPlayerController.cpp is nullptr"));
+                }
+
+                if (FOnPopUpIntervalSelectedFromSettings* PopUpIntervalSelectedFromSettings =
+                        WidgetCommonEvents->GetSelectedPopUpInterval())
+                {
+                    PopUpIntervalSelectedFromSettings->AddDynamic(this, &ThisClass::HandleNotificationSettingsChanged);
                 }
                 else
                 {
@@ -455,6 +498,49 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
     }
 
     /*
+     * Change notification mode
+     */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::ChangeNotificationMode)
+    {
+        if (bIsOperationConfirmed)
+        {
+            CommitPendingModeChange();
+        }
+        else
+        {
+            RejectPendingModeChange();
+        }
+
+        return;
+    }
+
+    /*
+     * Enable Android notifications
+     */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::EnableAndroidNotifications)
+    {
+        if (!bIsOperationConfirmed)
+        {
+            RejectPendingNotificationRequest();
+            return;
+        }
+
+        if (!EVGameInstance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: EVGameInstance is nullptr."));
+
+            RejectPendingNotificationRequest();
+            return;
+        }
+
+        bWaitingForNotificationSettings = true;
+
+        EVGameInstance->OpenNotificationSettings();
+
+        return;
+    }
+
+    /*
      * Import DB — Overwrite
      */
     if (ConfirmedDialogType == EEVConfirmationDialogType::OverwriteDB)
@@ -698,4 +784,388 @@ void AEVAppPlayerController::DestroyWidget(TObjectPtr<UUserWidget>& Widget)
         Widget->RemoveFromParent();
         Widget = nullptr;
     }
+}
+
+void AEVAppPlayerController::HandleNotificationSettingsChanged(const FEVPopUpSettingsInfo& RequestedSettings)
+{
+    if (bNotificationTransitionInProgress)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Ignoring notification settings change while another transition is pending."));
+        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+        return;
+    }
+
+    PendingRequestedSettings = RequestedSettings;
+    bHasPendingRequestedSettings = true;
+    bNotificationTransitionInProgress = true;
+
+    EvaluateNotificationSettingsChange();
+}
+
+void AEVAppPlayerController::EvaluateNotificationSettingsChange()
+{
+    if (!bHasPendingRequestedSettings)
+    {
+        bNotificationTransitionInProgress = false;
+        return;
+    }
+
+    const bool bIntervalChanged = HasNotificationIntervalChanged();
+    const bool bModeChanged = HasNotificationModeChanged();
+
+    if (!bIntervalChanged && !bModeChanged)
+    {
+        ClearPendingNotificationRequest();
+        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+        return;
+    }
+
+    if (bModeChanged)
+    {
+        switch (PendingRequestedSettings.NotificationMode)
+        {
+        case EEVNotificationMode::RandomWord:
+            EvaluateRandomWordModeChange();
+            return;
+
+        case EEVNotificationMode::TestMode:
+            EvaluateTestModeChange();
+            return;
+
+        default:
+            ensureMsgf(false, TEXT("Unsupported notification mode."));
+            RejectPendingModeChange();
+            return;
+        }
+    }
+
+    HandleNotificationIntervalChange();
+}
+
+void AEVAppPlayerController::EvaluateRandomWordModeChange()
+{
+    RequestNotificationModeChange();
+}
+
+void AEVAppPlayerController::EvaluateTestModeChange()
+{
+    RequestNotificationModeChange();
+}
+
+void AEVAppPlayerController::HandleNotificationIntervalChange()
+{
+    if (!bHasPendingRequestedSettings)
+    {
+        ClearPendingNotificationRequest();
+        return;
+    }
+
+    ProcessNotificationSettingsRequest(PendingRequestedSettings);
+}
+
+void AEVAppPlayerController::RequestNotificationModeChange()
+{
+    if (!bHasPendingRequestedSettings)
+    {
+        ClearPendingNotificationRequest();
+        return;
+    }
+
+    HandleCreateConfirmationDialog(EEVConfirmationDialogType::ChangeNotificationMode, EEVWordEntryActionType::Unknown);
+}
+
+void AEVAppPlayerController::CommitPendingModeChange()
+{
+    if (!bHasPendingRequestedSettings)
+    {
+        ClearPendingNotificationRequest();
+        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+        return;
+    }
+
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot change notification mode: EVGameInstance is nullptr."));
+        RejectPendingModeChange();
+        return;
+    }
+
+    FEVPopUpSettingsInfo ResolvedSettings = PendingRequestedSettings;
+    ResolvedSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
+
+    if (!EVGameInstance->HandlePopUpIntervalSelected(ResolvedSettings))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to stop the notification schedule while changing mode."));
+        RejectPendingModeChange();
+        return;
+    }
+
+    CurrentAcceptedSettings = ResolvedSettings;
+    ClearPendingNotificationRequest();
+    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+
+    FEVRequestedActionInfo ActionInfo;
+    ActionInfo.Source = EEVRequestedActionSource::PopUpSettings;
+    ActionInfo.Type = EEVRequestedActionType::EnableNotifications;
+    ActionInfo.Status = EEVRequestedActionStatus::Warning;
+    ActionInfo.Message =
+        FText::FromString(TEXT("Notification mode changed. Select a notification interval to start the new mode."));
+    ActionInfo.GenerateColor();
+    HandleActionStatusWidget(ActionInfo);
+}
+
+void AEVAppPlayerController::RejectPendingModeChange()
+{
+    ClearPendingNotificationRequest();
+    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+}
+
+void AEVAppPlayerController::ProcessNotificationSettingsRequest(const FEVPopUpSettingsInfo& RequestedSettings)
+{
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot process notification settings: EVGameInstance is nullptr."));
+        RejectPendingNotificationRequest();
+        return;
+    }
+
+    const EEVPopUpIntervals SelectedInterval = RequestedSettings.PopUpIntervals;
+
+    if (SelectedInterval == EEVPopUpIntervals::TurnedOff)
+    {
+        if (!EVGameInstance->HandlePopUpIntervalSelected(RequestedSettings))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to stop the notification schedule."));
+            RejectPendingNotificationRequest();
+            return;
+        }
+
+        CurrentAcceptedSettings = RequestedSettings;
+        ClearPendingNotificationRequest();
+        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+        return;
+    }
+
+    PendingPermissionSettings = RequestedSettings;
+    bHasPendingPermissionSettings = true;
+
+    FEVPopUpSettingsInfo InactiveSettings = RequestedSettings;
+    InactiveSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
+    ApplyResolvedNotificationSettings(InactiveSettings);
+
+    if (EVGameInstance->AreNotificationsEnabled())
+    {
+        CommitPendingPermissionSettings();
+        return;
+    }
+
+    if (!EVGameInstance->HasRequestedNotificationPermission())
+    {
+        if (!EVGameInstance->RequestNotificationPermission())
+        {
+            RejectPendingNotificationRequest();
+        }
+
+        return;
+    }
+
+    HandleCreateConfirmationDialog(EEVConfirmationDialogType::EnableAndroidNotifications,
+                                   EEVWordEntryActionType::Unknown);
+}
+
+void AEVAppPlayerController::ApplyResolvedNotificationSettings(const FEVPopUpSettingsInfo& ResolvedSettings)
+{
+    if (!WidgetCommonEvents)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot update notification settings: WidgetCommonEvents is nullptr."));
+        return;
+    }
+
+    WidgetCommonEvents->HandleApplyResolvedPopUpSettings(ResolvedSettings);
+}
+
+void AEVAppPlayerController::CommitPendingPermissionSettings()
+{
+    if (!bHasPendingPermissionSettings)
+    {
+        return;
+    }
+
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot commit notification settings: EVGameInstance is nullptr."));
+        RejectPendingNotificationRequest();
+        return;
+    }
+
+    const FEVPopUpSettingsInfo SettingsToCommit = PendingPermissionSettings;
+
+    if (!EVGameInstance->HandlePopUpIntervalSelected(SettingsToCommit))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to apply the pending notification settings."));
+        RejectPendingNotificationRequest();
+        return;
+    }
+
+    CurrentAcceptedSettings = SettingsToCommit;
+    ClearPendingNotificationRequest();
+    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+}
+
+void AEVAppPlayerController::RejectPendingNotificationRequest()
+{
+    bWaitingForNotificationSettings = false;
+    bHasPendingPermissionSettings = false;
+    PendingPermissionSettings = FEVPopUpSettingsInfo();
+
+    FEVPopUpSettingsInfo DisabledSettings = CurrentAcceptedSettings;
+
+    if (bHasPendingRequestedSettings)
+    {
+        DisabledSettings.NotificationMode = PendingRequestedSettings.NotificationMode;
+    }
+
+    DisabledSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->HandlePopUpIntervalSelected(DisabledSettings);
+    }
+
+    CurrentAcceptedSettings = DisabledSettings;
+    ClearPendingNotificationRequest();
+    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+}
+
+void AEVAppPlayerController::ClearPendingNotificationRequest()
+{
+    bHasPendingRequestedSettings = false;
+    bHasPendingPermissionSettings = false;
+    bWaitingForNotificationSettings = false;
+    bNotificationTransitionInProgress = false;
+
+    PendingRequestedSettings = FEVPopUpSettingsInfo();
+    PendingPermissionSettings = FEVPopUpSettingsInfo();
+}
+
+bool AEVAppPlayerController::HasActiveNotificationSchedule() const
+{
+    return CurrentAcceptedSettings.PopUpIntervals != EEVPopUpIntervals::TurnedOff;
+}
+
+bool AEVAppPlayerController::HasNotificationIntervalChanged() const
+{
+    return bHasPendingRequestedSettings &&
+           PendingRequestedSettings.PopUpIntervals != CurrentAcceptedSettings.PopUpIntervals;
+}
+
+bool AEVAppPlayerController::HasNotificationModeChanged() const
+{
+    return bHasPendingRequestedSettings &&
+           PendingRequestedSettings.NotificationMode != CurrentAcceptedSettings.NotificationMode;
+}
+
+void AEVAppPlayerController::HandleNotificationPermissionResult(bool bGranted)
+{
+    if (!bHasPendingPermissionSettings)
+    {
+        UE_LOG(LogTemp, Warning,
+               TEXT("Notification permission result received without pending notification settings."));
+        return;
+    }
+
+    if (!EVGameInstance)
+    {
+        RejectPendingNotificationRequest();
+        return;
+    }
+
+    if (bGranted && EVGameInstance->AreNotificationsEnabled())
+    {
+        CommitPendingPermissionSettings();
+        return;
+    }
+
+    RejectPendingNotificationRequest();
+}
+
+void AEVAppPlayerController::HandleApplicationEnteredForeground()
+{
+    SynchronizeNotificationSettingsFromDevice();
+    HandlePendingNotificationWord();
+
+    if (!bWaitingForNotificationSettings || !bHasPendingPermissionSettings)
+    {
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Returned from Android notification settings."));
+
+    bWaitingForNotificationSettings = false;
+
+    if (EVGameInstance && EVGameInstance->AreNotificationsEnabled())
+    {
+        CommitPendingPermissionSettings();
+        return;
+    }
+
+    RejectPendingNotificationRequest();
+}
+
+void AEVAppPlayerController::PollNotificationState()
+{
+    if (bNotificationTransitionInProgress)
+    {
+        return;
+    }
+
+    SynchronizeNotificationSettingsFromDevice();
+    HandlePendingNotificationWord();
+}
+
+void AEVAppPlayerController::HandlePendingNotificationWord()
+{
+    if (!EVGameInstance || !WidgetCommonEvents)
+    {
+        return;
+    }
+
+    if (CurrentAcceptedSettings.NotificationMode != EEVNotificationMode::RandomWord)
+    {
+        return;
+    }
+
+    FString NotificationWord;
+
+    if (!EVGameInstance->ConsumePendingNotificationWord(NotificationWord) || NotificationWord.IsEmpty())
+    {
+        return;
+    }
+
+    WidgetCommonEvents->HandleOpenReviewWordsForNotification(NotificationWord);
+}
+
+void AEVAppPlayerController::SynchronizeNotificationSettingsFromDevice()
+{
+    if (!EVGameInstance || !WidgetCommonEvents)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot synchronize notification settings: controller is not initialized."));
+        return;
+    }
+
+    FEVPopUpSettingsInfo StoredSettings;
+    if (!EVGameInstance->GetStoredNotificationSettings(StoredSettings))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to read stored notification settings from the device."));
+        return;
+    }
+
+    if (StoredSettings.PopUpIntervals == CurrentAcceptedSettings.PopUpIntervals &&
+        StoredSettings.NotificationMode == CurrentAcceptedSettings.NotificationMode)
+    {
+        return;
+    }
+
+    CurrentAcceptedSettings = StoredSettings;
+    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
 }

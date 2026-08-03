@@ -20,4 +20,9 @@ public:
 private:
     void HandleResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful,
                         FEVHttpResponseDelegate Callback);
+
+    // This function exists for examining the Free Dictionary provider's complete response
+    // in order to understand what information can be used and how.
+    // Its call inside HandleResponse can be commented or uncommented on demand.
+    void DebugDictionaryApiResponse(const FHttpRequestPtr& Request, const FHttpResponsePtr& Response) const;
 };

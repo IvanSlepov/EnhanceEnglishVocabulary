@@ -1,6 +1,7 @@
 #include "EVVocabularyStorageService.h"
 
 #include "EVVocabularyDatabaseSchema.h"
+#include "EVVocabularyFieldRegistry.h"
 #include "EVVocabularySqlQueries.h"
 #include "EVWordInputValidator.h"
 
@@ -16,15 +17,74 @@
 
 namespace
 {
-FString QuoteCsvField(const FString& Value)
-{
-    FString EscapedValue = Value;
+    FString QuoteCsvField(const FString& Value)
+    {
+        FString EscapedValue = Value;
 
-    // A quote inside a quoted CSV field is represented by two quotes.
-    EscapedValue.ReplaceInline(TEXT("\""), TEXT("\"\""));
+        // A quote inside a quoted CSV field is represented by two quotes.
+        EscapedValue.ReplaceInline(TEXT("\""), TEXT("\"\""));
 
-    return FString::Printf(TEXT("\"%s\""), *EscapedValue);
-}
+        return FString::Printf(TEXT("\"%s\""), *EscapedValue);
+    }
+
+    bool BindEntryFields(FSQLitePreparedStatement& Statement, const FVocabularyEntry& Entry, int32 StartBindingIndex = 1)
+    {
+        const TArray<FEVDatabaseColumnDefinition>& Fields = FEVVocabularyFieldRegistry::GetPersistentFields();
+
+        for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+        {
+            const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+
+            if (!Field.EntryMember ||
+                !Statement.SetBindingValueByIndex(StartBindingIndex + FieldIndex, Entry.*Field.EntryMember))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to bind vocabulary field '%s'"), *Field.Name);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool BindEditableEntryFields(FSQLitePreparedStatement& Statement, const FVocabularyEntry& Entry,
+                                 int32 StartBindingIndex = 1)
+    {
+        const TArray<FEVDatabaseColumnDefinition> Fields = FEVVocabularyFieldRegistry::GetEditablePersistentFields();
+
+        for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+        {
+            const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+
+            if (!Field.EntryMember ||
+                !Statement.SetBindingValueByIndex(StartBindingIndex + FieldIndex, Entry.*Field.EntryMember))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to bind editable vocabulary field '%s'"), *Field.Name);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ReadEntryFields(FSQLitePreparedStatement& Statement, FVocabularyEntry& OutEntry, int32 StartColumnIndex = 0)
+    {
+        const TArray<FEVDatabaseColumnDefinition>& Fields = FEVVocabularyFieldRegistry::GetPersistentFields();
+
+        for (int32 FieldIndex = 0; FieldIndex < Fields.Num(); ++FieldIndex)
+        {
+            const FEVDatabaseColumnDefinition& Field = Fields[FieldIndex];
+
+            if (!Field.EntryMember ||
+                !Statement.GetColumnValueByIndex(StartColumnIndex + FieldIndex, OutEntry.*Field.EntryMember))
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to read vocabulary field '%s'"), *Field.Name);
+                return false;
+            }
+        }
+
+        OutEntry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(OutEntry.Usage);
+        return true;
+    }
 } // namespace
 
 bool UEVVocabularyStorageService::InitializeStorage()
@@ -83,6 +143,55 @@ bool UEVVocabularyStorageService::CreateVocabularyTable()
 
     UE_LOG(LogTemp, Warning, TEXT("VocabularyEntries table ready"));
 
+    return EnsureVocabularyTableColumns();
+}
+
+bool UEVVocabularyStorageService::EnsureVocabularyTableColumns()
+{
+    const FString PragmaQuery =
+        FString::Printf(TEXT("PRAGMA table_info(%s);"), *FEVVocabularyDatabaseSchema::GetTableName());
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, *PragmaQuery, ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to inspect vocabulary table schema"));
+        return false;
+    }
+
+    TSet<FString> ExistingColumns;
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FString ColumnName;
+
+        // PRAGMA table_info: column 1 is the column name.
+        if (Statement.GetColumnValueByIndex(1, ColumnName))
+        {
+            ExistingColumns.Add(ColumnName);
+        }
+    }
+
+    for (const FEVDatabaseColumnDefinition& Field : FEVVocabularyFieldRegistry::GetPersistentFields())
+    {
+        if (ExistingColumns.Contains(Field.Name))
+        {
+            continue;
+        }
+
+        const FString AlterQuery =
+            FString::Printf(TEXT("ALTER TABLE %s ADD COLUMN %s %s;"), *FEVVocabularyDatabaseSchema::GetTableName(),
+                            *Field.Name, *Field.SqlDefinition);
+
+        if (!Database.Execute(*AlterQuery))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to add missing vocabulary column '%s'"), *Field.Name);
+            return false;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Added missing vocabulary column '%s'"), *Field.Name);
+    }
+
     return true;
 }
 
@@ -96,7 +205,7 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::InsertVocabularyEntryStrict,
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetInsertVocabularyEntryStrictQuery(),
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create INSERT statement"));
@@ -105,12 +214,10 @@ bool UEVVocabularyStorageService::SaveVocabularyEntry(const FVocabularyEntry& En
 
     UE_LOG(LogTemp, Error, TEXT("Word is: %s"), *Entry.Word);
 
-    // 1-based
-    Statement.SetBindingValueByIndex(1, Entry.Word);
-    Statement.SetBindingValueByIndex(2, Entry.Definition);
-    Statement.SetBindingValueByIndex(3, Entry.Usage);
-    Statement.SetBindingValueByIndex(4, Entry.TranslationRu);
-    Statement.SetBindingValueByIndex(5, Entry.TranslationUa);
+    if (!BindEntryFields(Statement, Entry))
+    {
+        return false;
+    }
 
     if (!Statement.Execute())
     {
@@ -131,19 +238,25 @@ bool UEVVocabularyStorageService::UpdateVocabularyEntry(const FVocabularyEntry& 
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::EditVocabularyEntry,
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetEditVocabularyEntryQuery(),
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create UPDATE statement"));
         return false;
     }
 
-    // 1-based
-    Statement.SetBindingValueByIndex(1, Entry.Definition);
-    Statement.SetBindingValueByIndex(2, Entry.Usage);
-    Statement.SetBindingValueByIndex(3, Entry.TranslationRu);
-    Statement.SetBindingValueByIndex(4, Entry.TranslationUa);
-    Statement.SetBindingValueByIndex(5, Entry.Word);
+    if (!BindEditableEntryFields(Statement, Entry))
+    {
+        return false;
+    }
+
+    const int32 WordBindingIndex = FEVVocabularyFieldRegistry::GetEditablePersistentFields().Num() + 1;
+
+    if (!Statement.SetBindingValueByIndex(WordBindingIndex, Entry.Word))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to bind UPDATE word: %s"), *Entry.Word);
+        return false;
+    }
 
     if (!Statement.Execute())
     {
@@ -193,7 +306,7 @@ bool UEVVocabularyStorageService::GetVocabularyEntryByWord(const FString& Word, 
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::GetVocabularyEntryByWord,
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetVocabularyEntryByWordQuery(),
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create SELECT statement"));
@@ -216,13 +329,141 @@ bool UEVVocabularyStorageService::GetVocabularyEntryByWord(const FString& Word, 
         return false;
     }
 
-    Statement.GetColumnValueByIndex(0, OutEntry.Word);
-    Statement.GetColumnValueByIndex(1, OutEntry.Definition);
-    Statement.GetColumnValueByIndex(2, OutEntry.Usage);
-    Statement.GetColumnValueByIndex(3, OutEntry.TranslationRu);
-    Statement.GetColumnValueByIndex(4, OutEntry.TranslationUa);
+    return ReadEntryFields(Statement, OutEntry);
+}
+
+bool UEVVocabularyStorageService::GetRandomlySelectedWord(FString& OutWord)
+{
+    OutWord.Reset();
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot retrieve random word: database is invalid."));
+        return false;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetRandomlySelectedWordQuery(),
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create random word SELECT statement."));
+        return false;
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Vocabulary is empty."));
+        return false;
+    }
+
+    if (!Statement.GetColumnValueByIndex(0, OutWord))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to read the random word."));
+        return false;
+    }
 
     return true;
+}
+
+int32 UEVVocabularyStorageService::GetVocabularyEntryCount()
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot count vocabulary entries: database is invalid"));
+
+        return 0;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::CountVocabularyEntries,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create vocabulary COUNT statement"));
+
+        return 0;
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary COUNT query returned no row"));
+
+        return 0;
+    }
+
+    int32 EntryCount = 0;
+
+    if (!Statement.GetColumnValueByIndex(0, EntryCount))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to read vocabulary entry count"));
+
+        return 0;
+    }
+
+    return EntryCount;
+}
+
+TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntriesPage(int32 Limit, int32 Offset)
+{
+    TArray<FVocabularyEntry> Entries;
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot load vocabulary page: database is invalid"));
+
+        return Entries;
+    }
+
+    if (Limit <= 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary page limit must be greater than zero"));
+
+        return Entries;
+    }
+
+    if (Offset < 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary page offset cannot be negative"));
+
+        return Entries;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageQuery(),
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create paginated vocabulary SELECT statement"));
+
+        return Entries;
+    }
+
+    // SQLite prepared-statement bindings are 1-based.
+    Statement.SetBindingValueByIndex(1, Limit);
+    Statement.SetBindingValueByIndex(2, Offset);
+
+    Entries.Reserve(Limit);
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FVocabularyEntry Entry;
+
+        if (!ReadEntryFields(Statement, Entry))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to read a paginated vocabulary row"));
+
+            Entries.Reset();
+            return Entries;
+        }
+
+        Entries.Add(MoveTemp(Entry));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Loaded vocabulary page: Limit=%d | Offset=%d | Returned=%d"), Limit, Offset,
+           Entries.Num());
+
+    return Entries;
 }
 
 TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32 EntryNumber)
@@ -243,7 +484,7 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntries,
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetSelectVocabularyEntriesQuery(),
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create SELECT statement"));
@@ -254,14 +495,12 @@ TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntries(int32
     {
         FVocabularyEntry Entry;
 
-        // 0-based
-        Statement.GetColumnValueByIndex(0, Entry.Word);
-        Statement.GetColumnValueByIndex(1, Entry.Definition);
-        Statement.GetColumnValueByIndex(2, Entry.Usage);
-        Statement.GetColumnValueByIndex(3, Entry.TranslationRu);
-        Statement.GetColumnValueByIndex(4, Entry.TranslationUa);
-
-        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
+        if (!ReadEntryFields(Statement, Entry))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to read vocabulary entry"));
+            Entries.Reset();
+            return Entries;
+        }
 
         UE_LOG(LogTemp, Warning, TEXT("Loaded word: %s"), *Entry.Word);
 
@@ -849,27 +1088,22 @@ FEVFileExchangeResultInfo UEVVocabularyStorageService::ValidateImportFile(EEVFil
         FirstRowByNormalizedWord.Add(NormalizedWord, CsvRowNumber);
 
         FVocabularyEntry Entry;
+
+        const TArray<FEVDatabaseColumnDefinition>& PersistentFields = FEVVocabularyFieldRegistry::GetPersistentFields();
+
+        for (int32 ColumnIndex = 0; ColumnIndex < Row.Num() && ColumnIndex < PersistentFields.Num(); ++ColumnIndex)
+        {
+            const FEVDatabaseColumnDefinition& Field = PersistentFields[ColumnIndex];
+
+            if (Field.EntryMember)
+            {
+                Entry.*Field.EntryMember = FString(Row[ColumnIndex]);
+            }
+        }
+
+        // Preserve the validated/normalized value instead of the raw CSV spelling.
         Entry.Word = NormalizedWord;
-
-        if (Row.Num() > 1)
-        {
-            Entry.Definition = FString(Row[1]);
-        }
-
-        if (Row.Num() > 2)
-        {
-            Entry.Usage = FString(Row[2]);
-        }
-
-        if (Row.Num() > 3)
-        {
-            Entry.TranslationRu = FString(Row[3]);
-        }
-
-        if (Row.Num() > 4)
-        {
-            Entry.TranslationUa = FString(Row[4]);
-        }
+        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
 
         ValidatedEntries.Add(MoveTemp(Entry));
     }
@@ -1198,6 +1432,122 @@ UEVVocabularyStorageService::GenerateValidationReport(EEVFileExtensionType FileE
     return ResultInfo;
 }
 
+int32 UEVVocabularyStorageService::GetVocabularyEntryCountByPrefix(const FString& SearchPrefix)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot count filtered vocabulary entries: database is invalid"));
+
+        return 0;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, FEVVocabularySqlQueries::GetVocabularyEntryCountByPrefixQuery,
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create filtered vocabulary COUNT statement"));
+
+        return 0;
+    }
+
+    const FString SearchPattern = SearchPrefix + TEXT("%");
+
+    if (!Statement.SetBindingValueByIndex(1, SearchPattern))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to bind vocabulary search pattern: %s"), *SearchPattern);
+
+        return 0;
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Filtered vocabulary COUNT query returned no row"));
+
+        return 0;
+    }
+
+    int32 EntryCount = 0;
+
+    if (!Statement.GetColumnValueByIndex(0, EntryCount))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to read filtered vocabulary entry count"));
+
+        return 0;
+    }
+
+    return EntryCount;
+}
+
+TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntriesPageByPrefix(const FString& SearchPrefix,
+                                                                                       int32 Limit, int32 Offset)
+{
+    TArray<FVocabularyEntry> Entries;
+
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot load filtered vocabulary page: database is invalid"));
+
+        return Entries;
+    }
+
+    if (Limit <= 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Filtered vocabulary page limit must be greater than zero"));
+
+        return Entries;
+    }
+
+    if (Offset < 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Filtered vocabulary page offset cannot be negative"));
+
+        return Entries;
+    }
+
+    FSQLitePreparedStatement Statement;
+
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageByPrefixQuery(),
+                          ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create filtered paginated vocabulary SELECT statement"));
+
+        return Entries;
+    }
+
+    const FString SearchPattern = SearchPrefix + TEXT("%");
+
+    if (!Statement.SetBindingValueByIndex(1, SearchPattern) || !Statement.SetBindingValueByIndex(2, Limit) ||
+        !Statement.SetBindingValueByIndex(3, Offset))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to bind filtered vocabulary page parameters"));
+
+        return Entries;
+    }
+
+    Entries.Reserve(Limit);
+
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FVocabularyEntry Entry;
+
+        if (!ReadEntryFields(Statement, Entry))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to read a filtered vocabulary row"));
+
+            Entries.Reset();
+            return Entries;
+        }
+
+        Entries.Add(MoveTemp(Entry));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Loaded filtered vocabulary page: Prefix=%s | Limit=%d | Offset=%d | Returned=%d"),
+           *SearchPrefix, Limit, Offset, Entries.Num());
+
+    return Entries;
+}
+
 bool UEVVocabularyStorageService::InsertVocabularyEntryStrict(const FVocabularyEntry& Entry)
 {
     if (!Database.IsValid())
@@ -1209,7 +1559,7 @@ bool UEVVocabularyStorageService::InsertVocabularyEntryStrict(const FVocabularyE
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::InsertVocabularyEntryStrict,
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetInsertVocabularyEntryStrictQuery(),
                           ESQLitePreparedStatementFlags::Persistent))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create strict INSERT statement for word: %s"), *Entry.Word);
@@ -1217,11 +1567,10 @@ bool UEVVocabularyStorageService::InsertVocabularyEntryStrict(const FVocabularyE
         return false;
     }
 
-    Statement.SetBindingValueByIndex(1, Entry.Word);
-    Statement.SetBindingValueByIndex(2, Entry.Definition);
-    Statement.SetBindingValueByIndex(3, Entry.Usage);
-    Statement.SetBindingValueByIndex(4, Entry.TranslationRu);
-    Statement.SetBindingValueByIndex(5, Entry.TranslationUa);
+    if (!BindEntryFields(Statement, Entry))
+    {
+        return false;
+    }
 
     if (!Statement.Execute())
     {
@@ -1250,7 +1599,7 @@ void UEVVocabularyStorageService::CollectAppendValidationProblems(const TArray<F
 
     FSQLitePreparedStatement Statement;
 
-    if (!Statement.Create(Database, FEVVocabularySqlQueries::SelectVocabularyEntries,
+    if (!Statement.Create(Database, *FEVVocabularySqlQueries::GetSelectVocabularyEntriesQuery(),
                           ESQLitePreparedStatementFlags::Persistent))
     {
         FEVValidationFailedEntry Problem;

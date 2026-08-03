@@ -40,8 +40,16 @@ public:
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry);
+    bool GetRandomlySelectedWord(FString& OutWord);
+
+    int32 GetVocabularyEntryCount();
+
+    TArray<FVocabularyEntry> GetVocabularyEntriesPage(int32 Limit, int32 Offset);
+
     TArray<FVocabularyEntry> GetVocabularyEntries(int32 EntryNumber = 5);
+
     void ShutdownStorage();
+
     EEVWordLookupResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
 
     FEVFileExchangeResultInfo GenerateDatabaseExportTemplate(EEVFileExtensionType FileExtensionType,
@@ -64,9 +72,14 @@ public:
                                                        const TArray<FEVValidationFailedEntry>& InvalidEntries,
                                                        TArray<uint8>& OutBytes);
 
+    int32 GetVocabularyEntryCountByPrefix(const FString& SearchPrefix);
+
+    TArray<FVocabularyEntry> GetVocabularyEntriesPageByPrefix(const FString& SearchPrefix, int32 Limit, int32 Offset);
+
 private:
     FSQLiteDatabase Database;
     bool CreateVocabularyTable();
+    bool EnsureVocabularyTableColumns();
     bool InsertVocabularyEntryStrict(const FVocabularyEntry& Entry);
     void CollectAppendValidationProblems(const TArray<FVocabularyEntry>& Entries,
                                          TArray<FEVValidationFailedEntry>& OutProblems);

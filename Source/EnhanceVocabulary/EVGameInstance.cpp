@@ -70,6 +70,11 @@ void UEVGameInstance::Init()
         DeviceService->OnFileSaved().AddUObject(this, &ThisClass::HandleFileSaved);
 
         DeviceService->OnImportFilePicked().AddUObject(this, &ThisClass::HandleImportFilePicked);
+
+        DeviceService->OnPopUpTimerExpired.AddUObject(this, &ThisClass::HandlePopUpTimerExpired);
+
+        DeviceService->OnNotificationPermissionResult().AddUObject(this,
+                                                                   &ThisClass::HandleNotificationPermissionResult);
     }
     else
     {
@@ -141,6 +146,7 @@ bool UEVGameInstance::SaveVocabularyEntry(const FWordSearchResult& WordSearchRes
 
     FVocabularyEntry Entry;
     Entry.Word = WordSearchResult.Word;
+    Entry.Transcription = WordSearchResult.Transcription;
     Entry.Definition = WordSearchResult.Definition;
     Entry.Usage = WordSearchResult.Usage;
     Entry.TranslationRu = WordSearchResult.TranslationRu;
@@ -170,6 +176,12 @@ bool UEVGameInstance::UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVoca
     return VocabularyStorageService->GetVocabularyEntryByWord(Entry.Word, OutEntry);
 }
 
+bool UEVGameInstance::GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry) const
+{
+    OutEntry = FVocabularyEntry();
+    return VocabularyStorageService && VocabularyStorageService->GetVocabularyEntryByWord(Word, OutEntry);
+}
+
 bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
 {
     if (!VocabularyStorageService)
@@ -189,6 +201,43 @@ bool UEVGameInstance::DeleteVocabularyEntry(const FVocabularyEntry& Entry)
     return true;
 }
 
+int32 UEVGameInstance::GetVocabularyEntryCount() const
+{
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntryCount: VocabularyStorageService is null"));
+
+        return 0;
+    }
+
+    return VocabularyStorageService->GetVocabularyEntryCount();
+}
+
+bool UEVGameInstance::GetVocabularyEntriesPage(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 Limit,
+                                               int32 Offset) const
+{
+    OutVocabularyEntries.Reset();
+
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntriesPage: VocabularyStorageService is null"));
+
+        return false;
+    }
+
+    if (Limit <= 0 || Offset < 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntriesPage received invalid arguments. Limit=%d | Offset=%d"), Limit,
+               Offset);
+
+        return false;
+    }
+
+    OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntriesPage(Limit, Offset);
+
+    return true;
+}
+
 bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabularyEntries, int32 EntryNumber)
 {
     if (!VocabularyStorageService)
@@ -201,6 +250,120 @@ bool UEVGameInstance::GetVocabularyEntries(TArray<FVocabularyEntry>& OutVocabula
     OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntries(EntryNumber);
 
     return true;
+}
+
+int32 UEVGameInstance::GetVocabularyEntryCountByPrefix(const FString& SearchPrefix) const
+{
+    if (!VocabularyStorageService)
+    {
+        return 0;
+    }
+
+    return VocabularyStorageService->GetVocabularyEntryCountByPrefix(SearchPrefix);
+}
+
+bool UEVGameInstance::GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>& OutVocabularyEntries,
+                                                       const FString& SearchPrefix, int32 Limit, int32 Offset) const
+{
+    OutVocabularyEntries.Reset();
+
+    if (!VocabularyStorageService)
+    {
+        return false;
+    }
+
+    OutVocabularyEntries = VocabularyStorageService->GetVocabularyEntriesPageByPrefix(SearchPrefix, Limit, Offset);
+
+    return true;
+}
+
+bool UEVGameInstance::GetRandomlySelectedWord(FString& OutWord)
+{
+    OutWord.Reset();
+
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot retrieve random word: vocabulary storage service is invalid."));
+
+        return false;
+    }
+
+    return VocabularyStorageService->GetRandomlySelectedWord(OutWord);
+}
+
+bool UEVGameInstance::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettings)
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot apply notification settings: DeviceService is invalid."));
+        return false;
+    }
+
+    CurrentPopUpSettings = PopUpSettings;
+
+    const int32 IntervalSeconds = FEVPopUpSettingsInfo::GetIntervalSeconds(PopUpSettings.PopUpIntervals);
+
+    if (IntervalSeconds <= 0)
+    {
+        return DeviceService->CancelVocabularyNotifications();
+    }
+
+#if PLATFORM_ANDROID
+    switch (PopUpSettings.NotificationMode)
+    {
+    case EEVNotificationMode::RandomWord:
+    {
+        if (!VocabularyStorageService)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Cannot schedule RandomWord notifications: vocabulary storage is invalid."));
+            return false;
+        }
+
+        const int32 EntryCount = VocabularyStorageService->GetVocabularyEntryCount();
+        if (EntryCount <= 0)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Cannot schedule RandomWord notifications: vocabulary database is empty."));
+            return false;
+        }
+
+        const TArray<FVocabularyEntry> Entries = VocabularyStorageService->GetVocabularyEntries(EntryCount);
+        TArray<FString> Words;
+        Words.Reserve(Entries.Num());
+
+        for (const FVocabularyEntry& Entry : Entries)
+        {
+            FString Word = Entry.Word;
+            Word.ReplaceInline(TEXT("\r"), TEXT(" "));
+            Word.ReplaceInline(TEXT("\n"), TEXT(" "));
+            Word.TrimStartAndEndInline();
+
+            if (!Word.IsEmpty())
+            {
+                Words.Add(MoveTemp(Word));
+            }
+        }
+
+        if (Words.IsEmpty())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Cannot schedule RandomWord notifications: no valid words exist."));
+            return false;
+        }
+
+        return DeviceService->ScheduleVocabularyNotifications(IntervalSeconds, FString::Join(Words, TEXT("\n")),
+                                                              static_cast<int32>(PopUpSettings.NotificationMode));
+    }
+
+    case EEVNotificationMode::TestMode:
+        return DeviceService->ScheduleVocabularyNotifications(IntervalSeconds, TEXT(""),
+                                                              static_cast<int32>(PopUpSettings.NotificationMode));
+
+    default:
+        ensureMsgf(false, TEXT("Unsupported notification mode."));
+        return false;
+    }
+#else
+    return DeviceService->StartPopUpTimer(IntervalSeconds);
+#endif
 }
 
 FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
@@ -287,6 +450,32 @@ void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
     const FWordSearchResult& SearchWordResultPassedByGameInstance)
 {
     OnEVWordSearchCompletedFromEVGameInstance.Broadcast(SearchWordResultPassedByGameInstance);
+}
+
+void UEVGameInstance::HandlePopUpTimerExpired()
+{
+    FString RandomWord;
+
+    if (!VocabularyStorageService->GetRandomlySelectedWord(RandomWord))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to retrieve a random word for the notification."));
+
+        return;
+    }
+
+    if (!DeviceService->ShowVocabularyNotification(RandomWord))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to show vocabulary notification."));
+
+        return;
+    }
+
+    const int32 IntervalSeconds = FEVPopUpSettingsInfo::GetIntervalSeconds(CurrentPopUpSettings.PopUpIntervals);
+
+    if (IntervalSeconds > 0)
+    {
+        DeviceService->StartPopUpTimer(IntervalSeconds);
+    }
 }
 
 void UEVGameInstance::HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo)
@@ -757,4 +946,133 @@ UEVGameInstance::ConvertFileExchangeResultToRequestedAction(const FEVFileExchang
     ActionInfo.GenerateColor();
 
     return ActionInfo;
+}
+
+bool UEVGameInstance::GetStoredNotificationSettings(FEVPopUpSettingsInfo& OutSettings) const
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot read stored notification settings: DeviceService is nullptr."));
+        return false;
+    }
+
+    bool bEnabled = false;
+    int32 IntervalSeconds = 0;
+    int32 NotificationModeValue = 0;
+
+    if (!DeviceService->GetStoredVocabularyNotificationSettings(bEnabled, IntervalSeconds, NotificationModeValue))
+    {
+        return false;
+    }
+
+    OutSettings = FEVPopUpSettingsInfo();
+
+    if (bEnabled)
+    {
+        bool bFoundInterval = false;
+        for (const EEVPopUpIntervals Interval : FEVPopUpSettingsInfo::GetAllIntervals())
+        {
+            if (FEVPopUpSettingsInfo::GetIntervalSeconds(Interval) == IntervalSeconds)
+            {
+                OutSettings.PopUpIntervals = Interval;
+                bFoundInterval = true;
+                break;
+            }
+        }
+
+        if (!bFoundInterval)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Stored notification interval %d seconds is unsupported."), IntervalSeconds);
+            OutSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
+        }
+    }
+
+    bool bFoundMode = false;
+    for (const EEVNotificationMode Mode : FEVPopUpSettingsInfo::GetAllNotificationModes())
+    {
+        if (static_cast<int32>(Mode) == NotificationModeValue)
+        {
+            OutSettings.NotificationMode = Mode;
+            bFoundMode = true;
+            break;
+        }
+    }
+
+    if (!bFoundMode)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Stored notification mode %d is unsupported."), NotificationModeValue);
+    }
+
+    return true;
+}
+
+bool UEVGameInstance::ConsumePendingNotificationWord(FString& OutWord) const
+{
+    OutWord.Empty();
+    return DeviceService && DeviceService->ConsumePendingNotificationWord(OutWord);
+}
+
+bool UEVGameInstance::AreNotificationsEnabled() const
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot check notifications: DeviceService is nullptr."));
+
+        return false;
+    }
+
+    return DeviceService->AreNotificationsEnabled();
+}
+
+bool UEVGameInstance::HasRequestedNotificationPermission() const
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot check notification permission history: DeviceService is nullptr."));
+
+        return false;
+    }
+
+    return DeviceService->HasRequestedNotificationPermission();
+}
+
+bool UEVGameInstance::RequestNotificationPermission()
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot request notification permission: DeviceService is nullptr."));
+
+        return false;
+    }
+
+    return DeviceService->RequestNotificationPermission();
+}
+
+void UEVGameInstance::OpenNotificationSettings()
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: DeviceService is nullptr."));
+
+        return;
+    }
+
+    DeviceService->OpenNotificationSettings();
+}
+
+void UEVGameInstance::TestDeviceAlarm()
+{
+    if (!DeviceService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: DeviceService is nullptr."));
+
+        return;
+    }
+
+    DeviceService->TestAlarm();
+}
+
+void UEVGameInstance::HandleNotificationPermissionResult(const bool bGranted)
+{
+    NotificationPermissionResultDelegate.Broadcast(bGranted);
 }

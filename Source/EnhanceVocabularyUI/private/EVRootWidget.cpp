@@ -93,6 +93,11 @@ void UEVRootWidget::NativeOnInitialized()
             this, &ThisClass::HandleOnImportExportDownloadDBOperationIssued);
     }
 
+    if (PopUpSettings)
+    {
+        PopUpSettings->OnNotificationSettingsChanged.AddDynamic(this, &ThisClass::HandlePopUpIntervalSelected);
+    }
+
     if (Button_Menu)
     {
         Button_Menu->OnPressed.AddDynamic(this, &ThisClass::ButtonMenuPressed);
@@ -162,6 +167,12 @@ void UEVRootWidget::ButtonMenuPressed()
                 WidgetSwitcher_Main->SetActiveWidget(ImportExportDB);
                 MenuSwitcherCount = 0;
             }
+
+            else if (bIsPopupSettingsActivated_internal)
+            {
+                WidgetSwitcher_Main->SetActiveWidget(PopUpSettings);
+                MenuSwitcherCount = 0;
+            }
         }
 
         else
@@ -194,12 +205,14 @@ void UEVRootWidget::HandleMenuButtonsPressed(bool bIsAddWordActivated, bool bIsR
     else if (bIsReviewWordsActivated)
     {
         WidgetSwitcher_Main->SetActiveWidget(ReviewWords);
-        ReviewWords->DisplayWords();
+        ReviewWords->RefreshReview();
         MenuSwitcherCount = 0;
     }
 
     else if (bIsPopupSettingsActivated)
     {
+        WidgetSwitcher_Main->SetActiveWidget(PopUpSettings);
+        MenuSwitcherCount = 0;
     }
 
     else if (bIsAppSettingsActivated)
@@ -356,6 +369,11 @@ void UEVRootWidget::HandleOnImportExportDownloadDBOperationIssued(
     OnImportExportDownloadDBOperationIssued.Broadcast(FileOperationInfoFromSelectorWidget);
 }
 
+void UEVRootWidget::HandlePopUpIntervalSelected(const FEVPopUpSettingsInfo& PopUpSettingsFromWidget)
+{
+    OnPopUpIntervalSelectedFromSettings.Broadcast(PopUpSettingsFromWidget);
+}
+
 void UEVRootWidget::HandleReviewWordsRefresh()
 {
     if (!ReviewWords)
@@ -365,7 +383,27 @@ void UEVRootWidget::HandleReviewWordsRefresh()
         return;
     }
 
-    ReviewWords->DisplayWords();
+    ReviewWords->RefreshReview();
+}
+
+void UEVRootWidget::HandleOpenReviewWordsForNotification(const FString& Word)
+{
+    if (!WidgetSwitcher_Main || !ReviewWords)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open Review Words from notification: required widget is null."));
+        return;
+    }
+
+    bIsAnyMenuActivated = true;
+    bIsAddWordActivated_internal = false;
+    bIsReviewWordsActivated_internal = true;
+    bIsPopupSettingsActivated_internal = false;
+    bIsImportExportActivated_internal = false;
+    bIsAppSettingsActivated_internal = false;
+    MenuSwitcherCount = 0;
+
+    WidgetSwitcher_Main->SetActiveWidget(ReviewWords);
+    ReviewWords->SetSearchWord(Word);
 }
 
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
@@ -398,6 +436,18 @@ void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynam
         UE_LOG(LogTemp, Error,
                TEXT("TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic is nullptr in WBP_RootWidget"));
     }
+}
+
+void UEVRootWidget::HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& PopUpSettingsInfo)
+{
+    if (!PopUpSettings)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot apply resolved pop-up settings: PopUpSettings is null."));
+
+        return;
+    }
+
+    PopUpSettings->SetSelectedSettings(PopUpSettingsInfo);
 }
 
 void UEVRootWidget::HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo)
