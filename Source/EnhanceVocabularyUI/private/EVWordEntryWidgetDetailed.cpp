@@ -2,7 +2,13 @@
 
 #include "EVWordEntryWidgetDetailed.h"
 
+#include "Components/Button.h"
+#include "Components/ListView.h"
+#include "Components/TextBlock.h"
+#include "EVEntryItem.h"
+#include "EVVocabularyEntryMeaningWidget.h"
 #include "EVVocabularyUiStyle.h"
+#include "EVWordInputValidator.h"
 
 void UEVWordEntryWidgetDetailed::NativeOnInitialized()
 {
@@ -10,7 +16,7 @@ void UEVWordEntryWidgetDetailed::NativeOnInitialized()
 
     if (Button_ViewWord)
     {
-        Button_ViewWord->OnPressed.AddDynamic(this, &ThisClass::HandleViewPressed);
+        Button_ViewWord->OnPressed.AddUniqueDynamic(this, &ThisClass::HandleViewPressed);
     }
     else
     {
@@ -19,7 +25,7 @@ void UEVWordEntryWidgetDetailed::NativeOnInitialized()
 
     if (Button_EditWordEntry)
     {
-        Button_EditWordEntry->OnPressed.AddDynamic(this, &ThisClass::HandleEditPressed);
+        Button_EditWordEntry->OnPressed.AddUniqueDynamic(this, &ThisClass::HandleEditPressed);
     }
     else
     {
@@ -28,7 +34,7 @@ void UEVWordEntryWidgetDetailed::NativeOnInitialized()
 
     if (Button_SaveChanges)
     {
-        Button_SaveChanges->OnPressed.AddDynamic(this, &ThisClass::HandleSaveChangesPressed);
+        Button_SaveChanges->OnPressed.AddUniqueDynamic(this, &ThisClass::HandleSaveChangesPressed);
     }
     else
     {
@@ -37,17 +43,22 @@ void UEVWordEntryWidgetDetailed::NativeOnInitialized()
 
     if (Button_DeleteWordEntry)
     {
-        Button_DeleteWordEntry->OnPressed.AddDynamic(this, &ThisClass::HandleDeletePressed);
+        Button_DeleteWordEntry->OnPressed.AddUniqueDynamic(this, &ThisClass::HandleDeletePressed);
     }
     else
     {
         UE_LOG(LogTemp, Error, TEXT("Button_DeleteWordEntry is nullptr in EVWordEntryWidgetDetailed.cpp"));
     }
-}
 
-void UEVWordEntryWidgetDetailed::NativePreConstruct()
-{
-    Super::NativePreConstruct();
+    if (ListView_MeaningWidgets)
+    {
+        ListView_MeaningWidgets->OnEntryWidgetGenerated().AddUObject(this,
+                                                                     &ThisClass::HandleMeaningEntryWidgetGenerated);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ListView_MeaningWidgets is nullptr in EVWordEntryWidgetDetailed.cpp"));
+    }
 }
 
 void UEVWordEntryWidgetDetailed::NativeConstruct()
@@ -55,100 +66,52 @@ void UEVWordEntryWidgetDetailed::NativeConstruct()
     Super::NativeConstruct();
 
     SetEditableFieldsReadOnly(true);
-    Button_SaveChanges->SetVisibility(ESlateVisibility::Hidden);
-}
 
-void UEVWordEntryWidgetDetailed::ShowWordEntry(const FVocabularyEntry& Entry)
-{
-    // same reason as in the #include "EVWordEntryWidget.cpp"
-    // ---start
-    CurrentOriginalWord = Entry.Word;
-
-    TextBlock_Word_Value->SetText(
-        FText::FromString(EVVocabularyUiStyle::BuildWrappedWordForDisplay(CurrentOriginalWord)));
-
-    TextBlock_Word_Value->SetToolTipText(FText::FromString(CurrentOriginalWord));
-    // ---end
-
-    MultiLineEditableTextBox_Transcription_Value->SetText(FText::FromString(Entry.Transcription));
-    MultiLineEditableTextBox_Definition_Value->SetText(FText::FromString(Entry.Definition));
-    MultiLineEditableTextBox_Usage_Value->SetText(FText::FromString(Entry.Usage));
-    MultiLineEditableTextBox_TranslationRU_Value->SetText(FText::FromString(Entry.TranslationRu));
-    MultiLineEditableTextBox_TranslationUA_Value->SetText(FText::FromString(Entry.TranslationUa));
-}
-
-void UEVWordEntryWidgetDetailed::SetButtonsDisabled(bool bIsViewButtonDisabled, bool bIsEditButtonDisabled,
-                                                    bool bIsDeleteButtonDisabled, bool bIsSaveChangesButtonHidden)
-{
-    if (bIsViewButtonDisabled)
+    if (Button_SaveChanges)
     {
-        if (Button_ViewWord->GetIsEnabled())
-        {
-            Button_ViewWord->SetIsEnabled(!bIsViewButtonDisabled);
-        }
-    }
-    else
-    {
-        if (!Button_ViewWord->GetIsEnabled())
-        {
-            Button_ViewWord->SetIsEnabled(!bIsViewButtonDisabled);
-        }
-    }
-
-    if (bIsEditButtonDisabled)
-    {
-        if (Button_EditWordEntry->GetIsEnabled())
-        {
-            Button_EditWordEntry->SetIsEnabled(!bIsEditButtonDisabled);
-        }
-    }
-    else
-    {
-        if (!Button_EditWordEntry->GetIsEnabled())
-        {
-            Button_EditWordEntry->SetIsEnabled(!bIsEditButtonDisabled);
-        }
-    }
-
-    if (bIsDeleteButtonDisabled)
-    {
-        if (Button_DeleteWordEntry->GetIsEnabled())
-        {
-            Button_DeleteWordEntry->SetIsEnabled(!bIsDeleteButtonDisabled);
-        }
-    }
-    else
-    {
-        if (!Button_DeleteWordEntry->GetIsEnabled())
-        {
-            Button_DeleteWordEntry->SetIsEnabled(!bIsDeleteButtonDisabled);
-        }
-    }
-
-    if (bIsSaveChangesButtonHidden)
-    {
-        if (Button_SaveChanges->IsVisible())
-        {
-            Button_SaveChanges->SetVisibility(ESlateVisibility::Hidden);
-        }
-    }
-    else
-    {
-        if (!Button_SaveChanges->IsVisible())
-        {
-            Button_SaveChanges->SetVisibility(ESlateVisibility::Visible);
-        }
+        Button_SaveChanges->SetVisibility(ESlateVisibility::Hidden);
     }
 }
 
-void UEVWordEntryWidgetDetailed::SetEditableFieldsReadOnly(bool bSetReadOnly)
+void UEVWordEntryWidgetDetailed::ShowWordEntry(const FEVVocabularyRecord& Entry)
 {
+    OriginalRecord = BuildRecordForDetailedDisplay(Entry);
+    WorkingRecord = OriginalRecord;
 
-    MultiLineEditableTextBox_Transcription_Value->SetIsReadOnly(bSetReadOnly);
-    MultiLineEditableTextBox_Definition_Value->SetIsReadOnly(bSetReadOnly);
-    MultiLineEditableTextBox_Usage_Value->SetIsReadOnly(bSetReadOnly);
-    MultiLineEditableTextBox_TranslationUA_Value->SetIsReadOnly(bSetReadOnly);
-    MultiLineEditableTextBox_TranslationRU_Value->SetIsReadOnly(bSetReadOnly);
+    PopulateWordLevelFields();
+    PopulateMeaningList();
+}
+
+void UEVWordEntryWidgetDetailed::SetButtonsDisabled(const bool bIsViewButtonDisabled, const bool bIsEditButtonDisabled,
+                                                    const bool bIsDeleteButtonDisabled,
+                                                    const bool bIsSaveChangesButtonHidden)
+{
+    if (Button_ViewWord)
+    {
+        Button_ViewWord->SetIsEnabled(!bIsViewButtonDisabled);
+    }
+
+    if (Button_EditWordEntry)
+    {
+        Button_EditWordEntry->SetIsEnabled(!bIsEditButtonDisabled);
+    }
+
+    if (Button_DeleteWordEntry)
+    {
+        Button_DeleteWordEntry->SetIsEnabled(!bIsDeleteButtonDisabled);
+    }
+
+    if (Button_SaveChanges)
+    {
+        Button_SaveChanges->SetVisibility(bIsSaveChangesButtonHidden ? ESlateVisibility::Hidden
+                                                                     : ESlateVisibility::Visible);
+    }
+}
+
+void UEVWordEntryWidgetDetailed::SetEditableFieldsReadOnly(const bool bSetReadOnly)
+{
+    bMeaningFieldsReadOnly = bSetReadOnly;
+    ApplyMeaningEditableState();
 }
 
 void UEVWordEntryWidgetDetailed::HandleViewPressed()
@@ -163,19 +126,314 @@ void UEVWordEntryWidgetDetailed::HandleEditPressed()
 
 void UEVWordEntryWidgetDetailed::HandleSaveChangesPressed()
 {
-    FVocabularyEntry EditedVocabularyEntry;
+    FEVVocabularyRecord SubmittedRecord = WorkingRecord;
+    NormalizeEditableCollections(SubmittedRecord);
 
-    EditedVocabularyEntry.Word = CurrentOriginalWord;
-    EditedVocabularyEntry.Transcription = MultiLineEditableTextBox_Transcription_Value->GetText().ToString();
-    EditedVocabularyEntry.Definition = MultiLineEditableTextBox_Definition_Value->GetText().ToString();
-    EditedVocabularyEntry.Usage = MultiLineEditableTextBox_Usage_Value->GetText().ToString();
-    EditedVocabularyEntry.TranslationRu = MultiLineEditableTextBox_TranslationRU_Value->GetText().ToString();
-    EditedVocabularyEntry.TranslationUa = MultiLineEditableTextBox_TranslationUA_Value->GetText().ToString();
-
-    OnWordEntryChangesSubmitted.Broadcast(EditedVocabularyEntry);
+    OnWordEntryChangesSubmitted.Broadcast(SubmittedRecord);
 }
 
 void UEVWordEntryWidgetDetailed::HandleDeletePressed()
 {
     OnDeleteRequested.Broadcast();
+}
+
+void UEVWordEntryWidgetDetailed::HandleMeaningChanged(UEVVocabularyEntryMeaningWidget* MeaningWidget,
+                                                      const FEVVocabularyMeaning& UpdatedMeaning)
+{
+    if (!MeaningWidget)
+    {
+        return;
+    }
+
+    const int32 MeaningIndex = MeaningWidget->GetMeaningIndex();
+
+    if (!WorkingRecord.Meanings.IsValidIndex(MeaningIndex))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Invalid meaning index %d in EVWordEntryWidgetDetailed."), MeaningIndex);
+        return;
+    }
+
+    WorkingRecord.Meanings[MeaningIndex] = UpdatedMeaning;
+}
+
+void UEVWordEntryWidgetDetailed::HandleMeaningEntryWidgetGenerated(UUserWidget& Widget)
+{
+    UEVVocabularyEntryMeaningWidget* MeaningWidget = Cast<UEVVocabularyEntryMeaningWidget>(&Widget);
+
+    if (!MeaningWidget)
+    {
+        return;
+    }
+
+    MeaningWidget->OnMeaningChanged.AddUniqueDynamic(this, &ThisClass::HandleMeaningChanged);
+
+    MeaningWidget->SetEditable(!bMeaningFieldsReadOnly);
+}
+
+void UEVWordEntryWidgetDetailed::PopulateWordLevelFields()
+{
+    if (TextBlock_Word_Value)
+    {
+        TextBlock_Word_Value->SetText(
+            FText::FromString(EVVocabularyUiStyle::BuildWrappedWordForDisplay(WorkingRecord.Word)));
+        TextBlock_Word_Value->SetToolTipText(FText::FromString(WorkingRecord.Word));
+        TextBlock_Word_Value->SetColorAndOpacity(EVVocabularyUiStyle::GetWordValueTextFontColor());
+    }
+
+    const FEVVocabularyPronunciation* Pronunciation = ResolvePrimaryPronunciation();
+
+    const bool bHasTranscription = Pronunciation && !Pronunciation->Transcription.IsEmpty();
+    const bool bHasAudioUrl = Pronunciation && !Pronunciation->AudioUrl.IsEmpty();
+
+    if (TextBlock_Transcription_Value)
+    {
+        TextBlock_Transcription_Value->SetText(FText::FromString(
+            bHasTranscription ? Pronunciation->Transcription : TEXT("No transcription was provided")));
+        TextBlock_Transcription_Value->SetColorAndOpacity(
+            bHasTranscription ? EVVocabularyUiStyle::GetNormalTranscriptionTextFontColor()
+                              : EVVocabularyUiStyle::GetMissingWrodEntryTextFontColor());
+    }
+
+    if (TextBlock_Pronunciation_Value)
+    {
+        TextBlock_Pronunciation_Value->SetText(
+            FText::FromString(bHasAudioUrl ? Pronunciation->AudioUrl : TEXT("No pronunciation was provided")));
+        TextBlock_Pronunciation_Value->SetColorAndOpacity(
+            bHasAudioUrl ? EVVocabularyUiStyle::GetNormalTranscriptionTextFontColor()
+                         : EVVocabularyUiStyle::GetMissingWrodEntryTextFontColor());
+    }
+}
+
+void UEVWordEntryWidgetDetailed::PopulateMeaningList()
+{
+    if (!ListView_MeaningWidgets)
+    {
+        return;
+    }
+
+    ListView_MeaningWidgets->ClearListItems();
+
+    for (int32 MeaningIndex = 0; MeaningIndex < WorkingRecord.Meanings.Num(); ++MeaningIndex)
+    {
+        UEVEntryItem* MeaningItem = NewObject<UEVEntryItem>(this);
+
+        if (!MeaningItem)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create meaning item in EVWordEntryWidgetDetailed."));
+            continue;
+        }
+
+        MeaningItem->PayloadType = EEVEntryItemPayloadType::VocabularyMeaning;
+        MeaningItem->VocabularyMeaning = WorkingRecord.Meanings[MeaningIndex];
+        MeaningItem->VocabularyMeaningIndex = MeaningIndex;
+
+        ListView_MeaningWidgets->AddItem(MeaningItem);
+    }
+}
+
+void UEVWordEntryWidgetDetailed::ApplyMeaningEditableState()
+{
+    if (!ListView_MeaningWidgets)
+    {
+        return;
+    }
+
+    const TArray<UUserWidget*> DisplayedWidgets = ListView_MeaningWidgets->GetDisplayedEntryWidgets();
+
+    for (UUserWidget* DisplayedWidget : DisplayedWidgets)
+    {
+        if (UEVVocabularyEntryMeaningWidget* MeaningWidget = Cast<UEVVocabularyEntryMeaningWidget>(DisplayedWidget))
+        {
+            MeaningWidget->SetEditable(!bMeaningFieldsReadOnly);
+        }
+    }
+}
+
+const FEVVocabularyPronunciation* UEVWordEntryWidgetDetailed::ResolvePrimaryPronunciation() const
+{
+    const FString SelectedLanguageCode = ResolveSelectedVocabularyLanguageCode();
+
+    for (const FEVVocabularyPronunciation& Pronunciation : WorkingRecord.Pronunciations)
+    {
+        if (Pronunciation.LanguageCode.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase) && Pronunciation.bPrimary)
+        {
+            return &Pronunciation;
+        }
+    }
+
+    for (const FEVVocabularyPronunciation& Pronunciation : WorkingRecord.Pronunciations)
+    {
+        if (Pronunciation.LanguageCode.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase))
+        {
+            return &Pronunciation;
+        }
+    }
+
+    return nullptr;
+}
+
+FString UEVWordEntryWidgetDetailed::ResolveSelectedVocabularyLanguageCode() const
+{
+    return TEXT("en");
+}
+
+FString UEVWordEntryWidgetDetailed::ResolveSelectedTranslationLanguageCode() const
+{
+    return TEXT("uk");
+}
+
+FEVVocabularyRecord
+UEVWordEntryWidgetDetailed::BuildRecordForDetailedDisplay(const FEVVocabularyRecord& SourceRecord) const
+{
+    FEVVocabularyRecord Result = SourceRecord;
+
+    if (Result.Meanings.IsEmpty())
+    {
+        return Result;
+    }
+
+    const FString SelectedTranslationLanguage = ResolveSelectedTranslationLanguageCode();
+    TArray<FEVVocabularyTranslation> RemainingGeneralTranslations;
+
+    for (const FEVVocabularyTranslation& Translation : Result.GeneralTranslations)
+    {
+        if (!Translation.TargetLanguage.Equals(SelectedTranslationLanguage, ESearchCase::IgnoreCase))
+        {
+            RemainingGeneralTranslations.Add(Translation);
+            continue;
+        }
+
+        if (Translation.TranslationText.IsEmpty())
+        {
+            continue;
+        }
+
+        const bool bAlreadyPresent = Result.Meanings[0].Translations.ContainsByPredicate(
+            [&Translation](const FEVVocabularyTranslation& Existing)
+            {
+                return Existing.TargetLanguage.Equals(Translation.TargetLanguage, ESearchCase::IgnoreCase) &&
+                       Existing.TranslationText.Equals(Translation.TranslationText, ESearchCase::IgnoreCase);
+            });
+
+        if (!bAlreadyPresent)
+        {
+            FEVVocabularyTranslation MeaningTranslation = Translation;
+            MeaningTranslation.TargetPartOfSpeech = Result.Meanings[0].PartOfSpeech;
+            MeaningTranslation.DisplayOrder = Result.Meanings[0].Translations.Num();
+            Result.Meanings[0].Translations.Add(MoveTemp(MeaningTranslation));
+        }
+    }
+
+    Result.GeneralTranslations = MoveTemp(RemainingGeneralTranslations);
+    return Result;
+}
+
+void UEVWordEntryWidgetDetailed::NormalizeEditableCollections(FEVVocabularyRecord& Record) const
+{
+    for (FEVVocabularyMeaning& Meaning : Record.Meanings)
+    {
+        NormalizeTranslations(Meaning);
+        NormalizeRelations(Meaning, TEXT("synonym"));
+        NormalizeRelations(Meaning, TEXT("antonym"));
+    }
+}
+
+void UEVWordEntryWidgetDetailed::NormalizeTranslations(FEVVocabularyMeaning& Meaning) const
+{
+    TArray<FEVVocabularyTranslation> NormalizedTranslations;
+
+    for (const FEVVocabularyTranslation& SourceTranslation : Meaning.Translations)
+    {
+        TArray<FString> Values;
+        SplitEditableValues(SourceTranslation.TranslationText, Values);
+
+        for (const FString& Value : Values)
+        {
+            const bool bDuplicate = NormalizedTranslations.ContainsByPredicate(
+                [&SourceTranslation, &Value](const FEVVocabularyTranslation& Existing)
+                {
+                    return Existing.TargetLanguage.Equals(SourceTranslation.TargetLanguage, ESearchCase::IgnoreCase) &&
+                           Existing.TargetPartOfSpeech.Equals(SourceTranslation.TargetPartOfSpeech,
+                                                              ESearchCase::IgnoreCase) &&
+                           Existing.TranslationText.Equals(Value, ESearchCase::IgnoreCase);
+                });
+
+            if (bDuplicate)
+            {
+                continue;
+            }
+
+            FEVVocabularyTranslation NewTranslation = SourceTranslation;
+            NewTranslation.TranslationText = Value;
+            NewTranslation.DisplayOrder = NormalizedTranslations.Num();
+            NormalizedTranslations.Add(MoveTemp(NewTranslation));
+        }
+    }
+
+    Meaning.Translations = MoveTemp(NormalizedTranslations);
+}
+
+void UEVWordEntryWidgetDetailed::NormalizeRelations(FEVVocabularyMeaning& Meaning, const FString& RelationType) const
+{
+    TArray<FEVVocabularyRelation> OtherRelations;
+    TArray<FEVVocabularyRelation> NormalizedTargetRelations;
+
+    for (const FEVVocabularyRelation& SourceRelation : Meaning.Relations)
+    {
+        if (!SourceRelation.RelationType.Equals(RelationType, ESearchCase::IgnoreCase))
+        {
+            OtherRelations.Add(SourceRelation);
+            continue;
+        }
+
+        TArray<FString> Values;
+        SplitEditableValues(SourceRelation.RelatedWord, Values);
+
+        for (const FString& Value : Values)
+        {
+            const bool bDuplicate = NormalizedTargetRelations.ContainsByPredicate(
+                [&Value](const FEVVocabularyRelation& Existing)
+                { return Existing.RelatedWord.Equals(Value, ESearchCase::IgnoreCase); });
+
+            if (bDuplicate)
+            {
+                continue;
+            }
+
+            FEVVocabularyRelation NewRelation = SourceRelation;
+            NewRelation.RelatedWord = Value;
+            NewRelation.NormalizedRelatedWord = FEVWordInputValidator::NormalizeWordInput(Value);
+            NewRelation.RelationType = RelationType;
+            NewRelation.DisplayOrder = NormalizedTargetRelations.Num();
+            NormalizedTargetRelations.Add(MoveTemp(NewRelation));
+        }
+    }
+
+    OtherRelations.Append(NormalizedTargetRelations);
+    Meaning.Relations = MoveTemp(OtherRelations);
+}
+
+void UEVWordEntryWidgetDetailed::SplitEditableValues(const FString& Source, TArray<FString>& OutValues)
+{
+    OutValues.Reset();
+
+    FString NormalizedSeparators = Source;
+    NormalizedSeparators.ReplaceInline(TEXT("\r\n"), TEXT("\n"));
+    NormalizedSeparators.ReplaceInline(TEXT("\r"), TEXT("\n"));
+    NormalizedSeparators.ReplaceInline(TEXT("\n"), TEXT(","));
+
+    TArray<FString> SplitValues;
+    NormalizedSeparators.ParseIntoArray(SplitValues, TEXT(","), true);
+
+    for (FString& Value : SplitValues)
+    {
+        Value = Value.TrimStartAndEnd();
+
+        if (Value.IsEmpty())
+        {
+            continue;
+        }
+
+        OutValues.AddUnique(Value);
+    }
 }

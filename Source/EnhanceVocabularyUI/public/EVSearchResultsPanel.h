@@ -4,15 +4,26 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/TextBlock.h"
-#include "Components/Button.h"
+#include "EVVocabularyTypes.h"
 #include "EVSearchResultsPanel.generated.h"
 
+class UButton;
+class UListView;
+class UTextBlock;
+
 /**
+ * Add Word search-result panel.
  *
+ * Displays:
+ * - the primary transcription;
+ * - the current pronunciation/audio placeholder value;
+ * - one read-only meaning widget per FEVVocabularyMeaning.
+ *
+ * Save and Discard behavior remains owned by UEVAddWordWidget through
+ * the existing delegates.
  */
 
-// USE OnClicked cause OnPressed may cause stale issues on Mobile
+// Use OnClicked because OnPressed may produce stale input behavior on mobile.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveClicked);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDiscardClicked);
 
@@ -22,29 +33,42 @@ class ENHANCEVOCABULARYUI_API UEVSearchResultsPanel : public UUserWidget
     GENERATED_BODY()
 
 public:
-    // Widget elements
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_SearchResultsTranscription;
+    /**
+     * Populates the complete Add Word search-result panel.
+     */
+    void SetSearchResult(const FWordSearchResult& InSearchResult);
+
+    /**
+     * Clears the cached result and every displayed field/list item.
+     */
+    void ClearSearchResult();
+
+    /**
+     * Returns the complete structured record currently displayed.
+     */
+    const FEVVocabularyRecord& GetCurrentVocabularyRecord() const;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_SearchResultsDefinition;
+    TObjectPtr<UTextBlock> TextBlock_SearchResultsTranscription_Value = nullptr;
+
+    /**
+     * Temporary pronunciation/audio placeholder.
+     *
+     * Until audio playback is implemented, this field displays the selected
+     * pronunciation audio URL or the missing-pronunciation text.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UTextBlock> TextBlock_SearchResultsPronunciation_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_SearchResultsUsage;
+    TObjectPtr<UListView> ListView_SearchResults = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_SearchResultsTranslation_Russian;
+    TObjectPtr<UButton> Button_Save = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_SearchResultsTranslation_Ukrainian;
+    TObjectPtr<UButton> Button_Discard = nullptr;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_Save;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_Discard;
-
-    // Events
     UPROPERTY(BlueprintAssignable, Category = "Search Results Panel Button Events")
     FOnSaveClicked OnSaveClicked;
 
@@ -57,8 +81,59 @@ protected:
 
 private:
     UFUNCTION()
-    void HandleSavePressed();
+    void HandleSaveClicked();
 
     UFUNCTION()
-    void HandleDiscardPressed();
+    void HandleDiscardClicked();
+
+    /**
+     * Populates the transcription and pronunciation fields.
+     */
+    void PopulatePronunciationFields();
+
+    /**
+     * Creates one UEVEntryItem per meaning and adds it to the ListView.
+     */
+    void PopulateMeaningList();
+
+    /**
+     * Returns the primary pronunciation.
+     *
+     * Selection order within the selected vocabulary language:
+     * 1. pronunciation marked bPrimary;
+     * 2. first pronunciation matching the language;
+     * 3. nullptr when no matching pronunciation exists.
+     */
+    const FEVVocabularyPronunciation* ResolvePrimaryPronunciation() const;
+
+    /**
+     * Returns the currently selected vocabulary/source language.
+     *
+     * English is the temporary source-language mode for the current Add Word flow.
+     * This function is the single replacement point for the future
+     * AppSettings language-mode selection.
+     */
+    FString ResolveSelectedVocabularyLanguageCode() const;
+
+    /**
+     * Returns the currently selected translation target language.
+     *
+     * Ukrainian is fixed for the current Add Word flow.
+     * This function is the single replacement point for the future
+     * AppSettings translation-language selection.
+     */
+    FString ResolveSelectedTranslationLanguageCode() const;
+
+    /**
+     * Prepares one meaning for Search Results display.
+     *
+     * Meaning-specific Ukrainian translations remain attached to the meaning.
+     * Entry-level translations are not assigned to a meaning without an
+     * explicit source-part-of-speech association.
+     */
+    FEVVocabularyMeaning BuildMeaningForDisplay(const FEVVocabularyMeaning& SourceMeaning, bool bIsFirstMeaning) const;
+
+private:
+    UPROPERTY(Transient)
+    FEVVocabularyRecord CurrentVocabularyRecord;
 };

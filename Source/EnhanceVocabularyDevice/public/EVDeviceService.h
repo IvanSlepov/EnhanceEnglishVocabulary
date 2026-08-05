@@ -40,7 +40,10 @@ public:
 
     void OpenNotificationSettings();
 
-    bool ShowVocabularyNotification(const FString& Word);
+    bool ShowVocabularyNotification(const FString& Word, const FString& NormalizedWord, const FString& Transcription,
+                                    const FString& PartOfSpeech, int32 MeaningDisplayOrder,
+                                    const FString& DefinitionText, int32 DefinitionDisplayOrder,
+                                    int32 NotificationMode);
 
     bool ScheduleVocabularyNotifications(int32 IntervalSeconds, const FString& SerializedWords, int32 NotificationMode);
     bool GetStoredVocabularyNotificationSettings(bool& bOutEnabled, int32& OutIntervalSeconds,

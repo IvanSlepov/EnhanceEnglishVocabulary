@@ -3,19 +3,34 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
 #include "Blueprint/IUserObjectListEntry.h"
-#include "Components/TextBlock.h"
+#include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "Components/ListView.h"
+#include "Components/TextBlock.h"
 #include "EVEntryItem.h"
+#include "EVSearchResultsMeaningWidget.h"
+#include "EVVocabularyTypes.h"
 #include "EVWordEntryWidget.generated.h"
 
-/**
- *
- */
+class UEVWordEntryWidget;
 
+/**
+ * Fired when the user presses View on a Review Words entry.
+ */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryViewButtonPressed, UEVWordEntryWidget*, WordEntryWidget);
 
+/**
+ * Read-only vocabulary entry used by Review Words.
+ *
+ * Displays:
+ * - Word
+ * - Primary transcription
+ * - Primary pronunciation AudioUrl
+ * - One UEVSearchResultsMeaningWidget per vocabulary meaning
+ *
+ * The widget receives one complete FEVVocabularyRecord through UEVEntryItem.
+ */
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVWordEntryWidget : public UUserWidget, public IUserObjectListEntry
 {
@@ -23,61 +38,95 @@ class ENHANCEVOCABULARYUI_API UEVWordEntryWidget : public UUserWidget, public IU
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_ViewWord;
+    TObjectPtr<UButton> Button_ViewWord = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Word_Key;
+    TObjectPtr<UTextBlock> TextBlock_Word_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Word_Value;
+    TObjectPtr<UTextBlock> TextBlock_Transcription_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Transcription_Key;
+    TObjectPtr<UTextBlock> TextBlock_Pronunciation_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Transcription_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Definition_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Definition_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Usage_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Usage_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationUA_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationUA_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationRU_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationRU_Value;
+    TObjectPtr<UListView> ListView_Meanings = nullptr;
 
     UPROPERTY(BlueprintAssignable)
     FOnWordEntryViewButtonPressed OnWordEntryViewButtonPressed;
 
-    FVocabularyEntry GetCurrentWidgetVocabularyEnryItemInfo();
+    /**
+     * Returns the complete structured record represented by this widget.
+     */
+    const FEVVocabularyRecord& GetCurrentVocabularyRecord() const;
 
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeConstruct() override;
 
-    // Triggerred by the ListItemObject, automatically
+    /**
+     * Called automatically by ListView when this entry receives
+     * its UEVEntryItem payload.
+     */
     virtual void NativeOnListItemObjectSet(UObject* ListItemObject) override;
 
-    FVocabularyEntry CurrentWidgetEnryItemToDisplayInPCGeneratedWordEntry;
-
 private:
-    bool bAreTextFieldsCreated;
+    /**
+     * Populates word-level fields and the meanings ListView.
+     */
+    void PopulateVocabularyRecord();
+
+    /**
+     * Populates:
+     * - primary transcription;
+     * - primary pronunciation AudioUrl.
+     */
+    void PopulatePronunciationFields();
+
+    /**
+     * Creates one UEVEntryItem per FEVVocabularyMeaning.
+     */
+    void PopulateMeanings();
+
+    /**
+     * Resolves the pronunciation used by the current language mode.
+     *
+     * Selection order:
+     * 1. matching language + bPrimary;
+     * 2. first pronunciation matching the language;
+     * 3. nullptr.
+     */
+    const FEVVocabularyPronunciation* ResolvePrimaryPronunciation() const;
+
+    /**
+     * Current vocabulary language mode.
+     *
+     * Temporarily returns English until AppSettings language mode is implemented.
+     */
+    FString ResolveSelectedVocabularyLanguageCode() const;
+
+    /**
+     * Current temporary translation target.
+     *
+     * Hardcoded to Ukrainian until AppSettings translation selection
+     * is implemented.
+     */
+    FString ResolveSelectedTranslationLanguageCode() const;
+
+    /**
+     * Filters meaning-specific translations by the current target language.
+     * Until translation providers return part-of-speech-aware values, the
+     * entry-level Ukrainian translation is displayed only in the first
+     * meaning block.
+     */
+    FEVVocabularyMeaning BuildMeaningForDisplay(const FEVVocabularyMeaning& SourceMeaning, bool bIsFirstMeaning) const;
 
     UFUNCTION()
     void HandleOnWordEntry_ViewButtonPressed();
+
+private:
+    UPROPERTY(Transient)
+    FEVVocabularyRecord CurrentVocabularyRecord;
+
+    bool bAreRequiredWidgetsCreated = false;
 };

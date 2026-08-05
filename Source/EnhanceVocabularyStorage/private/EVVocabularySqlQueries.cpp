@@ -1,108 +1,93 @@
 #include "EVVocabularySqlQueries.h"
 
 #include "EVVocabularyDatabaseSchema.h"
-#include "EVVocabularyFieldRegistry.h"
 
-namespace
+TArray<FString> FEVVocabularySqlQueries::GetCreateNormalizedSchemaQueries()
 {
-FString BuildColumnList()
-{
-    return FString::Join(FEVVocabularyFieldRegistry::GetPersistentColumnNames(), TEXT(", "));
-}
+    TArray<FString> Queries;
+    Queries.Add(TEXT("PRAGMA foreign_keys = ON;"));
 
-FString BuildPlaceholders(int32 Count)
-{
-    TArray<FString> Placeholders;
-    Placeholders.Init(TEXT("?"), Count);
-    return FString::Join(Placeholders, TEXT(", "));
-}
-} // namespace
-
-FString FEVVocabularySqlQueries::GetCreateVocabularyTableQuery()
-{
-    const FString& TableName = FEVVocabularyDatabaseSchema::GetTableName();
-    const TArray<FEVDatabaseColumnDefinition>& Columns = FEVVocabularyDatabaseSchema::GetColumns();
-
-    FString Query = FString::Printf(TEXT("CREATE TABLE IF NOT EXISTS %s ("), *TableName);
-
-    for (int32 Index = 0; Index < Columns.Num(); ++Index)
+    for (const FEVVocabularySchemaTable& Table : FEVVocabularyDatabaseSchema::GetNormalizedTables())
     {
-        const FEVDatabaseColumnDefinition& Column = Columns[Index];
-        Query += FString::Printf(TEXT("%s %s"), *Column.Name, *Column.SqlDefinition);
+        TArray<FString> Definitions;
+        Definitions.Reserve(Table.Columns.Num() + Table.Constraints.Num());
 
-        if (Index < Columns.Num() - 1)
+        for (const FEVVocabularySchemaColumn& Column : Table.Columns)
         {
-            Query += TEXT(",");
+            Definitions.Add(Column.Name + TEXT(" ") + Column.SqlDefinition);
         }
+
+        Definitions.Append(Table.Constraints);
+        Queries.Add(FString::Printf(TEXT("CREATE TABLE IF NOT EXISTS %s (%s);"), *Table.Name,
+                                    *FString::Join(Definitions, TEXT(", "))));
+        Queries.Append(Table.IndexQueries);
     }
 
-    Query += TEXT(");");
-    return Query;
+    return Queries;
 }
 
-FString FEVVocabularySqlQueries::GetInsertVocabularyEntryStrictQuery()
+FString FEVVocabularySqlQueries::GetSelectCompatibilityColumnsQuery(const FString& WhereClause,
+                                                                    const FString& OrderAndLimitClause)
 {
-    const int32 FieldCount = FEVVocabularyFieldRegistry::GetPersistentFields().Num();
+    FString Query =
+        TEXT("SELECT "
+             "e.Word, "
+             "COALESCE((SELECT p.Transcription FROM VocabularyPronunciations p "
+             "          WHERE p.EntryId = e.Id ORDER BY p.IsPrimary DESC, p.DisplayOrder ASC, p.Id ASC LIMIT 1), ''), "
+             "COALESCE((SELECT GROUP_CONCAT(d.DefinitionText, char(10)) "
+             "          FROM VocabularyDefinitions d JOIN VocabularyMeanings m ON m.Id = d.MeaningId "
+             "          WHERE m.EntryId = e.Id ORDER BY m.DisplayOrder, d.DisplayOrder, d.Id), ''), "
+             "COALESCE((SELECT GROUP_CONCAT(d.UsageExample, char(10)) "
+             "          FROM VocabularyDefinitions d JOIN VocabularyMeanings m ON m.Id = d.MeaningId "
+             "          WHERE m.EntryId = e.Id AND d.UsageExample IS NOT NULL AND d.UsageExample <> '' "
+             "          ORDER BY m.DisplayOrder, d.DisplayOrder, d.Id), ''), "
+             "COALESCE((SELECT GROUP_CONCAT(t.TranslationText, ', ') FROM VocabularyTranslations t "
+             "          WHERE t.EntryId = e.Id AND lower(t.TargetLanguage) = 'ru' "
+             "          ORDER BY t.DisplayOrder, t.Id), ''), "
+             "COALESCE((SELECT GROUP_CONCAT(t.TranslationText, ', ') FROM VocabularyTranslations t "
+             "          WHERE t.EntryId = e.Id AND lower(t.TargetLanguage) IN ('uk', 'ua') "
+             "          ORDER BY t.DisplayOrder, t.Id), '') "
+             "FROM VocabularyEntries e");
 
-    return FString::Printf(TEXT("INSERT INTO %s (%s) VALUES (%s);"), *FEVVocabularyDatabaseSchema::GetTableName(),
-                           *BuildColumnList(), *BuildPlaceholders(FieldCount));
-}
-
-FString FEVVocabularySqlQueries::GetEditVocabularyEntryQuery()
-{
-    TArray<FString> Assignments;
-
-    for (const FEVDatabaseColumnDefinition& Field : FEVVocabularyFieldRegistry::GetEditablePersistentFields())
+    if (!WhereClause.IsEmpty())
     {
-        Assignments.Add(Field.Name + TEXT(" = ?"));
+        Query += TEXT(" ") + WhereClause;
     }
-
-    return FString::Printf(TEXT("UPDATE %s SET %s WHERE Word = ?;"), *FEVVocabularyDatabaseSchema::GetTableName(),
-                           *FString::Join(Assignments, TEXT(", ")));
+    if (!OrderAndLimitClause.IsEmpty())
+    {
+        Query += TEXT(" ") + OrderAndLimitClause;
+    }
+    Query += TEXT(";");
+    return Query;
 }
 
 FString FEVVocabularySqlQueries::GetVocabularyEntryByWordQuery()
 {
-    return FString::Printf(TEXT("SELECT %s FROM %s WHERE Word = ?;"), *BuildColumnList(),
-                           *FEVVocabularyDatabaseSchema::GetTableName());
+    return GetSelectCompatibilityColumnsQuery(TEXT("WHERE e.NormalizedWord = ?"));
 }
 
 FString FEVVocabularySqlQueries::GetSelectImportExportColumnsQuery()
 {
-    const FString ColumnList = BuildColumnList();
-
-    if (ColumnList.IsEmpty())
-    {
-        return FString();
-    }
-
-    return FString::Printf(TEXT("SELECT %s FROM %s;"), *ColumnList, *FEVVocabularyDatabaseSchema::GetTableName());
+    return GetSelectCompatibilityColumnsQuery(FString(), TEXT("ORDER BY e.Word COLLATE NOCASE ASC"));
 }
 
 FString FEVVocabularySqlQueries::GetSelectVocabularyEntriesQuery()
 {
-    return FString::Printf(TEXT("SELECT %s FROM %s ORDER BY Word ASC;"), *BuildColumnList(),
-                           *FEVVocabularyDatabaseSchema::GetTableName());
+    return GetSelectCompatibilityColumnsQuery(FString(), TEXT("ORDER BY e.Word COLLATE NOCASE ASC"));
 }
 
 FString FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageQuery()
 {
-    return FString::Printf(TEXT("SELECT %s FROM %s ORDER BY Word COLLATE NOCASE ASC LIMIT ? OFFSET ?;"),
-                           *BuildColumnList(), *FEVVocabularyDatabaseSchema::GetTableName());
+    return GetSelectCompatibilityColumnsQuery(FString(), TEXT("ORDER BY e.Word COLLATE NOCASE ASC LIMIT ? OFFSET ?"));
 }
 
 FString FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageByPrefixQuery()
 {
-    return FString::Printf(
-        TEXT("SELECT %s FROM %s WHERE Word LIKE ? COLLATE NOCASE ORDER BY Word COLLATE NOCASE ASC LIMIT ? OFFSET ?;"),
-        *BuildColumnList(), *FEVVocabularyDatabaseSchema::GetTableName());
+    return GetSelectCompatibilityColumnsQuery(TEXT("WHERE e.NormalizedWord LIKE ? COLLATE NOCASE"),
+                                              TEXT("ORDER BY e.Word COLLATE NOCASE ASC LIMIT ? OFFSET ?"));
 }
 
 FString FEVVocabularySqlQueries::GetRandomlySelectedWordQuery()
 {
-    const FString& TableName = FEVVocabularyDatabaseSchema::GetTableName();
-
-    return TEXT("SELECT Word FROM ") + TableName +
-           TEXT(" WHERE rowid >= (") TEXT("1 + ABS(RANDOM()) % (SELECT MAX(rowid) FROM ") + TableName +
-           TEXT(")) ORDER BY rowid LIMIT 1;");
+    return TEXT("SELECT Word FROM VocabularyEntries ORDER BY RANDOM() LIMIT 1;");
 }

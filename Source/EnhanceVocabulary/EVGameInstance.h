@@ -74,10 +74,16 @@ public:
     bool UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVocabularyEntry& OutEntry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool UpdateVocabularyRecord(const FEVVocabularyRecord& Record, FEVVocabularyRecord& OutRecord);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyRecordByWord(const FString& Word, FEVVocabularyRecord& OutRecord) const;
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     int32 GetVocabularyEntryCount() const;
@@ -181,7 +187,7 @@ private:
     bool TrySaveImportValidationReport(FEVFileExchangeResultInfo ValidationResult,
                                        const TArray<uint8>& ValidationReportBytes);
 
-    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries);
+    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FEVVocabularyRecord>& ValidatedRecords);
 
     void PopulateImportResultFileInfo(FEVFileExchangeResultInfo& ResultInfo,
                                       const FEVFileExchangeResultInfo& PickResult, int32 ByteCount) const;

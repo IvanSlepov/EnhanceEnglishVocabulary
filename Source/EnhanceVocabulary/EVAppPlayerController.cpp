@@ -30,11 +30,15 @@ void AEVAppPlayerController::BeginPlay()
         EVGameInstance->OnImportFilePickCompleted().AddUObject(this, &ThisClass::HandleImportFilePickCompleted);
         EVGameInstance->OnNotificationPermissionResult().AddUObject(this,
                                                                     &ThisClass::HandleNotificationPermissionResult);
+
+#if PLATFORM_ANDROID
+
         SynchronizeNotificationSettingsFromDevice();
         HandlePendingNotificationWord();
 
         GetWorldTimerManager().SetTimer(NotificationStatePollTimerHandle, this, &ThisClass::PollNotificationState, 0.5f,
                                         true);
+#endif
     }
     ApplicationEnteredForegroundHandle = FCoreDelegates::ApplicationHasEnteredForegroundDelegate.AddUObject(
         this, &ThisClass::HandleApplicationEnteredForeground);
@@ -253,11 +257,28 @@ void AEVAppPlayerController::HandleActionStatusWidget(const FEVRequestedActionIn
 
 void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo)
 {
-    // Caching the FEVWordEntryActionInfo received from a particular WordEntry
     CachedWordEntryWidgetInfo = CurrentWordEntryWidgetInfo;
 
-    // ASsigning another cached var to update the entry once we confirm EDIT operation
-    CachedConfirmedWordEntry = CurrentWordEntryWidgetInfo.EntryInfo;
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in HandleWordEntryWidget"));
+        return;
+    }
+
+    FEVVocabularyRecord VocabularyRecord;
+
+    if (!EVGameInstance->GetVocabularyRecordByWord(CurrentWordEntryWidgetInfo.EntryInfo.NormalizedWord.IsEmpty()
+                                                       ? CurrentWordEntryWidgetInfo.EntryInfo.Word
+                                                       : CurrentWordEntryWidgetInfo.EntryInfo.NormalizedWord,
+                                                   VocabularyRecord))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load structured vocabulary record for Detailed View: %s"),
+               *CurrentWordEntryWidgetInfo.EntryInfo.Word);
+        return;
+    }
+
+    CachedConfirmedVocabularyRecord = VocabularyRecord;
+    CachedPendingVocabularyRecord = FEVVocabularyRecord{};
 
     if (DetailedWordEntryWidgetClass)
     {
@@ -270,7 +291,7 @@ void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo&
 
             if (DetailedWordEntryDisplay)
             {
-                DetailedWordEntryDisplay->ShowWordEntry(CurrentWordEntryWidgetInfo.EntryInfo);
+                DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedVocabularyRecord);
                 DetailedWordEntryDisplay->GetViewPressedDelegate().AddUObject(
                     this, &ThisClass::HandleDetailedViewButtonPressed);
                 DetailedWordEntryDisplay->GetEditPressedDelegate().AddUObject(
@@ -422,9 +443,9 @@ void AEVAppPlayerController::HandleDetailedEditButtonPressed()
     }
 }
 
-void AEVAppPlayerController::HandleDetailedSaveChangesButtonPressed(const FVocabularyEntry& NewVocabularyEntry)
+void AEVAppPlayerController::HandleDetailedSaveChangesButtonPressed(const FEVVocabularyRecord& NewVocabularyRecord)
 {
-    CachedWordEntryWidgetInfo.EntryInfo = NewVocabularyEntry;
+    CachedPendingVocabularyRecord = NewVocabularyRecord;
 
     HandleCreateConfirmationDialog(EEVConfirmationDialogType::EditWord, EEVWordEntryActionType::SaveEditedEntry);
 }
@@ -654,11 +675,11 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
     {
         if (CachedWordEntryWidgetInfo.ActionType == EEVWordEntryActionType::SaveEditedEntry)
         {
-            CachedWordEntryWidgetInfo.EntryInfo = CachedConfirmedWordEntry;
+            CachedPendingVocabularyRecord = FEVVocabularyRecord{};
 
             if (DetailedWordEntryDisplay)
             {
-                DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedWordEntry);
+                DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedVocabularyRecord);
 
                 DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
 
@@ -696,13 +717,12 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
 
 void AEVAppPlayerController::ProcessConfirmedWordUpdate()
 {
-
     HandleLoadingSpinner(true);
 
-    FVocabularyEntry UpdatedEntry;
+    FEVVocabularyRecord UpdatedRecord;
 
     const bool bUpdated =
-        EVGameInstance && EVGameInstance->UpdateVocabularyEntry(CachedWordEntryWidgetInfo.EntryInfo, UpdatedEntry);
+        EVGameInstance && EVGameInstance->UpdateVocabularyRecord(CachedPendingVocabularyRecord, UpdatedRecord);
 
     HandleLoadingSpinner(false);
 
@@ -715,32 +735,41 @@ void AEVAppPlayerController::ProcessConfirmedWordUpdate()
 
     HandleActionStatusWidget(StatusInfo);
 
-    if (bUpdated)
+    if (!bUpdated)
     {
-        CachedConfirmedWordEntry = UpdatedEntry;
+        UE_LOG(LogTemp, Error, TEXT("Failed to update structured vocabulary record."));
+        return;
+    }
 
-        CachedWordEntryWidgetInfo.ActionType = EEVWordEntryActionType::SaveEditedEntry;
-        CachedWordEntryWidgetInfo.EntryInfo = UpdatedEntry;
+    CachedConfirmedVocabularyRecord = UpdatedRecord;
+    CachedPendingVocabularyRecord = FEVVocabularyRecord{};
 
-        if (DetailedWordEntryDisplay)
-        {
-            DetailedWordEntryDisplay->ShowWordEntry(UpdatedEntry);
-            DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
-            DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryDisplay is false in ProcessConfirmedWordUpdate"));
-        }
+    FVocabularyEntry UpdatedLegacyEntry;
 
-        if (WidgetCommonEvents)
-        {
-            WidgetCommonEvents->HandleWordEntryChanged(CachedWordEntryWidgetInfo);
-        }
+    if (!EVGameInstance->GetVocabularyEntryByWord(UpdatedRecord.NormalizedWord, UpdatedLegacyEntry))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load compatibility entry after structured update: %s"),
+               *UpdatedRecord.Word);
+        return;
+    }
+
+    CachedWordEntryWidgetInfo.ActionType = EEVWordEntryActionType::SaveEditedEntry;
+    CachedWordEntryWidgetInfo.EntryInfo = UpdatedLegacyEntry;
+
+    if (DetailedWordEntryDisplay)
+    {
+        DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedVocabularyRecord);
+        DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
+        DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("bUpdated is false in ProcessConfirmedWordUpdate"));
+        UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryDisplay is false in ProcessConfirmedWordUpdate"));
+    }
+
+    if (WidgetCommonEvents)
+    {
+        WidgetCommonEvents->HandleWordEntryChanged(CachedWordEntryWidgetInfo);
     }
 }
 

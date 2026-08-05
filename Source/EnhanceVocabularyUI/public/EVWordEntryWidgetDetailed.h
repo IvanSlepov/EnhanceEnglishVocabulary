@@ -4,15 +4,22 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/TextBlock.h"
-#include "Components/Button.h"
-#include "EVEntryItem.h"
+#include "EVVocabularyTypes.h"
 #include "EVWordEntryDisplayWidgetProvider.h"
-#include "Components/MultiLineEditableTextBox.h"
 #include "EVWordEntryWidgetDetailed.generated.h"
 
+class UButton;
+class UListView;
+class UTextBlock;
+class UUserWidget;
+class UEVVocabularyEntryMeaningWidget;
+
 /**
+ * Detailed vocabulary-entry view.
  *
+ * Word, transcription and pronunciation stay read-only.
+ * Meaning data is edited through UEVVocabularyEntryMeaningWidget instances.
+ * All edits remain local until Save Changes is confirmed by the controller.
  */
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVWordEntryWidgetDetailed : public UUserWidget, public IEVWordEntryDisplayWidgetProvider
@@ -21,65 +28,36 @@ class ENHANCEVOCABULARYUI_API UEVWordEntryWidgetDetailed : public UUserWidget, p
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_ViewWord;
+    TObjectPtr<UButton> Button_ViewWord = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_EditWordEntry;
+    TObjectPtr<UButton> Button_EditWordEntry = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_DeleteWordEntry;
-
-    // Becomes Visible only when the Button_EditWord has been pressed
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UButton* Button_SaveChanges;
+    TObjectPtr<UButton> Button_DeleteWordEntry = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Word_Key;
+    TObjectPtr<UButton> Button_SaveChanges = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Word_Value;
+    TObjectPtr<UTextBlock> TextBlock_Word_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Transcription_Key;
+    TObjectPtr<UTextBlock> TextBlock_Transcription_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UMultiLineEditableTextBox* MultiLineEditableTextBox_Transcription_Value;
+    TObjectPtr<UTextBlock> TextBlock_Pronunciation_Value = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Definition_Key;
+    TObjectPtr<UListView> ListView_MeaningWidgets = nullptr;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UMultiLineEditableTextBox* MultiLineEditableTextBox_Definition_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_Usage_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UMultiLineEditableTextBox* MultiLineEditableTextBox_Usage_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationUA_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UMultiLineEditableTextBox* MultiLineEditableTextBox_TranslationUA_Value;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UTextBlock* TextBlock_TranslationRU_Key;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
-    class UMultiLineEditableTextBox* MultiLineEditableTextBox_TranslationRU_Value;
-
-    virtual void ShowWordEntry(const FVocabularyEntry& Entry) override;
+    virtual void ShowWordEntry(const FEVVocabularyRecord& Entry) override;
 
     virtual void SetButtonsDisabled(bool bIsViewButtonDisabled, bool bIsEditButtonDisabled,
                                     bool bIsDeleteButtonDisabled, bool bIsSaveChangesButtonHidden) override;
 
-    virtual void SetEditableFieldsReadOnly(bool bSetEnabled) override;
+    virtual void SetEditableFieldsReadOnly(bool bSetReadOnly) override;
 
-    /*Events*/
-
-    // The following events are used to allow PC
-    // to bind to this widget button events
     FSimpleMulticastDelegate OnViewRequested;
     FSimpleMulticastDelegate OnEditRequested;
     FOnWordEntryChangesSubmitted OnWordEntryChangesSubmitted;
@@ -108,7 +86,6 @@ public:
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeConstruct() override;
-    virtual void NativePreConstruct() override;
 
 private:
     UFUNCTION()
@@ -123,5 +100,34 @@ private:
     UFUNCTION()
     void HandleDeletePressed();
 
-    FString CurrentOriginalWord;
+    UFUNCTION()
+    void HandleMeaningChanged(UEVVocabularyEntryMeaningWidget* MeaningWidget,
+                              const FEVVocabularyMeaning& UpdatedMeaning);
+
+    void HandleMeaningEntryWidgetGenerated(UUserWidget& Widget);
+
+    void PopulateWordLevelFields();
+    void PopulateMeaningList();
+    void ApplyMeaningEditableState();
+
+    const FEVVocabularyPronunciation* ResolvePrimaryPronunciation() const;
+    FString ResolveSelectedVocabularyLanguageCode() const;
+    FString ResolveSelectedTranslationLanguageCode() const;
+    FEVVocabularyRecord BuildRecordForDetailedDisplay(const FEVVocabularyRecord& SourceRecord) const;
+
+    void NormalizeEditableCollections(FEVVocabularyRecord& Record) const;
+    void NormalizeTranslations(FEVVocabularyMeaning& Meaning) const;
+    void NormalizeRelations(FEVVocabularyMeaning& Meaning, const FString& RelationType) const;
+
+    static void SplitEditableValues(const FString& Source, TArray<FString>& OutValues);
+
+private:
+    UPROPERTY(Transient)
+    FEVVocabularyRecord OriginalRecord;
+
+    UPROPERTY(Transient)
+    FEVVocabularyRecord WorkingRecord;
+
+    UPROPERTY(Transient)
+    bool bMeaningFieldsReadOnly = true;
 };

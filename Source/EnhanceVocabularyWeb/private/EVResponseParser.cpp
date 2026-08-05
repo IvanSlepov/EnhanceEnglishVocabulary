@@ -2,99 +2,199 @@
 
 #include "EVJsonUtils.h"
 #include "EVResponseTypes.h"
+#include "EVWordInputValidator.h"
 #include "Dom/JsonObject.h"
 #include "JsonObjectConverter.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, FWordSearchResult& OutResult)
+namespace
 {
-    TArray<TSharedPtr<FJsonValue>> JsonArray;
+constexpr const TCHAR* FreeDictionaryProviderName = TEXT("FreeDictionary");
+constexpr const TCHAR* MyMemoryProviderName = TEXT("MyMemory");
 
+void AddRelations(const TArray<FString>& Values, const TCHAR* RelationType, int32& DisplayOrder,
+                  TSet<FString>& SeenRelations, TArray<FEVVocabularyRelation>& OutRelations)
+{
+    for (const FString& Value : Values)
+    {
+        const FString RelatedWord = Value.TrimStartAndEnd();
+        const FString NormalizedRelatedWord = FEVWordInputValidator::NormalizeWordInput(RelatedWord);
+
+        if (NormalizedRelatedWord.IsEmpty())
+        {
+            continue;
+        }
+
+        const FString DeduplicationKey = FString(RelationType) + TEXT("|") + NormalizedRelatedWord;
+        if (SeenRelations.Contains(DeduplicationKey))
+        {
+            continue;
+        }
+
+        SeenRelations.Add(DeduplicationKey);
+
+        FEVVocabularyRelation Relation;
+        Relation.RelatedWord = RelatedWord;
+        Relation.NormalizedRelatedWord = NormalizedRelatedWord;
+        Relation.RelationType = RelationType;
+        Relation.DisplayOrder = DisplayOrder++;
+        Relation.ProviderName = FreeDictionaryProviderName;
+        OutRelations.Add(MoveTemp(Relation));
+    }
+}
+} // namespace
+
+bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, FEVVocabularyRecord& OutRecord)
+{
+    OutRecord = FEVVocabularyRecord();
+
+    TArray<TSharedPtr<FJsonValue>> JsonArray;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
 
     if (!FJsonSerializer::Deserialize(Reader, JsonArray) || JsonArray.IsEmpty())
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to parse FreeDictionary JSON array."));
-
         return false;
     }
 
-    FEVFreeDictionaryResponse Response;
+    TSet<FString> SeenPronunciations;
+    TMap<FString, int32> MeaningIndexByPartOfSpeech;
+    int32 PronunciationDisplayOrder = 0;
+    int32 MeaningDisplayOrder = 0;
 
-    if (!JsonArray[0].IsValid() || !JsonArray[0]->AsObject().IsValid())
+    for (const TSharedPtr<FJsonValue>& JsonValue : JsonArray)
     {
-        UE_LOG(LogTemp, Error, TEXT("FreeDictionary first array item is invalid."));
+        if (!JsonValue.IsValid() || !JsonValue->AsObject().IsValid())
+        {
+            continue;
+        }
 
-        return false;
-    }
+        FEVFreeDictionaryResponse Response;
+        if (!FJsonObjectConverter::JsonObjectToUStruct(JsonValue->AsObject().ToSharedRef(), &Response))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to convert FreeDictionary object to struct."));
+            return false;
+        }
 
-    if (!FJsonObjectConverter::JsonObjectToUStruct(JsonArray[0]->AsObject().ToSharedRef(), &Response))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to convert FreeDictionary object to struct."));
+        if (OutRecord.Word.IsEmpty())
+        {
+            OutRecord.Word = FEVWordInputValidator::NormalizeWordInput(Response.Word);
+            OutRecord.NormalizedWord = OutRecord.Word;
+        }
 
-        return false;
-    }
+        auto AddPronunciation = [&](const FString& Transcription, const FString& AudioUrl, const FString& SourceUrl,
+                                    const FEVFreeDictionaryLicense& License)
+        {
+            const FString CleanTranscription = Transcription.TrimStartAndEnd();
+            const FString CleanAudioUrl = AudioUrl.TrimStartAndEnd();
 
-    OutResult.Word = Response.Word;
-    OutResult.Transcription = Response.Phonetic.TrimStartAndEnd();
+            if (CleanTranscription.IsEmpty() && CleanAudioUrl.IsEmpty())
+            {
+                return;
+            }
 
-    if (OutResult.Transcription.IsEmpty())
-    {
+            const FString DeduplicationKey = CleanTranscription + TEXT("|") + CleanAudioUrl;
+            if (SeenPronunciations.Contains(DeduplicationKey))
+            {
+                return;
+            }
+
+            SeenPronunciations.Add(DeduplicationKey);
+
+            FEVVocabularyPronunciation Pronunciation;
+            Pronunciation.LanguageCode = TEXT("en");
+            Pronunciation.Transcription = CleanTranscription;
+            Pronunciation.AudioUrl = CleanAudioUrl;
+            Pronunciation.SourceUrl = SourceUrl.TrimStartAndEnd();
+            Pronunciation.LicenseName = License.Name.TrimStartAndEnd();
+            Pronunciation.LicenseUrl = License.Url.TrimStartAndEnd();
+            Pronunciation.bPrimary = OutRecord.Pronunciations.IsEmpty();
+            Pronunciation.DisplayOrder = PronunciationDisplayOrder++;
+            Pronunciation.ProviderName = FreeDictionaryProviderName;
+            OutRecord.Pronunciations.Add(MoveTemp(Pronunciation));
+        };
+
+        AddPronunciation(Response.Phonetic, FString(), FString(), Response.License);
         for (const FEVFreeDictionaryPhonetic& Phonetic : Response.Phonetics)
         {
-            const FString Candidate = Phonetic.Text.TrimStartAndEnd();
-
-            if (!Candidate.IsEmpty())
-            {
-                OutResult.Transcription = Candidate;
-                break;
-            }
+            AddPronunciation(Phonetic.Text, Phonetic.Audio, Phonetic.SourceUrl, Phonetic.License);
         }
-    }
 
-    FString DefinitionText;
-    FString UsageText;
-
-    int32 Index = 1;
-    bool bHasAnyUsageExample = false;
-
-    for (const FEVFreeDictionaryMeaningGroup& Meaning : Response.Meanings)
-    {
-        for (const FEVFreeDictionaryDefinitionItem& Definition : Meaning.Definitions)
+        for (const FEVFreeDictionaryMeaningGroup& ProviderMeaning : Response.Meanings)
         {
-            DefinitionText += FString::Printf(TEXT("%d. %s\n\n"), Index, *Definition.Definition);
-
-            if (!Definition.Example.IsEmpty())
+            FString PartOfSpeech = ProviderMeaning.PartOfSpeech.TrimStartAndEnd().ToLower();
+            if (PartOfSpeech.IsEmpty())
             {
-                UsageText += FString::Printf(TEXT("%d. %s\n\n"), Index, *Definition.Example);
-
-                bHasAnyUsageExample = true;
+                PartOfSpeech = TEXT("unspecified");
             }
 
-            ++Index;
+            int32 MeaningIndex = INDEX_NONE;
+            if (const int32* ExistingMeaningIndex = MeaningIndexByPartOfSpeech.Find(PartOfSpeech))
+            {
+                MeaningIndex = *ExistingMeaningIndex;
+            }
+            else
+            {
+                FEVVocabularyMeaning Meaning;
+                Meaning.PartOfSpeech = PartOfSpeech;
+                Meaning.DisplayOrder = MeaningDisplayOrder++;
+                Meaning.ProviderName = FreeDictionaryProviderName;
+                MeaningIndex = OutRecord.Meanings.Add(MoveTemp(Meaning));
+                MeaningIndexByPartOfSpeech.Add(PartOfSpeech, MeaningIndex);
+            }
+
+            FEVVocabularyMeaning& Meaning = OutRecord.Meanings[MeaningIndex];
+            TSet<FString> SeenRelations;
+            for (const FEVVocabularyRelation& ExistingRelation : Meaning.Relations)
+            {
+                SeenRelations.Add(ExistingRelation.RelationType + TEXT("|") + ExistingRelation.NormalizedRelatedWord);
+            }
+            int32 RelationDisplayOrder = Meaning.Relations.Num();
+
+            AddRelations(ProviderMeaning.Synonyms, TEXT("synonym"), RelationDisplayOrder, SeenRelations,
+                         Meaning.Relations);
+            AddRelations(ProviderMeaning.Antonyms, TEXT("antonym"), RelationDisplayOrder, SeenRelations,
+                         Meaning.Relations);
+
+            for (const FEVFreeDictionaryDefinitionItem& ProviderDefinition : ProviderMeaning.Definitions)
+            {
+                const FString DefinitionText = ProviderDefinition.Definition.TrimStartAndEnd();
+                const FString UsageExample = ProviderDefinition.Example.TrimStartAndEnd();
+
+                if (!DefinitionText.IsEmpty() || !UsageExample.IsEmpty())
+                {
+                    FEVVocabularyDefinition Definition;
+                    Definition.DefinitionText = DefinitionText;
+                    Definition.UsageExample = UsageExample;
+                    Definition.DisplayOrder = Meaning.Definitions.Num();
+                    Definition.ProviderName = FreeDictionaryProviderName;
+                    Meaning.Definitions.Add(MoveTemp(Definition));
+                }
+
+                AddRelations(ProviderDefinition.Synonyms, TEXT("synonym"), RelationDisplayOrder, SeenRelations,
+                             Meaning.Relations);
+                AddRelations(ProviderDefinition.Antonyms, TEXT("antonym"), RelationDisplayOrder, SeenRelations,
+                             Meaning.Relations);
+            }
         }
     }
 
-    OutResult.Definition = DefinitionText.TrimEnd();
-    OutResult.bHasUsageExamples = bHasAnyUsageExample;
-
-    if (bHasAnyUsageExample)
+    if (OutRecord.Word.IsEmpty())
     {
-        OutResult.Usage = UsageText.TrimEnd();
-    }
-    else
-    {
-        OutResult.Usage = EVVocabularyUsage::GetNoUsageExamplesText();
+        UE_LOG(LogTemp, Error, TEXT("FreeDictionary response did not contain a word."));
+        return false;
     }
 
     return true;
 }
 
-bool FEVResponseParser::ParseMyMemoryTranslationResponse(const FString& JsonString, FString& OutTranslation)
+bool FEVResponseParser::ParseMyMemoryTranslationResponse(const FString& JsonString, const FString& TargetLanguage,
+                                                         FEVVocabularyTranslation& OutTranslation)
 {
-    FEVMyMemoryResponse Response;
+    OutTranslation = FEVVocabularyTranslation();
 
+    FEVMyMemoryResponse Response;
     if (!FEVJsonUtils::JsonStringToStruct(JsonString, Response))
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to parse MyMemory response."));
@@ -107,40 +207,45 @@ bool FEVResponseParser::ParseMyMemoryTranslationResponse(const FString& JsonStri
         return false;
     }
 
+    FString TranslationText;
+    float Confidence = 0.0f;
+
     if (IsValidTranslationCandidate(Response.ResponseData.TranslatedText))
     {
-        OutTranslation = Response.ResponseData.TranslatedText;
-        return true;
+        TranslationText = Response.ResponseData.TranslatedText.TrimStartAndEnd();
+        Confidence = Response.ResponseData.Match;
     }
-
-    for (const FEVMyMemoryMatchItem& Match : Response.Matches)
+    else
     {
-        if (IsValidTranslationCandidate(Match.Translation))
+        for (const FEVMyMemoryMatchItem& Match : Response.Matches)
         {
-            OutTranslation = Match.Translation;
-            return true;
+            if (IsValidTranslationCandidate(Match.Translation))
+            {
+                TranslationText = Match.Translation.TrimStartAndEnd();
+                Confidence = Match.Match;
+                break;
+            }
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("No valid MyMemory translation found."));
-    return false;
+    if (TranslationText.IsEmpty())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No valid MyMemory translation found."));
+        return false;
+    }
+
+    OutTranslation.TranslationText = TranslationText;
+    OutTranslation.TargetLanguage = TargetLanguage.ToLower();
+    OutTranslation.ProviderName = MyMemoryProviderName;
+    OutTranslation.Confidence = Confidence;
+    return true;
 }
 
 bool FEVResponseParser::IsValidTranslationCandidate(const FString& Translation)
 {
     const FString Clean = Translation.TrimStartAndEnd();
 
-    if (Clean.IsEmpty())
-    {
-        return false;
-    }
-
-    if (Clean == TEXT("?"))
-    {
-        return false;
-    }
-
-    if (Clean.Contains(TEXT("<g id=")))
+    if (Clean.IsEmpty() || Clean == TEXT("?") || Clean.Contains(TEXT("<g id=")))
     {
         return false;
     }

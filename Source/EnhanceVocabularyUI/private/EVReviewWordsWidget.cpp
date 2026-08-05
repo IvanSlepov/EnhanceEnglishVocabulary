@@ -104,7 +104,6 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
     FText SearchError;
 
     const bool bSearchEmpty = IsSearchInputEmpty();
-
     const bool bSearchValid = !bSearchEmpty && TryGetValidatedSearchInput(SearchPrefix, SearchError);
 
     TArray<FVocabularyEntry> VocabularyEntries;
@@ -124,14 +123,25 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
     if (!bLoadedSuccessfully)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to load vocabulary page %d."), CurrentPage);
-
         return;
     }
 
     ListView_ReviewWords->ClearListItems();
 
+    int32 AddedRecordCount = 0;
+
     for (const FVocabularyEntry& Entry : VocabularyEntries)
     {
+        FEVVocabularyRecord VocabularyRecord;
+
+        const FString RecordLookupWord = Entry.NormalizedWord.IsEmpty() ? Entry.Word : Entry.NormalizedWord;
+
+        if (!EVGameInstance->GetVocabularyRecordByWord(RecordLookupWord, VocabularyRecord))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to load structured vocabulary record for word: %s"), *Entry.Word);
+            continue;
+        }
+
         UEVEntryItem* EntryItem = NewObject<UEVEntryItem>(this);
 
         if (!EntryItem)
@@ -140,14 +150,15 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
             continue;
         }
 
-        EntryItem->EntryItem = Entry;
+        EntryItem->PayloadType = EEVEntryItemPayloadType::VocabularyRecord;
+        EntryItem->VocabularyRecord = MoveTemp(VocabularyRecord);
         ListView_ReviewWords->AddItem(EntryItem);
+        ++AddedRecordCount;
     }
 
-    if (!VocabularyEntries.IsEmpty())
+    if (AddedRecordCount > 0)
     {
         ListView_ReviewWords->SetScrollIntoViewAlignment(EScrollIntoViewAlignment::TopOrLeft);
-
         ListView_ReviewWords->ScrollToTop();
         ListView_ReviewWords->ScrollIndexIntoView(0);
     }
@@ -253,8 +264,28 @@ void UEVReviewWordsWidget::HandleWordEntryViewButtonPressed(UEVWordEntryWidget* 
         return;
     }
 
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in HandleWordEntryViewButtonPressed."));
+        return;
+    }
+
+    const FEVVocabularyRecord& VocabularyRecord = CurrentWordEntryWidget->GetCurrentVocabularyRecord();
+
+    FVocabularyEntry LegacyEntry;
+
+    const FString RecordLookupWord =
+        VocabularyRecord.NormalizedWord.IsEmpty() ? VocabularyRecord.Word : VocabularyRecord.NormalizedWord;
+
+    if (!EVGameInstance->GetVocabularyEntryByWord(RecordLookupWord, LegacyEntry))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to build the current detailed-view payload for word: %s"),
+               *VocabularyRecord.Word);
+        return;
+    }
+
     EVWordEntryActionInfo.ActionType = EEVWordEntryActionType::ViewEntry;
-    EVWordEntryActionInfo.EntryInfo = CurrentWordEntryWidget->GetCurrentWidgetVocabularyEnryItemInfo();
+    EVWordEntryActionInfo.EntryInfo = LegacyEntry;
 
     OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
 }

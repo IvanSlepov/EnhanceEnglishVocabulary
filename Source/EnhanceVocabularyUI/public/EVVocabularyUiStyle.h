@@ -4,10 +4,32 @@
 
 namespace EVVocabularyUiStyle
 {
+inline const FLinearColor& GetNormalWordTextLinearColor()
+{
+    return FLinearColor::Black;
+}
+
 inline const FSlateColor& GetNormalWrodEntryTextFontColor()
 {
     static const FSlateColor Color(FLinearColor::Black);
     return Color;
+}
+
+inline const FSlateColor& GetWordValueTextFontColor()
+{
+    static const FSlateColor Color(FLinearColor(FColor(0x6A, 0x1B, 0x9A, 0xFF)));
+    return Color;
+}
+
+inline const FSlateColor& GetNormalTranscriptionTextFontColor()
+{
+    static const FSlateColor Color(FLinearColor(FColor(0xFF, 0x6D, 0x00, 0xFF)));
+    return Color;
+}
+
+inline const FLinearColor& GetMissingWordTextLinearColor()
+{
+    return FLinearColor::Red;
 }
 
 inline const FSlateColor& GetMissingWrodEntryTextFontColor()

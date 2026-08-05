@@ -39,6 +39,11 @@ public:
     bool UpdateVocabularyEntry(const FVocabularyEntry& Entry);
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
+    bool SaveVocabularyRecord(const FEVVocabularyRecord& Record);
+    bool UpdateVocabularyRecord(const FEVVocabularyRecord& Record);
+    bool GetVocabularyRecordByWord(const FString& NormalizedWord, FEVVocabularyRecord& OutRecord);
+    bool DeleteVocabularyRecord(const FString& NormalizedWord);
+
     bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry);
     bool GetRandomlySelectedWord(FString& OutWord);
 
@@ -62,11 +67,11 @@ public:
     FEVFileExchangeResultInfo ValidateImportFile(EEVFileExtensionType FileExtensionType,
                                                  EEVFileOperationType OperationType, const TArray<uint8>& Bytes,
                                                  TArray<uint8>& OutValidationReportBytes,
-                                                 TArray<FVocabularyEntry>& OutValidatedEntries);
+                                                 TArray<FEVVocabularyRecord>& OutValidatedRecords);
 
-    FEVFileExchangeResultInfo OverwriteDatabase(const TArray<FVocabularyEntry>& Entries);
+    FEVFileExchangeResultInfo OverwriteDatabase(const TArray<FEVVocabularyRecord>& Records);
 
-    FEVFileExchangeResultInfo AppendDatabase(const TArray<FVocabularyEntry>& Entries);
+    FEVFileExchangeResultInfo AppendDatabase(const TArray<FEVVocabularyRecord>& Records);
 
     FEVFileExchangeResultInfo GenerateValidationReport(EEVFileExtensionType FileExtensionType,
                                                        const TArray<FEVValidationFailedEntry>& InvalidEntries,
@@ -78,9 +83,26 @@ public:
 
 private:
     FSQLiteDatabase Database;
-    bool CreateVocabularyTable();
-    bool EnsureVocabularyTableColumns();
+
+    bool InitializeSchema();
+    bool CreateNormalizedSchema();
+    bool MigrateLegacySchema();
+    bool MigrateNormalizedSchemaToVersion3(int32 CurrentVersion);
+    bool IsLegacySchema(bool& bOutIsLegacy);
+    bool GetSchemaVersion(int32& OutVersion);
+    bool SetSchemaVersion(int32 Version);
+
+    bool SaveVocabularyRecordInternal(const FEVVocabularyRecord& Record, bool bManageTransaction);
+    bool ReplaceVocabularyRecordInternal(const FEVVocabularyRecord& Record, bool bManageTransaction);
+    bool InsertRecordChildren(int64 EntryId, const FEVVocabularyRecord& Record);
+    bool GetEntryIdByNormalizedWord(const FString& NormalizedWord, int64& OutEntryId);
+    bool GetLastInsertedRowId(int64& OutRowId);
+
+    static FEVVocabularyRecord ConvertLegacyEntryToRecord(const FVocabularyEntry& Entry);
+    static FVocabularyEntry FlattenRecord(const FEVVocabularyRecord& Record);
+
     bool InsertVocabularyEntryStrict(const FVocabularyEntry& Entry);
-    void CollectAppendValidationProblems(const TArray<FVocabularyEntry>& Entries,
+    void CollectAppendValidationProblems(const TArray<FEVVocabularyRecord>& Records,
+                                         const TMap<FString, TArray<int32>>& SourceRowsByNormalizedWord,
                                          TArray<FEVValidationFailedEntry>& OutProblems);
 };

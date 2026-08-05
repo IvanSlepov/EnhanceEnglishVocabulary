@@ -3,26 +3,19 @@
 #include "CoreMinimal.h"
 #include "EVResponseTypes.generated.h"
 
-/*
- * FreeDictionary API
- * Response is an array:
- * [
- *   {
- *     "word": "...",
- *     "meanings": [
- *       {
- *         "partOfSpeech": "...",
- *         "definitions": [
- *           {
- *             "definition": "...",
- *             "example": "..."
- *           }
- *         ]
- *       }
- *     ]
- *   }
- * ]
- */
+/* FreeDictionary provider DTOs. */
+
+USTRUCT(BlueprintType)
+struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryLicense
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadWrite)
+    FString Name;
+
+    UPROPERTY(BlueprintReadWrite)
+    FString Url;
+};
 
 USTRUCT(BlueprintType)
 struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryDefinitionItem
@@ -32,10 +25,14 @@ struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryDefinitionItem
     UPROPERTY(BlueprintReadWrite)
     FString Definition;
 
-    // Maps FreeDictionary "example" field.
-    // In our app this becomes FWordSearchResult::Usage.
     UPROPERTY(BlueprintReadWrite)
     FString Example;
+
+    UPROPERTY(BlueprintReadWrite)
+    TArray<FString> Synonyms;
+
+    UPROPERTY(BlueprintReadWrite)
+    TArray<FString> Antonyms;
 };
 
 USTRUCT(BlueprintType)
@@ -48,6 +45,12 @@ struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryMeaningGroup
 
     UPROPERTY(BlueprintReadWrite)
     TArray<FEVFreeDictionaryDefinitionItem> Definitions;
+
+    UPROPERTY(BlueprintReadWrite)
+    TArray<FString> Synonyms;
+
+    UPROPERTY(BlueprintReadWrite)
+    TArray<FString> Antonyms;
 };
 
 USTRUCT(BlueprintType)
@@ -60,6 +63,12 @@ struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryPhonetic
 
     UPROPERTY(BlueprintReadWrite)
     FString Audio;
+
+    UPROPERTY(BlueprintReadWrite)
+    FString SourceUrl;
+
+    UPROPERTY(BlueprintReadWrite)
+    FEVFreeDictionaryLicense License;
 };
 
 USTRUCT(BlueprintType)
@@ -78,14 +87,15 @@ struct ENHANCEVOCABULARYWEB_API FEVFreeDictionaryResponse
 
     UPROPERTY(BlueprintReadWrite)
     TArray<FEVFreeDictionaryMeaningGroup> Meanings;
+
+    UPROPERTY(BlueprintReadWrite)
+    FEVFreeDictionaryLicense License;
+
+    UPROPERTY(BlueprintReadWrite)
+    TArray<FString> SourceUrls;
 };
 
-/*
- * MyMemory Translation API
- * Same response structure for:
- * en|ru
- * en|uk
- */
+/* MyMemory translation provider DTOs. */
 
 USTRUCT(BlueprintType)
 struct ENHANCEVOCABULARYWEB_API FEVMyMemoryResponseData
@@ -116,8 +126,6 @@ struct ENHANCEVOCABULARYWEB_API FEVMyMemoryMatchItem
     UPROPERTY(BlueprintReadWrite)
     FString Target;
 
-    // MyMemory sometimes returns quality as string, sometimes as number.
-    // Keep as FString for safer parsing.
     UPROPERTY(BlueprintReadWrite)
     FString Quality;
 

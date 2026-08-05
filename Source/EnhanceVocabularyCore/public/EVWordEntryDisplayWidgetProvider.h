@@ -5,7 +5,7 @@
 #include "EVVocabularyTypes.h"
 #include "EVWordEntryDisplayWidgetProvider.generated.h"
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnWordEntryChangesSubmitted, const FVocabularyEntry&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnWordEntryChangesSubmitted, const FEVVocabularyRecord&);
 
 UINTERFACE(MinimalAPI, Blueprintable)
 class UEVWordEntryDisplayWidgetProvider : public UInterface
@@ -18,7 +18,7 @@ class ENHANCEVOCABULARYCORE_API IEVWordEntryDisplayWidgetProvider
     GENERATED_BODY()
 
 public:
-    virtual void ShowWordEntry(const FVocabularyEntry& Entry) = 0;
+    virtual void ShowWordEntry(const FEVVocabularyRecord& Entry) = 0;
     virtual void SetEditableFieldsReadOnly(bool bSetEnabled) = 0;
     virtual void SetButtonsDisabled(bool bIsViewButtonDisabled, bool bIsEditButtonDisabled,
                                     bool bIsDeleteButtonDisabled, bool bIsSaveChangesButtonHidden) = 0;

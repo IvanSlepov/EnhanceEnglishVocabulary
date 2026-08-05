@@ -38,14 +38,17 @@ private:
 
     void ResetPendingSearch(const FString& Word);
     void TryCompleteSearch();
+    void PopulateLegacySearchResult();
 
 private:
     UPROPERTY()
     TObjectPtr<UEVHttpService> HttpService;
 
     FWordSearchResult PendingResult;
+    FEVVocabularyRecord PendingRecord;
 
     bool bDictionaryCompleted = false;
+    bool bDictionarySucceeded = false;
     bool bTranslationRuCompleted = false;
     bool bTranslationUkCompleted = false;
 

@@ -99,10 +99,11 @@ private:
     // we decided to review
     FEVWordEntryActionInfo CachedWordEntryWidgetInfo;
 
-    // Cache the result we want to display AFTER
-    // the word has been edited. If we discard changes
-    // we'll retreat to displaying FEVWordEntryActionInfo CachedWordEntryWidgetInfo
-    FVocabularyEntry CachedConfirmedWordEntry;
+    // Structured record currently confirmed and displayed in Detailed View.
+    FEVVocabularyRecord CachedConfirmedVocabularyRecord;
+
+    // Structured edits waiting for confirmation.
+    FEVVocabularyRecord CachedPendingVocabularyRecord;
 
     FEVFileOperationInfo PendingFileOperationInfo;
 
@@ -150,7 +151,7 @@ private:
     void HandleDetailedDeleteButtonPressed();
 
     UFUNCTION()
-    void HandleDetailedSaveChangesButtonPressed(const FVocabularyEntry& NewVocabularyEntry);
+    void HandleDetailedSaveChangesButtonPressed(const FEVVocabularyRecord& NewVocabularyRecord);
 
     // Handlers for the "EVConfirmationDialogWidget.h"
     UFUNCTION()
