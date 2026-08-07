@@ -122,7 +122,7 @@ private:
      * This function is the single replacement point for the future
      * AppSettings translation-language selection.
      */
-    FString ResolveSelectedTranslationLanguageCode() const;
+    TArray<FString> ResolveSelectedTranslationLanguageCodes() const;
 
     /**
      * Prepares one meaning for Search Results display.

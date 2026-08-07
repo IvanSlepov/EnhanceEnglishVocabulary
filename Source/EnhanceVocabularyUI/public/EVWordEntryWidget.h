@@ -117,7 +117,7 @@ private:
      * Hardcoded to Ukrainian until AppSettings translation selection
      * is implemented.
      */
-    FString ResolveSelectedTranslationLanguageCode() const;
+    TArray<FString> ResolveSelectedTranslationLanguageCodes() const;
 
     /**
      * Filters meaning-specific translations by the current target language.

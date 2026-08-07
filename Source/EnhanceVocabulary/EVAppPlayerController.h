@@ -18,6 +18,7 @@
 #include "EVVocabularyInteractionTypes.h"
 #include "EVVocabularyFilterTypes.h"
 #include "EVVocabularyFilterWidgetProvider.h"
+#include "EVVocabularyLanguageTypes.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -168,6 +169,9 @@ private:
 
     UFUNCTION()
     void HandleVocabularyFilterWidgetCloseRequested();
+
+    UFUNCTION()
+    void HandleVocabularyLanguagePreferencesChanged(const FEVVocabularyLanguagePreferences& Preferences);
 
     void HandleRelationValueAction(const FEVVocabularyValueActionRequest& Request);
     void HandleTranslationValueAction(const FEVVocabularyValueActionRequest& Request);

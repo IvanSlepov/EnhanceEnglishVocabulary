@@ -64,7 +64,9 @@ FWordSearchResult UEVWordSearchService::SearchWordFake(const FString& Word)
 }
 
 void UEVWordSearchService::SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
-                                            EEVWebProvider TranslationProvider)
+                                            EEVWebProvider TranslationProvider,
+                                            const EEVVocabularyDBContext DatabaseContext,
+                                            const TArray<EEVVocabularyTranslationLanguage>& TranslationLanguages)
 {
     if (!HttpService)
     {
@@ -80,9 +82,29 @@ void UEVWordSearchService::SearchWordOnline(const FString& Word, EEVWebProvider 
 
     ResetPendingSearch(Word);
 
+    TArray<EEVVocabularyTranslationLanguage> NormalizedTargets;
+    for (const EEVVocabularyTranslationLanguage Language : TranslationLanguages)
+    {
+        if (Language == EEVVocabularyTranslationLanguage::None ||
+            EVVocabularyLanguage::IsTranslationEquivalentToDatabaseContext(Language, DatabaseContext) ||
+            NormalizedTargets.Contains(Language))
+        {
+            continue;
+        }
+        NormalizedTargets.Add(Language);
+    }
+
+    PendingTranslationRequestCount = NormalizedTargets.Num();
+
     SendDictionaryRequest(Word, DefinitionUsageProvider);
-    SendTranslationRequest(Word, TEXT("ru"), TranslationProvider);
-    SendTranslationRequest(Word, TEXT("uk"), TranslationProvider);
+
+    for (const EEVVocabularyTranslationLanguage Language : NormalizedTargets)
+    {
+        SendTranslationRequest(Word, DatabaseContext, Language, TranslationProvider);
+    }
+
+    // Zero selected translations is an intentional and valid state. The dictionary callback
+    // remains the completion trigger in that case.
 }
 
 void UEVWordSearchService::SendDictionaryRequest(const FString& Word, EEVWebProvider DefinitionUsageProvider)
@@ -106,95 +128,115 @@ void UEVWordSearchService::SendDictionaryRequest(const FString& Word, EEVWebProv
     UE_LOG(LogTemp, Warning, TEXT("Dictionary request sent: %s"), *Url);
 }
 
-void UEVWordSearchService::SendTranslationRequest(const FString& Word, const FString& TranslateTo,
+void UEVWordSearchService::SendTranslationRequest(const FString& Word, const EEVVocabularyDBContext DatabaseContext,
+                                                  const EEVVocabularyTranslationLanguage TranslateTo,
                                                   EEVWebProvider TranslationProvider)
 {
     FEVWebProviderUrlBuildContext Context;
     Context.Word = Word;
-    Context.SourceLanguage = TEXT("en");
-    Context.TargetLanguage = TranslateTo;
+    Context.SourceLanguage = EVVocabularyLanguage::GetDatabaseContextWebLanguageCode(DatabaseContext);
+    Context.TargetLanguage = EVVocabularyLanguage::GetTranslationWebLanguageCode(TranslateTo);
 
     FString Url;
 
     if (!FEVWebProviderUrlBuilder::BuildRequestUrl(TranslationProvider, Context, Url))
     {
-        if (TranslateTo.Equals(TEXT("ru")))
-        {
-            bTranslationRuCompleted = true;
-        }
-        else if (TranslateTo.Equals(TEXT("uk")))
-        {
-            bTranslationUkCompleted = true;
-        }
+        PendingTranslationRequestCount = FMath::Max(0, PendingTranslationRequestCount - 1);
+        TryCompleteSearch();
+        return;
+    }
+
+    HttpService->SendGetRequest(
+        Url, FEVHttpResponseDelegate::CreateUObject(this, &ThisClass::HandleTranslationResponse, TranslateTo));
+
+    UE_LOG(LogTemp, Warning, TEXT("Translation request sent: %s"), *Url);
+}
+
+void UEVWordSearchService::HandleDictionaryResponse(const bool bSuccess, const int32 ResponseCode,
+                                                    const FString& ResponseBody)
+{
+    bDictionaryCompleted = true;
+    bDictionarySucceeded = false;
+
+    if (!bSuccess || ResponseCode != 200)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Dictionary request failed. Response code: %d"), ResponseCode);
 
         TryCompleteSearch();
         return;
     }
 
-    if (TranslateTo.Equals(TEXT("ru")))
+    FEVVocabularyRecord ParsedDictionaryRecord;
+
+    if (!FEVResponseParser::ParseFreeDictionaryResponse(ResponseBody, ParsedDictionaryRecord))
     {
-        HttpService->SendGetRequest(
-            Url, FEVHttpResponseDelegate::CreateUObject(this, &UEVWordSearchService::HandleTranslationRuResponse));
-    }
-    else if (TranslateTo.Equals(TEXT("uk")))
-    {
-        HttpService->SendGetRequest(
-            Url, FEVHttpResponseDelegate::CreateUObject(this, &UEVWordSearchService::HandleTranslationUkResponse));
+        UE_LOG(LogTemp, Warning, TEXT("Failed to parse FreeDictionary response."));
+
+        TryCompleteSearch();
+        return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Translation request sent: %s"), *Url);
-}
+    //
+    // Translation requests run independently from the dictionary request.
+    //
+    // Some translations may already have completed by the time the
+    // dictionary response arrives. ParseFreeDictionaryResponse() resets
+    // its output record, so preserve those translations before replacing
+    // PendingRecord with the parsed dictionary data.
+    //
+    TArray<FEVVocabularyTranslation> CompletedTranslations = MoveTemp(PendingRecord.GeneralTranslations);
 
-void UEVWordSearchService::HandleDictionaryResponse(bool bSuccess, int32 ResponseCode, const FString& ResponseBody)
-{
-    bDictionaryCompleted = true;
-    bDictionarySucceeded = false;
+    PendingRecord = MoveTemp(ParsedDictionaryRecord);
 
-    if (bSuccess && ResponseCode == 200)
+    PendingRecord.GeneralTranslations = MoveTemp(CompletedTranslations);
+
+    //
+    // Keep the normalized search identity established when the request
+    // started.
+    //
+    if (PendingRecord.Word.IsEmpty())
     {
-        FEVVocabularyRecord ParsedRecord;
-        if (FEVResponseParser::ParseFreeDictionaryResponse(ResponseBody, ParsedRecord))
-        {
-            PendingRecord.Word = ParsedRecord.Word;
-            PendingRecord.NormalizedWord = ParsedRecord.NormalizedWord;
-            PendingRecord.Pronunciations = MoveTemp(ParsedRecord.Pronunciations);
-            PendingRecord.Meanings = MoveTemp(ParsedRecord.Meanings);
-            bDictionarySucceeded = true;
-        }
+        PendingRecord.Word = CurrentSearchWord;
     }
+
+    PendingRecord.NormalizedWord = CurrentSearchWord;
+
+    bDictionarySucceeded = true;
 
     TryCompleteSearch();
 }
 
-void UEVWordSearchService::HandleTranslationRuResponse(bool bSuccess, int32 ResponseCode, const FString& ResponseBody)
+void UEVWordSearchService::HandleTranslationResponse(const bool bSuccess, const int32 ResponseCode,
+                                                     const FString& ResponseBody,
+                                                     const EEVVocabularyTranslationLanguage TargetLanguage)
 {
     if (bSuccess && ResponseCode == 200)
     {
-        FEVVocabularyTranslation Translation;
-        if (FEVResponseParser::ParseMyMemoryTranslationResponse(ResponseBody, TEXT("ru"), Translation))
+        TArray<FEVVocabularyTranslation> Translations;
+        const FString StorageCode = EVVocabularyLanguage::GetTranslationStorageCode(TargetLanguage);
+        if (!StorageCode.IsEmpty() &&
+            FEVResponseParser::ParseMyMemoryTranslationResponse(ResponseBody, StorageCode, Translations))
         {
-            Translation.DisplayOrder = PendingRecord.GeneralTranslations.Num();
-            PendingRecord.GeneralTranslations.Add(MoveTemp(Translation));
+            for (FEVVocabularyTranslation& Translation : Translations)
+            {
+                const bool bDuplicate = PendingRecord.GeneralTranslations.ContainsByPredicate(
+                    [&Translation](const FEVVocabularyTranslation& Existing)
+                    {
+                        return Existing.TargetLanguage.Equals(Translation.TargetLanguage, ESearchCase::IgnoreCase) &&
+                               Existing.TranslationText.Equals(Translation.TranslationText, ESearchCase::IgnoreCase);
+                    });
+                if (bDuplicate)
+                {
+                    continue;
+                }
+
+                Translation.DisplayOrder = PendingRecord.GeneralTranslations.Num();
+                PendingRecord.GeneralTranslations.Add(MoveTemp(Translation));
+            }
         }
     }
 
-    bTranslationRuCompleted = true;
-    TryCompleteSearch();
-}
-
-void UEVWordSearchService::HandleTranslationUkResponse(bool bSuccess, int32 ResponseCode, const FString& ResponseBody)
-{
-    if (bSuccess && ResponseCode == 200)
-    {
-        FEVVocabularyTranslation Translation;
-        if (FEVResponseParser::ParseMyMemoryTranslationResponse(ResponseBody, TEXT("uk"), Translation))
-        {
-            Translation.DisplayOrder = PendingRecord.GeneralTranslations.Num();
-            PendingRecord.GeneralTranslations.Add(MoveTemp(Translation));
-        }
-    }
-
-    bTranslationUkCompleted = true;
+    PendingTranslationRequestCount = FMath::Max(0, PendingTranslationRequestCount - 1);
     TryCompleteSearch();
 }
 
@@ -211,13 +253,12 @@ void UEVWordSearchService::ResetPendingSearch(const FString& Word)
 
     bDictionaryCompleted = false;
     bDictionarySucceeded = false;
-    bTranslationRuCompleted = false;
-    bTranslationUkCompleted = false;
+    PendingTranslationRequestCount = 0;
 }
 
 void UEVWordSearchService::TryCompleteSearch()
 {
-    if (!bDictionaryCompleted || !bTranslationRuCompleted || !bTranslationUkCompleted)
+    if (!bDictionaryCompleted || PendingTranslationRequestCount > 0)
     {
         return;
     }

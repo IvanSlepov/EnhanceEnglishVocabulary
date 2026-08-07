@@ -3,6 +3,7 @@
 #include "EVJsonUtils.h"
 #include "EVResponseTypes.h"
 #include "EVWordInputValidator.h"
+#include "EVVocabularyTranslationUtils.h"
 #include "Dom/JsonObject.h"
 #include "JsonObjectConverter.h"
 #include "Serialization/JsonReader.h"
@@ -190,9 +191,9 @@ bool FEVResponseParser::ParseFreeDictionaryResponse(const FString& JsonString, F
 }
 
 bool FEVResponseParser::ParseMyMemoryTranslationResponse(const FString& JsonString, const FString& TargetLanguage,
-                                                         FEVVocabularyTranslation& OutTranslation)
+                                                         TArray<FEVVocabularyTranslation>& OutTranslations)
 {
-    OutTranslation = FEVVocabularyTranslation();
+    OutTranslations.Reset();
 
     FEVMyMemoryResponse Response;
     if (!FEVJsonUtils::JsonStringToStruct(JsonString, Response))
@@ -234,11 +235,19 @@ bool FEVResponseParser::ParseMyMemoryTranslationResponse(const FString& JsonStri
         return false;
     }
 
-    OutTranslation.TranslationText = TranslationText;
-    OutTranslation.TargetLanguage = TargetLanguage.ToLower();
-    OutTranslation.ProviderName = MyMemoryProviderName;
-    OutTranslation.Confidence = Confidence;
-    return true;
+    FEVVocabularyTranslation PackedTranslation;
+    PackedTranslation.TranslationText = TranslationText;
+    PackedTranslation.TargetLanguage = TargetLanguage;
+    PackedTranslation.ProviderName = MyMemoryProviderName;
+    PackedTranslation.Confidence = Confidence;
+
+    EVVocabularyTranslationUtils::ExpandTranslation(PackedTranslation, OutTranslations);
+    for (int32 Index = 0; Index < OutTranslations.Num(); ++Index)
+    {
+        OutTranslations[Index].DisplayOrder = Index;
+    }
+
+    return !OutTranslations.IsEmpty();
 }
 
 bool FEVResponseParser::IsValidTranslationCandidate(const FString& Translation)

@@ -118,12 +118,19 @@ public:
         return &OnVocabularyFiltersRequested;
     }
 
+    virtual FOnVocabularyLanguagePreferencesChangedFromWidgets* GetVocabularyLanguagePreferencesChangedEvent() override
+    {
+        return &OnVocabularyLanguagePreferencesChanged;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
     virtual void HandleReviewWordsRefresh() override;
     virtual void HandleOpenReviewWordsForNotification(const FString& Word) override;
     virtual void HandleOpenAddWordWithWord(const FString& Word) override;
     virtual void HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria) override;
+    virtual void
+    HandleVocabularyLanguagePreferencesApplied(const FEVVocabularyLanguagePreferences& Preferences) override;
 
     // This method is getting called from the PC to
     // confirm a user-selected Pop-up Interval. And it always forces the
@@ -191,6 +198,9 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnVocabularyFiltersRequested OnVocabularyFiltersRequested;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnVocabularyLanguagePreferencesChangedFromWidgets OnVocabularyLanguagePreferencesChanged;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -213,6 +223,9 @@ private:
 
     UFUNCTION()
     void HandleVocabularyFiltersRequested();
+
+    UFUNCTION()
+    void HandleVocabularyLanguagePreferencesChanged(const FEVVocabularyLanguagePreferences& Preferences);
 
     UFUNCTION()
     void HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo);

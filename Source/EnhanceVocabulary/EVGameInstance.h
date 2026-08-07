@@ -11,6 +11,7 @@
 #include "EVFileExchangeDefaults.h"
 #include "EVPopUpSettingsTypes.h"
 #include "EVVocabularyFilterTypes.h"
+#include "EVVocabularyLanguageTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -111,6 +112,9 @@ public:
 
     void SetActiveVocabularyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria);
     const FEVVocabularyQueryCriteria& GetActiveVocabularyQueryCriteria() const;
+
+    const FEVVocabularyLanguagePreferences& GetVocabularyLanguagePreferences() const;
+    bool SetVocabularyLanguagePreferences(const FEVVocabularyLanguagePreferences& Preferences);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetRandomlySelectedWord(FString& OutWord);
@@ -227,6 +231,15 @@ private:
     FEVVocabularyQueryCriteria ActiveVocabularyQueryCriteria;
 
     FEVNotificationPermissionResultFromGameInstance NotificationPermissionResultDelegate;
+
+    UPROPERTY(Transient)
+    FEVVocabularyLanguagePreferences VocabularyLanguagePreferences;
+
+    FDelegateHandle ApplicationWillEnterBackgroundHandle;
+
+    void LoadVocabularyLanguagePreferences();
+    void SaveVocabularyLanguagePreferences() const;
+    void HandleApplicationWillEnterBackground();
 
     void HandleNotificationPermissionResult(const bool bGranted);
 };

@@ -7,6 +7,8 @@
 #include "Components/TextBlock.h"
 #include "EVEntryItem.h"
 #include "EVVocabularyUiStyle.h"
+#include "EnhanceVocabulary/EVGameInstance.h"
+#include "EVVocabularyLanguageTypes.h"
 
 void UEVSearchResultsPanel::NativeOnInitialized()
 {
@@ -218,24 +220,50 @@ const FEVVocabularyPronunciation* UEVSearchResultsPanel::ResolvePrimaryPronuncia
 
 FString UEVSearchResultsPanel::ResolveSelectedVocabularyLanguageCode() const
 {
+    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
+    {
+        return EVVocabularyLanguage::GetDatabaseContextPronunciationLanguageCode(
+            GameInstance->GetVocabularyLanguagePreferences().DatabaseContext);
+    }
     return TEXT("en");
 }
 
-FString UEVSearchResultsPanel::ResolveSelectedTranslationLanguageCode() const
+TArray<FString> UEVSearchResultsPanel::ResolveSelectedTranslationLanguageCodes() const
 {
-    return TEXT("uk");
+    TArray<FString> Codes;
+    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
+    {
+        for (const EEVVocabularyTranslationLanguage Language :
+             GameInstance->GetVocabularyLanguagePreferences().SelectedTranslations)
+        {
+            const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
+            if (!Code.IsEmpty())
+            {
+                Codes.AddUnique(Code);
+                if (Language == EEVVocabularyTranslationLanguage::Ukrainian)
+                    Codes.AddUnique(TEXT("ua"));
+                else if (Language == EEVVocabularyTranslationLanguage::EnglishUSA)
+                    Codes.AddUnique(TEXT("en"));
+            }
+        }
+    }
+    return Codes;
 }
 
 FEVVocabularyMeaning UEVSearchResultsPanel::BuildMeaningForDisplay(const FEVVocabularyMeaning& SourceMeaning,
                                                                    const bool bIsFirstMeaning) const
 {
     FEVVocabularyMeaning Result = SourceMeaning;
+    const TArray<FString> SelectedLanguageCodes = ResolveSelectedTranslationLanguageCodes();
 
-    const FString SelectedLanguageCode = ResolveSelectedTranslationLanguageCode();
+    auto IsSelectedLanguage = [&SelectedLanguageCodes](const FString& TargetLanguage)
+    {
+        return SelectedLanguageCodes.ContainsByPredicate(
+            [&TargetLanguage](const FString& Code) { return Code.Equals(TargetLanguage, ESearchCase::IgnoreCase); });
+    };
 
-    Result.Translations.RemoveAll(
-        [&SelectedLanguageCode](const FEVVocabularyTranslation& Translation)
-        { return !Translation.TargetLanguage.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase); });
+    Result.Translations.RemoveAll([&IsSelectedLanguage](const FEVVocabularyTranslation& Translation)
+                                  { return !IsSelectedLanguage(Translation.TargetLanguage); });
 
     if (!Result.Translations.IsEmpty() || !bIsFirstMeaning)
     {
@@ -244,12 +272,7 @@ FEVVocabularyMeaning UEVSearchResultsPanel::BuildMeaningForDisplay(const FEVVoca
 
     for (const FEVVocabularyTranslation& GeneralTranslation : CurrentVocabularyRecord.GeneralTranslations)
     {
-        if (!GeneralTranslation.TargetLanguage.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase))
-        {
-            continue;
-        }
-
-        if (GeneralTranslation.TranslationText.IsEmpty())
+        if (!IsSelectedLanguage(GeneralTranslation.TargetLanguage) || GeneralTranslation.TranslationText.IsEmpty())
         {
             continue;
         }
@@ -262,12 +285,10 @@ FEVVocabularyMeaning UEVSearchResultsPanel::BuildMeaningForDisplay(const FEVVoca
                        ExistingTranslation.TranslationText.Equals(GeneralTranslation.TranslationText,
                                                                   ESearchCase::IgnoreCase);
             });
-
         if (!bAlreadyAdded)
         {
             Result.Translations.Add(GeneralTranslation);
         }
     }
-
     return Result;
 }

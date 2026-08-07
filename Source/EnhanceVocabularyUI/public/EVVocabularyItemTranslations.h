@@ -7,6 +7,9 @@
 #include "EVVocabularyValueItemWidgetBase.h"
 #include "EVVocabularyItemTranslations.generated.h"
 
+class UImage;
+class UEVVocabularyLanguageUiData;
+
 /**
  * Displays and edits one stored vocabulary translation.
  *
@@ -38,6 +41,8 @@ protected:
     virtual void NativeOnInitialized() override;
 
 private:
+    void ApplyLanguageFlag();
+
     UFUNCTION()
     void HandleTranslationValueChanged(UEVVocabularyValueItemWidgetBase* ItemWidget, const FString& NewValue);
 
@@ -46,6 +51,13 @@ private:
                                          ETextCommit::Type CommitMethod);
 
 private:
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UImage> Image_LanguageCountryFlag = nullptr;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Vocabulary Translation Item|Presentation",
+              meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UEVVocabularyLanguageUiData> LanguageUiData = nullptr;
+
     UPROPERTY(Transient)
     FEVVocabularyTranslation Translation;
 };

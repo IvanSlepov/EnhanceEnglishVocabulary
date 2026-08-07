@@ -12,6 +12,8 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/CoreDelegates.h"
 
 namespace
 {
@@ -280,6 +282,10 @@ void UEVGameInstance::Init()
 {
     Super::Init();
 
+    LoadVocabularyLanguagePreferences();
+    ApplicationWillEnterBackgroundHandle = FCoreDelegates::ApplicationWillEnterBackgroundDelegate.AddUObject(
+        this, &ThisClass::HandleApplicationWillEnterBackground);
+
     VocabularyStorageService = NewObject<UEVVocabularyStorageService>(this);
 
     WordSearchService = NewObject<UEVWordSearchService>(this);
@@ -323,7 +329,7 @@ void UEVGameInstance::Init()
 
     if (VocabularyStorageService)
     {
-        VocabularyStorageService->InitializeStorage();
+        VocabularyStorageService->InitializeStorage(VocabularyLanguagePreferences.DatabaseContext);
     }
     else
     {
@@ -351,6 +357,12 @@ void UEVGameInstance::Init()
 
 void UEVGameInstance::Shutdown()
 {
+    SaveVocabularyLanguagePreferences();
+    if (ApplicationWillEnterBackgroundHandle.IsValid())
+    {
+        FCoreDelegates::ApplicationWillEnterBackgroundDelegate.Remove(ApplicationWillEnterBackgroundHandle);
+    }
+
     if (VocabularyStorageService)
     {
         VocabularyStorageService->ShutdownStorage();
@@ -662,7 +674,34 @@ FWordSearchResult UEVGameInstance::SearchWordFake(const FString& Word)
         return Result;
     }
 
-    return WordSearchService->SearchWordFake(Word);
+    FWordSearchResult Result = WordSearchService->SearchWordFake(Word);
+
+    auto IsSelectedTarget = [this](const FString& TargetLanguage)
+    {
+        EEVVocabularyTranslationLanguage Parsed = EEVVocabularyTranslationLanguage::None;
+        return EVVocabularyLanguage::TryParseTranslationLanguage(TargetLanguage, Parsed) &&
+               VocabularyLanguagePreferences.SelectedTranslations.Contains(Parsed);
+    };
+
+    Result.VocabularyRecord.GeneralTranslations.RemoveAll(
+        [&IsSelectedTarget](const FEVVocabularyTranslation& Translation)
+        { return !IsSelectedTarget(Translation.TargetLanguage); });
+    for (FEVVocabularyMeaning& Meaning : Result.VocabularyRecord.Meanings)
+    {
+        Meaning.Translations.RemoveAll([&IsSelectedTarget](const FEVVocabularyTranslation& Translation)
+                                       { return !IsSelectedTarget(Translation.TargetLanguage); });
+    }
+
+    if (!VocabularyLanguagePreferences.SelectedTranslations.Contains(EEVVocabularyTranslationLanguage::Russian))
+    {
+        Result.TranslationRu.Reset();
+    }
+    if (!VocabularyLanguagePreferences.SelectedTranslations.Contains(EEVVocabularyTranslationLanguage::Ukrainian))
+    {
+        Result.TranslationUa.Reset();
+    }
+
+    return Result;
 }
 
 void UEVGameInstance::SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
@@ -675,7 +714,9 @@ void UEVGameInstance::SearchWordOnline(const FString& Word, EEVWebProvider Defin
         return;
     }
 
-    WordSearchService->SearchWordOnline(Word, DefinitionUsageProvider, TranslationProvider);
+    WordSearchService->SearchWordOnline(Word, DefinitionUsageProvider, TranslationProvider,
+                                        VocabularyLanguagePreferences.DatabaseContext,
+                                        VocabularyLanguagePreferences.SelectedTranslations);
 }
 
 FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo)
@@ -705,6 +746,109 @@ FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFi
         return ActionInfo;
     }
     }
+}
+
+const FEVVocabularyLanguagePreferences& UEVGameInstance::GetVocabularyLanguagePreferences() const
+{
+    return VocabularyLanguagePreferences;
+}
+
+bool UEVGameInstance::SetVocabularyLanguagePreferences(const FEVVocabularyLanguagePreferences& Preferences)
+{
+    FEVVocabularyLanguagePreferences Normalized = Preferences;
+    Normalized.Normalize();
+
+    const FEVVocabularyLanguagePreferences Previous = VocabularyLanguagePreferences;
+    const bool bContextChanged = Normalized.DatabaseContext != Previous.DatabaseContext;
+
+    if (bContextChanged && VocabularyStorageService)
+    {
+        VocabularyStorageService->ShutdownStorage();
+        if (!VocabularyStorageService->InitializeStorage(Normalized.DatabaseContext))
+        {
+            UE_LOG(LogTemp, Error,
+                   TEXT("Failed to initialize storage for vocabulary language context. Restoring previous context."));
+            VocabularyStorageService->InitializeStorage(Previous.DatabaseContext);
+            VocabularyLanguagePreferences = Previous;
+            SaveVocabularyLanguagePreferences();
+            return false;
+        }
+    }
+
+    VocabularyLanguagePreferences = MoveTemp(Normalized);
+    SaveVocabularyLanguagePreferences();
+    return true;
+}
+
+void UEVGameInstance::LoadVocabularyLanguagePreferences()
+{
+    static const TCHAR* Section = TEXT("EnhanceVocabulary.LanguagePreferences");
+
+    FEVVocabularyLanguagePreferences Loaded;
+
+    FString ContextValue;
+    if (GConfig && GConfig->GetString(Section, TEXT("DatabaseContext"), ContextValue, GGameUserSettingsIni))
+    {
+        EEVVocabularyDBContext ParsedContext = EEVVocabularyDBContext::None;
+        if (EVVocabularyLanguage::TryParseDatabaseContext(ContextValue, ParsedContext))
+        {
+            Loaded.DatabaseContext = ParsedContext;
+        }
+    }
+
+    FString TranslationValues;
+    const bool bHasPersistedTranslations =
+        GConfig && GConfig->GetString(Section, TEXT("TranslationLanguages"), TranslationValues, GGameUserSettingsIni);
+
+    if (bHasPersistedTranslations)
+    {
+        Loaded.SelectedTranslations.Reset();
+        TArray<FString> Tokens;
+        TranslationValues.ParseIntoArray(Tokens, TEXT(","), true);
+        for (const FString& Token : Tokens)
+        {
+            EEVVocabularyTranslationLanguage Language = EEVVocabularyTranslationLanguage::None;
+            if (EVVocabularyLanguage::TryParseTranslationLanguage(Token, Language))
+            {
+                Loaded.SelectedTranslations.Add(Language);
+            }
+        }
+    }
+
+    Loaded.Normalize();
+    VocabularyLanguagePreferences = MoveTemp(Loaded);
+}
+
+void UEVGameInstance::SaveVocabularyLanguagePreferences() const
+{
+    if (!GConfig)
+    {
+        return;
+    }
+
+    static const TCHAR* Section = TEXT("EnhanceVocabulary.LanguagePreferences");
+
+    GConfig->SetString(Section, TEXT("DatabaseContext"),
+                       *EVVocabularyLanguage::GetDatabaseContextId(VocabularyLanguagePreferences.DatabaseContext),
+                       GGameUserSettingsIni);
+
+    TArray<FString> TranslationIds;
+    for (const EEVVocabularyTranslationLanguage Language : VocabularyLanguagePreferences.SelectedTranslations)
+    {
+        const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
+        if (!Code.IsEmpty())
+        {
+            TranslationIds.Add(Code);
+        }
+    }
+    GConfig->SetString(Section, TEXT("TranslationLanguages"), *FString::Join(TranslationIds, TEXT(",")),
+                       GGameUserSettingsIni);
+    GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void UEVGameInstance::HandleApplicationWillEnterBackground()
+{
+    SaveVocabularyLanguagePreferences();
 }
 
 EEVConnectionState UEVGameInstance::GetConnectionState() const

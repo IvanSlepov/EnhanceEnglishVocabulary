@@ -11,6 +11,7 @@
 #include "EVPopUpSettingsTypes.h"
 #include "EVVocabularyInteractionTypes.h"
 #include "EVVocabularyFilterTypes.h"
+#include "EVVocabularyLanguageTypes.h"
 
 #include "EVWidgetCommonEvents.generated.h"
 
@@ -32,6 +33,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPopUpIntervalSelectedFromSettings
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVocabularyValueActionRequested, const FEVVocabularyValueActionRequest&,
                                             Request);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnVocabularyFiltersRequested);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVocabularyLanguagePreferencesChangedFromWidgets,
+                                            const FEVVocabularyLanguagePreferences&, Preferences);
 
 UINTERFACE(BlueprintType)
 class ENHANCEVOCABULARYCORE_API UEVWidgetCommonEvents : public UInterface
@@ -104,6 +107,11 @@ public:
         return nullptr;
     }
 
+    virtual FOnVocabularyLanguagePreferencesChangedFromWidgets* GetVocabularyLanguagePreferencesChangedEvent()
+    {
+        return nullptr;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) {}
 
     virtual void HandleReviewWordsRefresh() {}
@@ -115,4 +123,6 @@ public:
     virtual void HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& EVPopUpSettingsInfo) {}
 
     virtual void HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria) {}
+
+    virtual void HandleVocabularyLanguagePreferencesApplied(const FEVVocabularyLanguagePreferences& Preferences) {}
 };

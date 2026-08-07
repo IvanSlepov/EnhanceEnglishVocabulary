@@ -7,6 +7,7 @@
 #include "Components/TextBlock.h"
 #include "EVEntryItem.h"
 #include "EVVocabularyEntryMeaningWidget.h"
+#include "EVVocabularyTranslationUtils.h"
 #include "EVVocabularyUiStyle.h"
 #include "EVWordInputValidator.h"
 
@@ -277,11 +278,6 @@ FString UEVWordEntryWidgetDetailed::ResolveSelectedVocabularyLanguageCode() cons
     return TEXT("en");
 }
 
-FString UEVWordEntryWidgetDetailed::ResolveSelectedTranslationLanguageCode() const
-{
-    return TEXT("uk");
-}
-
 FEVVocabularyRecord
 UEVWordEntryWidgetDetailed::BuildRecordForDetailedDisplay(const FEVVocabularyRecord& SourceRecord) const
 {
@@ -292,17 +288,15 @@ UEVWordEntryWidgetDetailed::BuildRecordForDetailedDisplay(const FEVVocabularyRec
         return Result;
     }
 
-    const FString SelectedTranslationLanguage = ResolveSelectedTranslationLanguageCode();
-    TArray<FEVVocabularyTranslation> RemainingGeneralTranslations;
+    // Detailed View is a representation of stored vocabulary data, not of the
+    // currently selected web-translation request targets. Show every stored
+    // translation. General translations remain associated with the first
+    // meaning until a future explicit translation-display filter is added.
+    TArray<FEVVocabularyTranslation> GeneralTranslations = Result.GeneralTranslations;
+    EVVocabularyTranslationUtils::NormalizeTranslations(GeneralTranslations);
 
-    for (const FEVVocabularyTranslation& Translation : Result.GeneralTranslations)
+    for (FEVVocabularyTranslation& Translation : GeneralTranslations)
     {
-        if (!Translation.TargetLanguage.Equals(SelectedTranslationLanguage, ESearchCase::IgnoreCase))
-        {
-            RemainingGeneralTranslations.Add(Translation);
-            continue;
-        }
-
         if (Translation.TranslationText.IsEmpty())
         {
             continue;
@@ -317,14 +311,19 @@ UEVWordEntryWidgetDetailed::BuildRecordForDetailedDisplay(const FEVVocabularyRec
 
         if (!bAlreadyPresent)
         {
-            FEVVocabularyTranslation MeaningTranslation = Translation;
-            MeaningTranslation.TargetPartOfSpeech = Result.Meanings[0].PartOfSpeech;
-            MeaningTranslation.DisplayOrder = Result.Meanings[0].Translations.Num();
-            Result.Meanings[0].Translations.Add(MoveTemp(MeaningTranslation));
+            Translation.TargetPartOfSpeech = Result.Meanings[0].PartOfSpeech;
+            Translation.DisplayOrder = Result.Meanings[0].Translations.Num();
+            Result.Meanings[0].Translations.Add(MoveTemp(Translation));
         }
     }
 
-    Result.GeneralTranslations = MoveTemp(RemainingGeneralTranslations);
+    Result.GeneralTranslations.Reset();
+
+    for (FEVVocabularyMeaning& Meaning : Result.Meanings)
+    {
+        EVVocabularyTranslationUtils::NormalizeTranslations(Meaning.Translations);
+    }
+
     return Result;
 }
 
@@ -340,37 +339,7 @@ void UEVWordEntryWidgetDetailed::NormalizeEditableCollections(FEVVocabularyRecor
 
 void UEVWordEntryWidgetDetailed::NormalizeTranslations(FEVVocabularyMeaning& Meaning) const
 {
-    TArray<FEVVocabularyTranslation> NormalizedTranslations;
-
-    for (const FEVVocabularyTranslation& SourceTranslation : Meaning.Translations)
-    {
-        TArray<FString> Values;
-        SplitEditableValues(SourceTranslation.TranslationText, Values);
-
-        for (const FString& Value : Values)
-        {
-            const bool bDuplicate = NormalizedTranslations.ContainsByPredicate(
-                [&SourceTranslation, &Value](const FEVVocabularyTranslation& Existing)
-                {
-                    return Existing.TargetLanguage.Equals(SourceTranslation.TargetLanguage, ESearchCase::IgnoreCase) &&
-                           Existing.TargetPartOfSpeech.Equals(SourceTranslation.TargetPartOfSpeech,
-                                                              ESearchCase::IgnoreCase) &&
-                           Existing.TranslationText.Equals(Value, ESearchCase::IgnoreCase);
-                });
-
-            if (bDuplicate)
-            {
-                continue;
-            }
-
-            FEVVocabularyTranslation NewTranslation = SourceTranslation;
-            NewTranslation.TranslationText = Value;
-            NewTranslation.DisplayOrder = NormalizedTranslations.Num();
-            NormalizedTranslations.Add(MoveTemp(NewTranslation));
-        }
-    }
-
-    Meaning.Translations = MoveTemp(NormalizedTranslations);
+    EVVocabularyTranslationUtils::NormalizeTranslations(Meaning.Translations);
 }
 
 void UEVWordEntryWidgetDetailed::NormalizeRelations(FEVVocabularyMeaning& Meaning, const FString& RelationType) const

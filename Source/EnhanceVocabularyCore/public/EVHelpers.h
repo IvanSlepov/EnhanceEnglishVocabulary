@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "EVVocabularyLanguageTypes.h"
 #include "EVHelpers.generated.h"
 
 /**
@@ -26,4 +27,7 @@ public:
     // We use this path in the packaged app to allow CRUD operations
     UFUNCTION(BlueprintCallable, Category = "EV|Paths")
     static FString GetVocabularyLiveDbPath();
+
+    static FString GetVocabularyDebugDbPathForContext(EEVVocabularyDBContext Context);
+    static FString GetVocabularyLiveDbPathForContext(EEVVocabularyDBContext Context);
 };
