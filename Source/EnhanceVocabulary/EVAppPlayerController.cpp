@@ -166,6 +166,25 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                     UE_LOG(LogTemp, Error,
                            TEXT("FOnVocabularyFiltersRequested in EVAppPlayerController.cpp is nullptr"));
                 }
+
+                if (FOnVocabularyLanguagePreferencesChangedFromWidgets* LanguagePreferencesChanged =
+                        WidgetCommonEvents->GetVocabularyLanguagePreferencesChangedEvent())
+                {
+                    LanguagePreferencesChanged->AddDynamic(this,
+                                                           &ThisClass::HandleVocabularyLanguagePreferencesChanged);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnVocabularyLanguagePreferencesChangedFromWidgets in EVAppPlayerController.cpp is "
+                                "nullptr"));
+                }
+
+                if (EVGameInstance)
+                {
+                    WidgetCommonEvents->HandleVocabularyLanguagePreferencesApplied(
+                        EVGameInstance->GetVocabularyLanguagePreferences());
+                }
             }
             else
             {
@@ -533,7 +552,12 @@ void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialo
     else if (DialogType == EEVConfirmationDialogType::UnsupportedTranslationLanguage ||
              DialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext)
     {
-        ConfirmationDialogInfo.SubjectValue = PendingVocabularyValueActionRequest.Translation.TargetLanguage;
+        EEVVocabularyTranslationLanguage Language = EEVVocabularyTranslationLanguage::None;
+        ConfirmationDialogInfo.SubjectValue =
+            EVVocabularyLanguage::TryParseTranslationLanguage(
+                PendingVocabularyValueActionRequest.Translation.TargetLanguage, Language)
+                ? EVVocabularyLanguage::GetTranslationLanguageDisplayText(Language).ToString()
+                : PendingVocabularyValueActionRequest.Translation.TargetLanguage;
     }
     else if (DialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord ||
              DialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
@@ -1305,6 +1329,27 @@ void AEVAppPlayerController::HandleVocabularyValueActionRequested(const FEVVocab
     }
 }
 
+void AEVAppPlayerController::HandleVocabularyLanguagePreferencesChanged(
+    const FEVVocabularyLanguagePreferences& Preferences)
+{
+    if (!EVGameInstance)
+    {
+        return;
+    }
+
+    if (!EVGameInstance->SetVocabularyLanguagePreferences(Preferences))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to apply vocabulary language preferences."));
+        return;
+    }
+
+    if (WidgetCommonEvents)
+    {
+        WidgetCommonEvents->HandleVocabularyLanguagePreferencesApplied(
+            EVGameInstance->GetVocabularyLanguagePreferences());
+    }
+}
+
 void AEVAppPlayerController::HandleRelationValueAction(const FEVVocabularyValueActionRequest& Request)
 {
     if (!EVGameInstance)
@@ -1354,7 +1399,16 @@ void AEVAppPlayerController::HandleTranslationValueAction(const FEVVocabularyVal
 
 bool AEVAppPlayerController::DoesTranslationWordExistInTargetContext(const FEVVocabularyTranslation& Translation) const
 {
-    if (!EVGameInstance || !Translation.TargetLanguage.Equals(TEXT("en"), ESearchCase::IgnoreCase))
+    if (!EVGameInstance)
+    {
+        return false;
+    }
+
+    EEVVocabularyTranslationLanguage TranslationLanguage = EEVVocabularyTranslationLanguage::None;
+    EEVVocabularyDBContext TargetContext = EEVVocabularyDBContext::None;
+    if (!EVVocabularyLanguage::TryParseTranslationLanguage(Translation.TargetLanguage, TranslationLanguage) ||
+        !EVVocabularyLanguage::TryResolveDatabaseContextForTranslation(TranslationLanguage, TargetContext) ||
+        TargetContext != EVGameInstance->GetVocabularyLanguagePreferences().DatabaseContext)
     {
         return false;
     }
@@ -1366,19 +1420,16 @@ bool AEVAppPlayerController::DoesTranslationWordExistInTargetContext(const FEVVo
 EEVVocabularyLanguageSupportState
 AEVAppPlayerController::ResolveTranslationLanguageSupport(const FString& LanguageCode) const
 {
-    static const TSet<FString> SupportedLanguages = {TEXT("en"), TEXT("uk"), TEXT("ru"), TEXT("it"),
-                                                     TEXT("fr"), TEXT("es"), TEXT("de")};
-
-    FString NormalizedCode = LanguageCode.TrimStartAndEnd();
-    NormalizedCode.ToLowerInline();
-
-    if (!SupportedLanguages.Contains(NormalizedCode))
+    EEVVocabularyTranslationLanguage TranslationLanguage = EEVVocabularyTranslationLanguage::None;
+    if (!EVVocabularyLanguage::TryParseTranslationLanguage(LanguageCode, TranslationLanguage))
     {
         return EEVVocabularyLanguageSupportState::Unsupported;
     }
 
-    return NormalizedCode == TEXT("en") ? EEVVocabularyLanguageSupportState::SupportedWithContext
-                                        : EEVVocabularyLanguageSupportState::SupportedWithoutContext;
+    EEVVocabularyDBContext TargetContext = EEVVocabularyDBContext::None;
+    return EVVocabularyLanguage::TryResolveDatabaseContextForTranslation(TranslationLanguage, TargetContext)
+               ? EEVVocabularyLanguageSupportState::SupportedWithContext
+               : EEVVocabularyLanguageSupportState::SupportedWithoutContext;
 }
 
 void AEVAppPlayerController::HandleTranslationContextCreationConfirmed()

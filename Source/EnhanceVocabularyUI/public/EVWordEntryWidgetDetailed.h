@@ -112,7 +112,6 @@ private:
 
     const FEVVocabularyPronunciation* ResolvePrimaryPronunciation() const;
     FString ResolveSelectedVocabularyLanguageCode() const;
-    FString ResolveSelectedTranslationLanguageCode() const;
     FEVVocabularyRecord BuildRecordForDetailedDisplay(const FEVVocabularyRecord& SourceRecord) const;
 
     void NormalizeEditableCollections(FEVVocabularyRecord& Record) const;

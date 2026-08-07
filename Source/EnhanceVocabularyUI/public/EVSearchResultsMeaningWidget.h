@@ -94,7 +94,6 @@ private:
      * Returns "uk" for the current Add Word implementation.
      * This function will later read AppSettings.
      */
-    FString ResolveSelectedTranslationLanguageCode() const;
 
     /**
      * Applies normal or missing-data color to a value TextBlock.

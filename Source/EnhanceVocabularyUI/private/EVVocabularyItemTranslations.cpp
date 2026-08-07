@@ -2,6 +2,11 @@
 
 #include "EVVocabularyItemTranslations.h"
 
+#include "Components/Image.h"
+#include "Engine/Texture2D.h"
+#include "EVVocabularyLanguageTypes.h"
+#include "EVVocabularyLanguageUiData.h"
+
 void UEVVocabularyItemTranslations::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
@@ -16,6 +21,7 @@ void UEVVocabularyItemTranslations::SetTranslation(const FEVVocabularyTranslatio
     Translation = InTranslation;
 
     SetValue(Translation.TranslationText);
+    ApplyLanguageFlag();
 }
 
 const FEVVocabularyTranslation& UEVVocabularyItemTranslations::GetTranslation() const
@@ -44,4 +50,29 @@ void UEVVocabularyItemTranslations::HandleTranslationValueCommitted(UEVVocabular
     }
 
     Translation.TranslationText = CommittedValue;
+}
+
+void UEVVocabularyItemTranslations::ApplyLanguageFlag()
+{
+    if (!Image_LanguageCountryFlag)
+    {
+        return;
+    }
+
+    EEVVocabularyTranslationLanguage Language = EEVVocabularyTranslationLanguage::None;
+    if (!EVVocabularyLanguage::TryParseTranslationLanguage(Translation.TargetLanguage, Language))
+    {
+        Image_LanguageCountryFlag->SetVisibility(ESlateVisibility::Hidden);
+        return;
+    }
+
+    UTexture2D* Flag = LanguageUiData ? LanguageUiData->GetFlagTexture(Language) : nullptr;
+    if (!Flag)
+    {
+        Image_LanguageCountryFlag->SetVisibility(ESlateVisibility::Hidden);
+        return;
+    }
+
+    Image_LanguageCountryFlag->SetBrushFromTexture(Flag, false);
+    Image_LanguageCountryFlag->SetVisibility(ESlateVisibility::Visible);
 }

@@ -188,17 +188,10 @@ FString UEVSearchResultsMeaningWidget::BuildTranslationsText(bool& bOutHasTransl
 {
     bOutHasTranslations = false;
 
-    const FString SelectedLanguageCode = ResolveSelectedTranslationLanguageCode();
-
     TArray<FString> TranslationValues;
 
     for (const FEVVocabularyTranslation& Translation : CurrentMeaning.Translations)
     {
-        if (!Translation.TargetLanguage.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase))
-        {
-            continue;
-        }
-
         if (Translation.TranslationText.IsEmpty())
         {
             continue;
@@ -247,11 +240,6 @@ FString UEVSearchResultsMeaningWidget::BuildRelationsText(const FString& Relatio
     }
 
     return FString::Join(RelationValues, TEXT(", "));
-}
-
-FString UEVSearchResultsMeaningWidget::ResolveSelectedTranslationLanguageCode() const
-{
-    return TEXT("uk");
 }
 
 void UEVSearchResultsMeaningWidget::ApplyValueColor(UTextBlock* TextBlock, const bool bHasValue) const

@@ -99,6 +99,8 @@ void UEVRootWidget::NativeOnInitialized()
         // Binding the EVGameInstance handler to catch and pass the EVWebProviders to the Storage functions
         Settings_SelectWebProviders->OnWebProvidersSelectionChangedSettingsWidget.AddDynamic(
             AddWord, &UEVAddWordWidget::HandleWebProvidersChanged);
+        Settings_SelectWebProviders->OnVocabularyLanguagePreferencesChangedSettingsWidget.AddUniqueDynamic(
+            this, &ThisClass::HandleVocabularyLanguagePreferencesChanged);
     }
 
     if (ImportExportDB)
@@ -543,5 +545,23 @@ void UEVRootWidget::HandleVocabularyFiltersApplied(const FEVVocabularyQueryCrite
     if (ReviewWords)
     {
         ReviewWords->ApplyQueryCriteria(Criteria);
+    }
+}
+
+void UEVRootWidget::HandleVocabularyLanguagePreferencesChanged(const FEVVocabularyLanguagePreferences& Preferences)
+{
+    OnVocabularyLanguagePreferencesChanged.Broadcast(Preferences);
+}
+
+void UEVRootWidget::HandleVocabularyLanguagePreferencesApplied(const FEVVocabularyLanguagePreferences& Preferences)
+{
+    if (Settings_SelectWebProviders)
+    {
+        Settings_SelectWebProviders->ApplyVocabularyLanguagePreferences(Preferences);
+    }
+
+    if (ReviewWords)
+    {
+        ReviewWords->RefreshReview();
     }
 }

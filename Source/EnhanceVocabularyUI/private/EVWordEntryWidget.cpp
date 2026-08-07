@@ -5,6 +5,9 @@
 #include "EVEntryItem.h"
 #include "EVVocabularyUiStyle.h"
 #include "EVVocabularyEntryMeaningWidget.h"
+#include "EnhanceVocabulary/EVGameInstance.h"
+#include "EVVocabularyLanguageTypes.h"
+#include "EVVocabularyTranslationUtils.h"
 
 void UEVWordEntryWidget::NativeOnInitialized()
 {
@@ -157,38 +160,57 @@ const FEVVocabularyPronunciation* UEVWordEntryWidget::ResolvePrimaryPronunciatio
 
 FString UEVWordEntryWidget::ResolveSelectedVocabularyLanguageCode() const
 {
-    // Temporary source-language mode. This will be read from AppSettings
-    // when vocabulary language modes are introduced.
+    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
+    {
+        return EVVocabularyLanguage::GetDatabaseContextPronunciationLanguageCode(
+            GameInstance->GetVocabularyLanguagePreferences().DatabaseContext);
+    }
     return TEXT("en");
 }
 
-FString UEVWordEntryWidget::ResolveSelectedTranslationLanguageCode() const
+TArray<FString> UEVWordEntryWidget::ResolveSelectedTranslationLanguageCodes() const
 {
-    // Temporary translation target. This will be read from AppSettings
-    // when translation-language selection is introduced.
-    return TEXT("uk");
+    TArray<FString> Codes;
+    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
+    {
+        for (const EEVVocabularyTranslationLanguage Language :
+             GameInstance->GetVocabularyLanguagePreferences().SelectedTranslations)
+        {
+            const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
+            if (!Code.IsEmpty())
+            {
+                Codes.AddUnique(Code);
+                if (Language == EEVVocabularyTranslationLanguage::Ukrainian)
+                {
+                    Codes.AddUnique(TEXT("ua")); // legacy compatibility
+                }
+                else if (Language == EEVVocabularyTranslationLanguage::EnglishUSA)
+                {
+                    Codes.AddUnique(TEXT("en")); // legacy broad English code
+                }
+            }
+        }
+    }
+    return Codes;
 }
 
 FEVVocabularyMeaning UEVWordEntryWidget::BuildMeaningForDisplay(const FEVVocabularyMeaning& SourceMeaning,
                                                                 const bool bIsFirstMeaning) const
 {
     FEVVocabularyMeaning Result = SourceMeaning;
+    EVVocabularyTranslationUtils::NormalizeTranslations(Result.Translations);
 
-    const FString SelectedLanguageCode = ResolveSelectedTranslationLanguageCode();
-
-    Result.Translations.RemoveAll(
-        [&SelectedLanguageCode](const FEVVocabularyTranslation& Translation)
-        { return !Translation.TargetLanguage.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase); });
-
-    if (!Result.Translations.IsEmpty() || !bIsFirstMeaning)
+    if (!bIsFirstMeaning)
     {
         return Result;
     }
 
-    for (const FEVVocabularyTranslation& GeneralTranslation : CurrentVocabularyRecord.GeneralTranslations)
+    TArray<FEVVocabularyTranslation> GeneralTranslations = CurrentVocabularyRecord.GeneralTranslations;
+    EVVocabularyTranslationUtils::NormalizeTranslations(GeneralTranslations);
+
+    for (const FEVVocabularyTranslation& GeneralTranslation : GeneralTranslations)
     {
-        if (!GeneralTranslation.TargetLanguage.Equals(SelectedLanguageCode, ESearchCase::IgnoreCase) ||
-            GeneralTranslation.TranslationText.IsEmpty())
+        if (GeneralTranslation.TranslationText.IsEmpty())
         {
             continue;
         }
@@ -204,7 +226,10 @@ FEVVocabularyMeaning UEVWordEntryWidget::BuildMeaningForDisplay(const FEVVocabul
 
         if (!bAlreadyAdded)
         {
-            Result.Translations.Add(GeneralTranslation);
+            FEVVocabularyTranslation Translation = GeneralTranslation;
+            Translation.TargetPartOfSpeech = Result.PartOfSpeech;
+            Translation.DisplayOrder = Result.Translations.Num();
+            Result.Translations.Add(MoveTemp(Translation));
         }
     }
 

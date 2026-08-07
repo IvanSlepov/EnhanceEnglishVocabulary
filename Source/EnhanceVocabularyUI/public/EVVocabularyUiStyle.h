@@ -61,6 +61,16 @@ inline const FSlateColor& GetActiveFiltersTextFontColor()
     return Color;
 }
 
+inline const FSlateColor& GetInactiveTranslationsTextFontColor()
+{
+    return GetInactiveFiltersTextFontColor();
+}
+
+inline const FSlateColor& GetActiveTranslationsTextFontColor()
+{
+    return GetActiveFiltersTextFontColor();
+}
+
 inline FString BuildWrappedWordForDisplay(const FString& Word, int32 BreakInterval = 14)
 {
     if (Word.IsEmpty() || BreakInterval <= 0)

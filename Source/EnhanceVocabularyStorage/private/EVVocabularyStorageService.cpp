@@ -4,6 +4,7 @@
 #include "EVVocabularyFieldRegistry.h"
 #include "EVVocabularySqlQueries.h"
 #include "EVWordInputValidator.h"
+#include "EVVocabularyTranslationUtils.h"
 
 #include "EVImportValidationReportFormatter.h"
 #include "EVImportValidationRules.h"
@@ -264,13 +265,14 @@ FString JoinRelationValues(const TArray<FEVVocabularyRelation>& Values, const FS
 }
 } // namespace
 
-bool UEVVocabularyStorageService::InitializeStorage()
+bool UEVVocabularyStorageService::InitializeStorage(const EEVVocabularyDBContext DatabaseContext)
 {
+    ActiveDatabaseContext = DatabaseContext;
 #if WITH_EDITOR
-    const FString DbPath = UEVHelpers::GetVocabularyDebugDbPath();
+    const FString DbPath = UEVHelpers::GetVocabularyDebugDbPathForContext(DatabaseContext);
     UE_LOG(LogTemp, Warning, TEXT("Editor Debug DB path: %s"), *DbPath);
 #else
-    const FString DbPath = UEVHelpers::GetVocabularyLiveDbPath();
+    const FString DbPath = UEVHelpers::GetVocabularyLiveDbPathForContext(DatabaseContext);
     UE_LOG(LogTemp, Warning, TEXT("Packaged Live DB path: %s"), *DbPath);
 #endif
 
@@ -546,11 +548,15 @@ FEVVocabularyRecord UEVVocabularyStorageService::ConvertLegacyEntryToRecord(cons
 
     auto AddTranslation = [&Record](const FString& Text, const TCHAR* Language)
     {
-        if (!Text.IsEmpty())
+        FEVVocabularyTranslation PackedTranslation;
+        PackedTranslation.TranslationText = Text;
+        PackedTranslation.TargetLanguage = Language;
+
+        TArray<FEVVocabularyTranslation> ExpandedTranslations;
+        EVVocabularyTranslationUtils::ExpandTranslation(PackedTranslation, ExpandedTranslations);
+        for (FEVVocabularyTranslation& Translation : ExpandedTranslations)
         {
-            FEVVocabularyTranslation Translation;
-            Translation.TranslationText = Text;
-            Translation.TargetLanguage = Language;
+            Translation.DisplayOrder = Record.GeneralTranslations.Num();
             Record.GeneralTranslations.Add(MoveTemp(Translation));
         }
     };
@@ -987,10 +993,22 @@ bool UEVVocabularyStorageService::GetVocabularyRecordByWord(const FString& Word,
         double Confidence = 0.0;
         T.GetColumnValueByIndex(7, Confidence);
         V.Confidence = static_cast<float>(Confidence);
-        if (MeaningId != 0 && MeaningIndex.Contains(MeaningId))
-            OutRecord.Meanings[MeaningIndex[MeaningId]].Translations.Add(MoveTemp(V));
-        else
-            OutRecord.GeneralTranslations.Add(MoveTemp(V));
+        TArray<FEVVocabularyTranslation> ExpandedTranslations;
+        EVVocabularyTranslationUtils::ExpandTranslation(V, ExpandedTranslations);
+        for (FEVVocabularyTranslation& Expanded : ExpandedTranslations)
+        {
+            if (MeaningId != 0 && MeaningIndex.Contains(MeaningId))
+            {
+                TArray<FEVVocabularyTranslation>& Target = OutRecord.Meanings[MeaningIndex[MeaningId]].Translations;
+                Expanded.DisplayOrder = Target.Num();
+                Target.Add(MoveTemp(Expanded));
+            }
+            else
+            {
+                Expanded.DisplayOrder = OutRecord.GeneralTranslations.Num();
+                OutRecord.GeneralTranslations.Add(MoveTemp(Expanded));
+            }
+        }
     }
 
     FSQLitePreparedStatement R;

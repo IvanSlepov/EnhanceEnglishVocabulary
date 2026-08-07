@@ -5,6 +5,7 @@
 #include "EnhanceVocabulary/EVGameInstance.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
+#include "EVDBLanguageContextAndTranslationsWidget.h"
 
 void UEVAppSettingsWidget::NativeOnInitialized()
 {
@@ -14,6 +15,12 @@ void UEVAppSettingsWidget::NativeOnInitialized()
     {
         WBP_SelectWebProviders->OnWebProvidersSelectionChanged.AddDynamic(
             this, &ThisClass::HandleDefinitionUsageProviderChanged);
+    }
+
+    if (WBP_DBLanguageContextAndTranslations)
+    {
+        WBP_DBLanguageContextAndTranslations->OnPreferencesChanged.AddUniqueDynamic(
+            this, &ThisClass::HandleVocabularyLanguagePreferencesChanged);
     }
 }
 
@@ -41,4 +48,18 @@ void UEVAppSettingsWidget::HandleDefinitionUsageProviderChanged(EEVWebProvider D
                                                                 EEVWebProvider TranslationProvider)
 {
     OnWebProvidersSelectionChangedSettingsWidget.Broadcast(DefinitionUsageProvider, TranslationProvider);
+}
+
+void UEVAppSettingsWidget::ApplyVocabularyLanguagePreferences(const FEVVocabularyLanguagePreferences& Preferences)
+{
+    if (WBP_DBLanguageContextAndTranslations)
+    {
+        WBP_DBLanguageContextAndTranslations->SetInitialPreferences(Preferences);
+    }
+}
+
+void UEVAppSettingsWidget::HandleVocabularyLanguagePreferencesChanged(
+    const FEVVocabularyLanguagePreferences& Preferences)
+{
+    OnVocabularyLanguagePreferencesChangedSettingsWidget.Broadcast(Preferences);
 }

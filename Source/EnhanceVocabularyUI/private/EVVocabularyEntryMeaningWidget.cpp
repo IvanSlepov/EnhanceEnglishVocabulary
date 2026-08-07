@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "EVVocabularyEntryMeaningWidget.h"
+#include "EVVocabularyTranslationUtils.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/MultiLineEditableTextBox.h"
@@ -191,6 +192,7 @@ void UEVVocabularyEntryMeaningWidget::NativeOnListItemObjectSet(UObject* ListIte
 void UEVVocabularyEntryMeaningWidget::SetMeaning(const FEVVocabularyMeaning& InMeaning)
 {
     CurrentMeaning = InMeaning;
+    EVVocabularyTranslationUtils::NormalizeTranslations(CurrentMeaning.Translations);
 
     PopulateMeaning();
 }
@@ -284,7 +286,10 @@ void UEVVocabularyEntryMeaningWidget::PopulateTranslations()
         return;
     }
 
-    for (const FEVVocabularyTranslation& Translation : CurrentMeaning.Translations)
+    TArray<FEVVocabularyTranslation> DisplayTranslations = CurrentMeaning.Translations;
+    EVVocabularyTranslationUtils::NormalizeTranslations(DisplayTranslations);
+
+    for (const FEVVocabularyTranslation& Translation : DisplayTranslations)
     {
         if (Translation.TranslationText.IsEmpty())
         {

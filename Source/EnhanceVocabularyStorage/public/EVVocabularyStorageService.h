@@ -6,6 +6,7 @@
 #include "UObject/Object.h"
 #include "EVVocabularyTypes.h"
 #include "EVVocabularyFilterTypes.h"
+#include "EVVocabularyLanguageTypes.h"
 #include "SQLiteDatabase.h"
 #include "EVFileExchangeTypes.h"
 #include "EVImportValidationTypes.h"
@@ -35,7 +36,7 @@ class ENHANCEVOCABULARYSTORAGE_API UEVVocabularyStorageService : public UObject
     GENERATED_BODY()
 
 public:
-    bool InitializeStorage();
+    bool InitializeStorage(EEVVocabularyDBContext DatabaseContext = EEVVocabularyDBContext::EnglishUSA);
     bool SaveVocabularyEntry(const FVocabularyEntry& Entry);
     bool UpdateVocabularyEntry(const FVocabularyEntry& Entry);
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
@@ -89,6 +90,7 @@ public:
 
 private:
     FSQLiteDatabase Database;
+    EEVVocabularyDBContext ActiveDatabaseContext = EEVVocabularyDBContext::EnglishUSA;
 
     bool InitializeSchema();
     bool CreateNormalizedSchema();
