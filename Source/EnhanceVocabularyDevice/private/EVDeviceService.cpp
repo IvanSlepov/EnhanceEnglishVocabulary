@@ -96,12 +96,14 @@ void UEVDeviceService::OpenNotificationSettings()
 #endif
 }
 
-bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
+bool UEVDeviceService::ShowVocabularyNotification(const FString& Word, const FString& NormalizedWord,
+                                                  const FString& Transcription, const FString& PartOfSpeech,
+                                                  const int32 MeaningDisplayOrder, const FString& DefinitionText,
+                                                  const int32 DefinitionDisplayOrder, const int32 NotificationMode)
 {
-    if (Word.IsEmpty())
+    if (Word.IsEmpty() || PartOfSpeech.IsEmpty() || DefinitionText.IsEmpty())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Cannot show notification: word is empty."));
-
+        UE_LOG(LogTemp, Warning, TEXT("Cannot show notification: RandomWord payload is incomplete."));
         return false;
     }
 
@@ -112,33 +114,51 @@ bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
     if (!Env)
     {
         UE_LOG(LogTemp, Error, TEXT("Cannot show notification: Java environment is invalid."));
-
         return false;
     }
 
-    static jmethodID ShowNotificationMethod =
-        FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
-                                 "AndroidThunkJava_EV_ShowVocabularyNotification", "(Ljava/lang/String;)V", false);
+    static jmethodID ShowNotificationMethod = FJavaWrapper::FindMethod(
+        Env, FJavaWrapper::GameActivityClassID, "AndroidThunkJava_EV_ShowVocabularyNotification",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;II)V", false);
 
     if (!ShowNotificationMethod)
     {
         UE_LOG(LogTemp, Error, TEXT("Cannot find Android vocabulary notification method."));
-
         return false;
     }
 
     jstring JavaWord = Env->NewStringUTF(TCHAR_TO_UTF8(*Word));
+    jstring JavaNormalizedWord = Env->NewStringUTF(TCHAR_TO_UTF8(*NormalizedWord));
+    jstring JavaTranscription = Env->NewStringUTF(TCHAR_TO_UTF8(*Transcription));
+    jstring JavaPartOfSpeech = Env->NewStringUTF(TCHAR_TO_UTF8(*PartOfSpeech));
+    jstring JavaDefinitionText = Env->NewStringUTF(TCHAR_TO_UTF8(*DefinitionText));
 
-    if (!JavaWord)
+    if (!JavaWord || !JavaNormalizedWord || !JavaTranscription || !JavaPartOfSpeech || !JavaDefinitionText)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to convert vocabulary word to Java string."));
+        if (JavaWord)
+            Env->DeleteLocalRef(JavaWord);
+        if (JavaNormalizedWord)
+            Env->DeleteLocalRef(JavaNormalizedWord);
+        if (JavaTranscription)
+            Env->DeleteLocalRef(JavaTranscription);
+        if (JavaPartOfSpeech)
+            Env->DeleteLocalRef(JavaPartOfSpeech);
+        if (JavaDefinitionText)
+            Env->DeleteLocalRef(JavaDefinitionText);
 
+        UE_LOG(LogTemp, Error, TEXT("Failed to convert RandomWord notification payload to Java strings."));
         return false;
     }
 
-    Env->CallVoidMethod(FJavaWrapper::GameActivityThis, ShowNotificationMethod, JavaWord);
+    Env->CallVoidMethod(FJavaWrapper::GameActivityThis, ShowNotificationMethod, JavaWord, JavaNormalizedWord,
+                        JavaTranscription, JavaPartOfSpeech, MeaningDisplayOrder, JavaDefinitionText,
+                        DefinitionDisplayOrder, NotificationMode);
 
     Env->DeleteLocalRef(JavaWord);
+    Env->DeleteLocalRef(JavaNormalizedWord);
+    Env->DeleteLocalRef(JavaTranscription);
+    Env->DeleteLocalRef(JavaPartOfSpeech);
+    Env->DeleteLocalRef(JavaDefinitionText);
 
     if (Env->ExceptionCheck())
     {
@@ -146,7 +166,6 @@ bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
         Env->ExceptionClear();
 
         UE_LOG(LogTemp, Error, TEXT("Java exception occurred while showing vocabulary notification."));
-
         return false;
     }
 
@@ -154,7 +173,8 @@ bool UEVDeviceService::ShowVocabularyNotification(const FString& Word)
 
 #else
 
-    UE_LOG(LogTemp, Warning, TEXT("Vocabulary notification test: %s"), *Word);
+    UE_LOG(LogTemp, Warning, TEXT("Vocabulary notification test: %s | %s | %s | %d. %s"), *Word, *Transcription,
+           *PartOfSpeech, DefinitionDisplayOrder + 1, *DefinitionText);
 
     return true;
 

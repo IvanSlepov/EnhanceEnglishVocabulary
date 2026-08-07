@@ -39,6 +39,9 @@ void UEVErrorWidget::HandleRemoveFromParent()
     {
         World->GetTimerManager().ClearTimer(AutoCloseTimerHandler);
     }
+
+    ErrorWidgetDestroyed.Broadcast();
+
     RemoveFromParent();
 }
 

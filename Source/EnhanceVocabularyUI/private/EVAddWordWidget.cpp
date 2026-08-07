@@ -68,22 +68,37 @@ void UEVAddWordWidget::Init()
     Button_Clear->SetIsEnabled(false);
 }
 
-void UEVAddWordWidget::EnableEditableTextBox(bool bIsEditableTextFieldEnabled)
+void UEVAddWordWidget::SetWordInput(const FString& Word)
 {
-    if (bIsEditableTextFieldEnabled)
+    if (!EditableText_WordInput)
     {
-        if (!EditableText_WordInput->GetIsEnabled())
-        {
-            EditableText_WordInput->SetIsEnabled(bIsEditableTextFieldEnabled);
-        }
+        return;
     }
-    else
+
+    EnableEditableTextBox(true);
+    EditableText_WordInput->SetText(FText::FromString(Word));
+    EditableText_WordInput->SetKeyboardFocus();
+}
+
+void UEVAddWordWidget::EnableEditableTextBox(bool bEnable)
+{
+    if (EditableText_WordInput)
     {
-        if (EditableText_WordInput->GetIsEnabled())
-        {
-            EditableText_WordInput->SetIsEnabled(bIsEditableTextFieldEnabled);
-        }
+        EditableText_WordInput->SetIsReadOnly(!bEnable);
     }
+
+    if (Button_Search)
+    {
+        Button_Search->SetIsEnabled(bEnable);
+    }
+
+    if (Button_Clear)
+    {
+        Button_Clear->SetIsEnabled(bEnable);
+    }
+
+    // Any future controls that depend on the editable state
+    // should also be handled here.
 }
 
 void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
@@ -96,6 +111,11 @@ bool UEVAddWordWidget::GetControlsEnabled()
     return bAreInteractionElementsEnabled;
 }
 
+void UEVAddWordWidget::SetInputEnabled(bool bSetInputEnabled)
+{
+    EnableEditableTextBox(bSetInputEnabled);
+}
+
 void UEVAddWordWidget::ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult)
 {
     CachedWordSearchResult = FWordSearchResult{};
@@ -103,50 +123,67 @@ void UEVAddWordWidget::ClearStoredSearchResultVariable(FWordSearchResult& Cached
 
 void UEVAddWordWidget::HandleOnSearchPressed()
 {
-    // Call the event in case local interaction has been disabled
     if (!bAreInteractionElementsEnabled)
     {
         HandleOnWidgetInteractionDisabled();
         return;
     }
 
-    // We need to clear the local WordSearchResult struct to avoid setting
-    // WBP_SearchResultPanel Visible in case of the bad input/existing word
     ClearStoredSearchResultVariable(WordSearchResult);
+
+    if (WBP_SearchResultsPanel)
+    {
+        WBP_SearchResultsPanel->ClearSearchResult();
+        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+    }
+
     EnableEditableTextBox(false);
 
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
+
+        EnableEditableTextBox(true);
+        return;
     }
 
     FString NormalizedWord;
     FText WordInputError;
     FEVErrorInfo EVErrorInfo;
-    FString WordToSearch = EditableText_WordInput->GetText().ToString();
+
+    const FString WordToSearch = EditableText_WordInput->GetText().ToString();
 
     switch (FEVWordInputValidator::ValidateSearchInput(WordToSearch, NormalizedWord, WordInputError))
     {
     case EEVInputValidationResult::Valid:
-        // WordSearchResult = EVGameInstance->SearchWordFake(NormalizedWord); - leave this for debugging purposes
         HandleOnLoadingDataTriggerred(true);
+
         EVGameInstance->SearchWordOnline(NormalizedWord, ActiveDefinitionUsageProvider, ActiveTranslationProvider);
+
         break;
+
     case EEVInputValidationResult::EmptyInput:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::EmptyString;
         EVErrorInfo.Message = WordInputError;
+
         EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
+
         break;
+
     case EEVInputValidationResult::InvalidCharacters:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::InvalidInput;
         EVErrorInfo.Message = WordInputError;
+
         EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
+
         break;
+
     default:
+        EnableEditableTextBox(true);
         break;
     }
 }
@@ -155,44 +192,47 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
 {
     HandleOnLoadingDataTriggerred(false);
 
-    if (Result.bSuccess)
-    {
-        WordSearchResult = Result;
-
-        Button_Search->SetIsEnabled(false);
-        Button_Clear->SetIsEnabled(false);
-
-        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Visible);
-
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranscription->SetText(FText::FromString(Result.Transcription));
-
-        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::FromString(Result.Definition));
-
-        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::FromString(Result.Usage));
-
-        // Set the Usage color to Red if no usage was provided
-        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetColorAndOpacity(
-            Result.bHasUsageExamples ? EVVocabularyUiStyle::GetNormalWrodEntryTextFontColor()
-                                     : EVVocabularyUiStyle::GetMissingWrodEntryTextFontColor());
-
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(
-            FText::FromString(Result.TranslationRu));
-
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(
-            FText::FromString(Result.TranslationUa));
-    }
-    else
+    if (!Result.bSuccess)
     {
         UE_LOG(LogTemp, Error, TEXT("Word search failed."));
+
+        ClearStoredSearchResultVariable(WordSearchResult);
+
+        if (WBP_SearchResultsPanel)
+        {
+            WBP_SearchResultsPanel->ClearSearchResult();
+            WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+        }
 
         FEVErrorInfo EVErrorInfo;
         EVErrorInfo.Source = EEVErrorSource::AddWord;
         EVErrorInfo.Type = EEVErrorType::SearchError;
-        EVErrorInfo.Message = FText::FromString(TEXT(
-            "We couldn't find that word. Please check the spelling or change your dictionary provider in settings."));
-        EnableEditableTextBox(true);
+        EVErrorInfo.Message = FText::FromString(TEXT("We couldn't find that word. Please check the spelling "
+                                                     "or change your dictionary provider in settings."));
+
+        EnableEditableTextBox(false);
         OnError.Broadcast(EVErrorInfo);
+
+        return;
     }
+
+    WordSearchResult = Result;
+
+    Button_Search->SetIsEnabled(false);
+    Button_Clear->SetIsEnabled(false);
+
+    if (!WBP_SearchResultsPanel)
+    {
+        UE_LOG(LogTemp, Error,
+               TEXT("WBP_SearchResultsPanel is nullptr in "
+                    "HandleSearchWordCompleted."));
+
+        EnableEditableTextBox(true);
+        return;
+    }
+
+    WBP_SearchResultsPanel->SetSearchResult(Result);
+    WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Visible);
 }
 
 void UEVAddWordWidget::HandleOnClearPressed()
@@ -239,7 +279,6 @@ void UEVAddWordWidget::HandleOnActionRequested(const FEVRequestedActionInfo& Req
 
 void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
 {
-    // Call the event in case local interaction has been disabled
     if (!bAreInteractionElementsEnabled)
     {
         HandleOnWidgetInteractionDisabled();
@@ -249,14 +288,10 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
     if (!EVGameInstance)
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
+
+        return;
     }
 
-    // Add the LoadingDataSpinner to the Viewport while the results are being saved.
-    // So far, it looks redundant because the DB is small and the saving process
-    // happens immediately so we'll leave this and the following related handlers commented
-    // untill saving time becomes more noticeable
-
-    /*HandleOnLoadingDataTriggerred(true);*/
     FEVRequestedActionInfo EVRequestedActionInfo;
     FEVErrorInfo EVErrorInfo;
     FText OutErrorMessage;
@@ -264,62 +299,64 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
     if (EVGameInstance->DoesWordExist(WordSearchResult.Word, OutErrorMessage) ==
         EEVVocabularyStorageServiceResult::WordExists)
     {
-        /*HandleOnLoadingDataTriggerred(false);*/
-
         EVErrorInfo.Source = EEVErrorSource::Database;
         EVErrorInfo.Type = EEVErrorType::DuplicateWord;
         EVErrorInfo.Message = OutErrorMessage;
 
         Button_Search->SetIsEnabled(true);
         Button_Clear->SetIsEnabled(true);
+
         EnableEditableTextBox(true);
 
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranscription->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+        if (WBP_SearchResultsPanel)
+        {
+            WBP_SearchResultsPanel->ClearSearchResult();
+            WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+        }
+
+        ClearStoredSearchResultVariable(WordSearchResult);
 
         OnError.Broadcast(EVErrorInfo);
+
+        return;
     }
 
-    else if (EVGameInstance->SaveVocabularyEntry(WordSearchResult))
+    if (!EVGameInstance->SaveVocabularyEntry(WordSearchResult))
     {
-        /*HandleOnLoadingDataTriggerred(false);*/
+        UE_LOG(LogTemp, Error, TEXT("Cannot save the entry in WBP_AddWord."));
 
-        EVRequestedActionInfo.Source = EEVRequestedActionSource::AddWord;
-        EVRequestedActionInfo.Type = EEVRequestedActionType::SaveWord;
-        EVRequestedActionInfo.Status = EEVRequestedActionStatus::Saved;
-        EVRequestedActionInfo.GenerateMessage();
-        EVRequestedActionInfo.GenerateColor();
+        return;
+    }
 
-        // Sending the FEVRequestedActionInfo to be fetched by the EVAppPC
-        // and further passed to the EVRequestedActionStatusWidget
-        HandleOnActionRequested(EVRequestedActionInfo);
+    EVRequestedActionInfo.Source = EEVRequestedActionSource::AddWord;
 
-        Button_Search->SetIsEnabled(false);
-        Button_Clear->SetIsEnabled(false);
-        EnableEditableTextBox(true);
-        EditableText_WordInput->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranscription->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsDefinition->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsUsage->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Russian->SetText(FText::GetEmpty());
-        WBP_SearchResultsPanel->TextBlock_SearchResultsTranslation_Ukrainian->SetText(FText::GetEmpty());
+    EVRequestedActionInfo.Type = EEVRequestedActionType::SaveWord;
+
+    EVRequestedActionInfo.Status = EEVRequestedActionStatus::Saved;
+
+    EVRequestedActionInfo.GenerateMessage();
+    EVRequestedActionInfo.GenerateColor();
+
+    HandleOnActionRequested(EVRequestedActionInfo);
+
+    Button_Search->SetIsEnabled(false);
+    Button_Clear->SetIsEnabled(false);
+
+    EnableEditableTextBox(true);
+
+    EditableText_WordInput->SetText(FText::GetEmpty());
+
+    if (WBP_SearchResultsPanel)
+    {
+        WBP_SearchResultsPanel->ClearSearchResult();
         WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
     }
 
-    else
-    {
-        /*HandleOnLoadingDataTriggerred(false);*/
-        UE_LOG(LogTemp, Error, TEXT("Can not save the entry in WBP_AddWord!!!"));
-    }
+    ClearStoredSearchResultVariable(WordSearchResult);
 }
 
 void UEVAddWordWidget::HandleOnDiscardSearchResultPressed()
 {
-    // Call the event in case local interaction has been disabled
     if (!bAreInteractionElementsEnabled)
     {
         HandleOnWidgetInteractionDisabled();
@@ -327,9 +364,17 @@ void UEVAddWordWidget::HandleOnDiscardSearchResultPressed()
     }
 
     EnableEditableTextBox(true);
+
     Button_Search->SetIsEnabled(true);
     Button_Clear->SetIsEnabled(true);
-    WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+
+    if (WBP_SearchResultsPanel)
+    {
+        WBP_SearchResultsPanel->ClearSearchResult();
+        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+    }
+
+    ClearStoredSearchResultVariable(WordSearchResult);
 }
 
 void UEVAddWordWidget::HandleWebProvidersChanged(EEVWebProvider DefinitionUsageProvider,

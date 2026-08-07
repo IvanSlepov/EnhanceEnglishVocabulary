@@ -9,6 +9,8 @@
 #include "EVWordEntryActionTypes.h"
 #include "EVFileExchangeTypes.h"
 #include "EVPopUpSettingsTypes.h"
+#include "EVVocabularyInteractionTypes.h"
+#include "EVVocabularyFilterTypes.h"
 
 #include "EVWidgetCommonEvents.generated.h"
 
@@ -27,6 +29,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnImportExportDownloadDBOperationIs
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPopUpIntervalSelectedFromSettings, const FEVPopUpSettingsInfo&,
                                             PopUpSettingsInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVocabularyValueActionRequested, const FEVVocabularyValueActionRequest&,
+                                            Request);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnVocabularyFiltersRequested);
 
 UINTERFACE(BlueprintType)
 class ENHANCEVOCABULARYCORE_API UEVWidgetCommonEvents : public UInterface
@@ -89,11 +94,25 @@ public:
         return nullptr;
     }
 
+    virtual FOnVocabularyValueActionRequested* GetVocabularyValueActionRequestedEvent()
+    {
+        return nullptr;
+    }
+
+    virtual FOnVocabularyFiltersRequested* GetVocabularyFiltersRequestedEvent()
+    {
+        return nullptr;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) {}
 
     virtual void HandleReviewWordsRefresh() {}
 
     virtual void HandleOpenReviewWordsForNotification(const FString& Word) {}
 
+    virtual void HandleOpenAddWordWithWord(const FString& Word) {}
+
     virtual void HandleApplyResolvedPopUpSettings(const FEVPopUpSettingsInfo& EVPopUpSettingsInfo) {}
+
+    virtual void HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria) {}
 };

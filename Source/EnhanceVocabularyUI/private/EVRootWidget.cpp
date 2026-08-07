@@ -2,6 +2,7 @@
 
 #include "EVRootWidget.h"
 #include "EnhanceVocabulary/EVGameInstance.h"
+#include "EnhanceVocabulary/EVAppPlayerController.h"
 
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -16,6 +17,7 @@ void UEVRootWidget::NativeOnInitialized()
     SetupConnectionErrorInfo(EVConnectionErrorInfo);
 
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
+    EVAppPlayerController = Cast<AEVAppPlayerController>(GetOwningPlayer());
 
     if (Image_ConnectionState)
     {
@@ -31,6 +33,15 @@ void UEVRootWidget::NativeOnInitialized()
     else
     {
         UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVRootWidget.cpp is nullptr"));
+    }
+
+    if (EVAppPlayerController)
+    {
+        EVAppPlayerController->OnWidgetsErrorResolved.AddDynamic(this, &ThisClass::HandleOnErrorMessageResolved);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVAppPlayerController in EVRootWidget.cpp is nullptr"));
     }
 
     bIsAddWordActivated_internal = false;
@@ -78,6 +89,9 @@ void UEVRootWidget::NativeOnInitialized()
     {
         ReviewWords->OnWordEntryWidgetControlsButtonPressed.AddDynamic(
             this, &ThisClass::HandleOnWordEntryWidgetControlsActivated);
+        ReviewWords->OnVocabularyValueActionRequested.AddDynamic(this,
+                                                                 &ThisClass::HandleVocabularyValueActionRequested);
+        ReviewWords->OnFiltersRequested.AddDynamic(this, &ThisClass::HandleVocabularyFiltersRequested);
     }
 
     if (Settings_SelectWebProviders)
@@ -284,6 +298,28 @@ void UEVRootWidget::HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, 
     }
 }
 
+void UEVRootWidget::HandleOnErrorMessageResolved(const FEVErrorInfo& EVErrorInfo)
+{
+    EEVErrorSource EVErrorSource = EVErrorInfo.Source;
+    EEVErrorType EEVErrorType = EVErrorInfo.Type;
+
+    switch (EVErrorSource)
+    {
+    case EEVErrorSource::AddWord:
+        if (EEVErrorType == EEVErrorType::SearchError)
+        {
+            if (!AddWord)
+            {
+                return;
+            }
+            AddWord->SetInputEnabled(true);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 void UEVRootWidget::HandleQuitButtonPressed()
 {
     UKismetSystemLibrary::QuitGame(GetWorld(), GetOwningPlayer(), EQuitPreference::Quit, false);
@@ -406,6 +442,31 @@ void UEVRootWidget::HandleOpenReviewWordsForNotification(const FString& Word)
     ReviewWords->SetSearchWord(Word);
 }
 
+void UEVRootWidget::HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request)
+{
+    OnVocabularyValueActionRequested.Broadcast(Request);
+}
+
+void UEVRootWidget::HandleOpenAddWordWithWord(const FString& Word)
+{
+    if (!WidgetSwitcher_Main || !AddWord)
+    {
+        return;
+    }
+
+    bIsAnyMenuActivated = true;
+    bIsAddWordActivated_internal = true;
+    bIsReviewWordsActivated_internal = false;
+    bIsPopupSettingsActivated_internal = false;
+    bIsImportExportActivated_internal = false;
+    bIsAppSettingsActivated_internal = false;
+    MenuSwitcherCount = 0;
+
+    HandleOnlineDependantWidgetsActivation(AddWord, bIsAppOnline);
+    HandleWidgetControlsState(AddWord, bIsAppOnline);
+    AddWord->SetWordInput(Word);
+}
+
 void UEVRootWidget::HandleConnectionImageColor(TObjectPtr<UMaterialInstanceDynamic> MaterialInstanceDynamic,
                                                EEVConnectionState ConnectionState)
 {
@@ -469,5 +530,18 @@ void UEVRootWidget::HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEnt
 
     default:
         break;
+    }
+}
+
+void UEVRootWidget::HandleVocabularyFiltersRequested()
+{
+    OnVocabularyFiltersRequested.Broadcast();
+}
+
+void UEVRootWidget::HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria)
+{
+    if (ReviewWords)
+    {
+        ReviewWords->ApplyQueryCriteria(Criteria);
     }
 }

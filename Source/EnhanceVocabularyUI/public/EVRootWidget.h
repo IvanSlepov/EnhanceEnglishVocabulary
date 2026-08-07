@@ -73,6 +73,8 @@ public:
 
     class UEVGameInstance* EVGameInstance;
 
+    class AEVAppPlayerController* EVAppPlayerController;
+
     /*Events*/
 
     // Interface derrived event declaration
@@ -106,10 +108,22 @@ public:
         return &OnPopUpIntervalSelectedFromSettings;
     }
 
+    virtual FOnVocabularyValueActionRequested* GetVocabularyValueActionRequestedEvent() override
+    {
+        return &OnVocabularyValueActionRequested;
+    }
+
+    virtual FOnVocabularyFiltersRequested* GetVocabularyFiltersRequestedEvent() override
+    {
+        return &OnVocabularyFiltersRequested;
+    }
+
     virtual void HandleWordEntryChanged(const FEVWordEntryActionInfo& WordEntryActionInfo) override;
 
     virtual void HandleReviewWordsRefresh() override;
     virtual void HandleOpenReviewWordsForNotification(const FString& Word) override;
+    virtual void HandleOpenAddWordWithWord(const FString& Word) override;
+    virtual void HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria) override;
 
     // This method is getting called from the PC to
     // confirm a user-selected Pop-up Interval. And it always forces the
@@ -126,6 +140,9 @@ private:
     void SetupConnectionErrorInfo(FEVErrorInfo& ConnectionErrorInfo);
     bool HandleWidgetControlsState(IEVWidgetControllable* Widget, bool bIsConnectionStatusOnline);
     void HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, bool bIsConnectionStatusOnline);
+
+    UFUNCTION()
+    void HandleOnErrorMessageResolved(const FEVErrorInfo& EVErrorInfo);
 
     UFUNCTION()
     void ButtonMenuPressed();
@@ -168,6 +185,12 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnPopUpIntervalSelectedFromSettings OnPopUpIntervalSelectedFromSettings;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnVocabularyValueActionRequested OnVocabularyValueActionRequested;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnVocabularyFiltersRequested OnVocabularyFiltersRequested;
+
     UFUNCTION()
     void HandleOnConnectionErrorDetected();
 
@@ -184,6 +207,12 @@ private:
 
     UFUNCTION()
     void HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo);
+
+    UFUNCTION()
+    void HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request);
+
+    UFUNCTION()
+    void HandleVocabularyFiltersRequested();
 
     UFUNCTION()
     void HandleOnWordEntryWidgetControlsActivated(const FEVWordEntryActionInfo& WordEntryActionInfo);

@@ -6,9 +6,10 @@
 class ENHANCEVOCABULARYWEB_API FEVResponseParser
 {
 public:
-    static bool ParseFreeDictionaryResponse(const FString& JsonString, FWordSearchResult& OutResult);
+    static bool ParseFreeDictionaryResponse(const FString& JsonString, FEVVocabularyRecord& OutRecord);
 
-    static bool ParseMyMemoryTranslationResponse(const FString& JsonString, FString& OutTranslation);
+    static bool ParseMyMemoryTranslationResponse(const FString& JsonString, const FString& TargetLanguage,
+                                                 FEVVocabularyTranslation& OutTranslation);
 
 private:
     static bool IsValidTranslationCandidate(const FString& Translation);

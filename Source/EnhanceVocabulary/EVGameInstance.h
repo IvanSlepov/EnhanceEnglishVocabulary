@@ -10,6 +10,7 @@
 #include "EVRequestedActionTypes.h"
 #include "EVFileExchangeDefaults.h"
 #include "EVPopUpSettingsTypes.h"
+#include "EVVocabularyFilterTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -74,10 +75,16 @@ public:
     bool UpdateVocabularyEntry(const FVocabularyEntry& Entry, FVocabularyEntry& OutEntry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool UpdateVocabularyRecord(const FEVVocabularyRecord& Record, FEVVocabularyRecord& OutRecord);
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool DeleteVocabularyEntry(const FVocabularyEntry& Entry);
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntryByWord(const FString& Word, FVocabularyEntry& OutEntry) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
+    bool GetVocabularyRecordByWord(const FString& Word, FEVVocabularyRecord& OutRecord) const;
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     int32 GetVocabularyEntryCount() const;
@@ -94,6 +101,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetVocabularyEntriesPageByPrefix(TArray<FVocabularyEntry>& OutVocabularyEntries, const FString& SearchPrefix,
                                           int32 Limit, int32 Offset) const;
+
+    int32 GetVocabularyEntryCountByCriteria(const FString& SearchPrefix,
+                                            const FEVVocabularyQueryCriteria& Criteria) const;
+
+    bool GetVocabularyEntriesPageByCriteria(TArray<FVocabularyEntry>& OutVocabularyEntries, const FString& SearchPrefix,
+                                            const FEVVocabularyQueryCriteria& Criteria, int32 Limit,
+                                            int32 Offset) const;
+
+    void SetActiveVocabularyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria);
+    const FEVVocabularyQueryCriteria& GetActiveVocabularyQueryCriteria() const;
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     bool GetRandomlySelectedWord(FString& OutWord);
@@ -181,7 +198,7 @@ private:
     bool TrySaveImportValidationReport(FEVFileExchangeResultInfo ValidationResult,
                                        const TArray<uint8>& ValidationReportBytes);
 
-    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FVocabularyEntry>& ValidatedEntries);
+    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FEVVocabularyRecord>& ValidatedRecords);
 
     void PopulateImportResultFileInfo(FEVFileExchangeResultInfo& ResultInfo,
                                       const FEVFileExchangeResultInfo& PickResult, int32 ByteCount) const;
@@ -205,6 +222,9 @@ private:
     FEVFileExchangeResultInfo PendingImportValidationResult;
 
     FEVPopUpSettingsInfo CurrentPopUpSettings;
+
+    UPROPERTY(Transient)
+    FEVVocabularyQueryCriteria ActiveVocabularyQueryCriteria;
 
     FEVNotificationPermissionResultFromGameInstance NotificationPermissionResultDelegate;
 

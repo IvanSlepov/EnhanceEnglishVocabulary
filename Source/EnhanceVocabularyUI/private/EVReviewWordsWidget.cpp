@@ -7,6 +7,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "EVWordEntryWidget.h"
 #include "EVWordInputValidator.h"
+#include "EVVocabularyUiStyle.h"
+#include "EVVocabularyFilterTypes.h"
 #include "Widgets/Views/STableViewBase.h"
 
 // Amount of the entries we can display per page
@@ -52,6 +54,11 @@ void UEVReviewWordsWidget::NativeOnInitialized()
     {
         Button_ClearSearch->OnPressed.AddUniqueDynamic(this, &ThisClass::ClearSearch);
     }
+
+    if (Button_Filter)
+    {
+        Button_Filter->OnPressed.AddUniqueDynamic(this, &ThisClass::HandleFilterButtonPressed);
+    }
 }
 
 void UEVReviewWordsWidget::NativePreConstruct()
@@ -74,6 +81,11 @@ void UEVReviewWordsWidget::NativeConstruct()
     SearchPaginationState.CurrentPage = 1;
     SearchPaginationState.EntriesPerPage = DefaultEntriesPerPage;
 
+    if (EVGameInstance)
+    {
+        ActiveQueryCriteria = EVGameInstance->GetActiveVocabularyQueryCriteria();
+    }
+    UpdateFilterStatusText();
     RefreshReview();
     PopulateEntriesPerPageComboBox();
 }
@@ -104,34 +116,41 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
     FText SearchError;
 
     const bool bSearchEmpty = IsSearchInputEmpty();
-
     const bool bSearchValid = !bSearchEmpty && TryGetValidatedSearchInput(SearchPrefix, SearchError);
 
     TArray<FVocabularyEntry> VocabularyEntries;
 
-    bool bLoadedSuccessfully = false;
+    if (!bSearchEmpty && !bSearchValid)
+    {
+        ListView_ReviewWords->ClearListItems();
+        return;
+    }
 
-    if (bSearchEmpty)
-    {
-        bLoadedSuccessfully = EVGameInstance->GetVocabularyEntriesPage(VocabularyEntries, EntriesPerPage, Offset);
-    }
-    else if (bSearchValid)
-    {
-        bLoadedSuccessfully =
-            EVGameInstance->GetVocabularyEntriesPageByPrefix(VocabularyEntries, SearchPrefix, EntriesPerPage, Offset);
-    }
+    const bool bLoadedSuccessfully = EVGameInstance->GetVocabularyEntriesPageByCriteria(
+        VocabularyEntries, bSearchValid ? SearchPrefix : FString(), ActiveQueryCriteria, EntriesPerPage, Offset);
 
     if (!bLoadedSuccessfully)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to load vocabulary page %d."), CurrentPage);
-
         return;
     }
 
     ListView_ReviewWords->ClearListItems();
 
+    int32 AddedRecordCount = 0;
+
     for (const FVocabularyEntry& Entry : VocabularyEntries)
     {
+        FEVVocabularyRecord VocabularyRecord;
+
+        const FString RecordLookupWord = Entry.NormalizedWord.IsEmpty() ? Entry.Word : Entry.NormalizedWord;
+
+        if (!EVGameInstance->GetVocabularyRecordByWord(RecordLookupWord, VocabularyRecord))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to load structured vocabulary record for word: %s"), *Entry.Word);
+            continue;
+        }
+
         UEVEntryItem* EntryItem = NewObject<UEVEntryItem>(this);
 
         if (!EntryItem)
@@ -140,14 +159,15 @@ void UEVReviewWordsWidget::DisplayCurrentPage()
             continue;
         }
 
-        EntryItem->EntryItem = Entry;
+        EntryItem->PayloadType = EEVEntryItemPayloadType::VocabularyRecord;
+        EntryItem->VocabularyRecord = BuildFilteredRecordForDisplay(VocabularyRecord);
         ListView_ReviewWords->AddItem(EntryItem);
+        ++AddedRecordCount;
     }
 
-    if (!VocabularyEntries.IsEmpty())
+    if (AddedRecordCount > 0)
     {
         ListView_ReviewWords->SetScrollIntoViewAlignment(EScrollIntoViewAlignment::TopOrLeft);
-
         ListView_ReviewWords->ScrollToTop();
         ListView_ReviewWords->ScrollIndexIntoView(0);
     }
@@ -176,18 +196,13 @@ void UEVReviewWordsWidget::RefreshReview()
     const bool bSearchEmpty = IsSearchInputEmpty();
     const bool bSearchValid = !bSearchEmpty && TryGetValidatedSearchInput(SearchPrefix, SearchError);
 
-    if (bSearchEmpty)
-    {
-        TotalEntries = EVGameInstance->GetVocabularyEntryCount();
-    }
-    else if (bSearchValid)
-    {
-        TotalEntries = EVGameInstance->GetVocabularyEntryCountByPrefix(SearchPrefix);
-    }
-    else
+    if (!bSearchEmpty && !bSearchValid)
     {
         return;
     }
+
+    TotalEntries =
+        EVGameInstance->GetVocabularyEntryCountByCriteria(bSearchValid ? SearchPrefix : FString(), ActiveQueryCriteria);
 
     if (!SupportedEntriesPerPageValues.Contains(EntriesPerPage))
     {
@@ -242,6 +257,7 @@ void UEVReviewWordsWidget::HandleListEntryWidgetGenerated(UUserWidget& Widget)
         even though the ListView generates or recycles it multiple times*/
 
     WordEntryWidget->OnWordEntryViewButtonPressed.AddUniqueDynamic(this, &ThisClass::HandleWordEntryViewButtonPressed);
+    WordEntryWidget->OnValueActionRequested.AddUniqueDynamic(this, &ThisClass::HandleVocabularyValueActionRequested);
 }
 
 void UEVReviewWordsWidget::HandleWordEntryViewButtonPressed(UEVWordEntryWidget* CurrentWordEntryWidget)
@@ -253,8 +269,28 @@ void UEVReviewWordsWidget::HandleWordEntryViewButtonPressed(UEVWordEntryWidget* 
         return;
     }
 
+    if (!EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in HandleWordEntryViewButtonPressed."));
+        return;
+    }
+
+    const FEVVocabularyRecord& VocabularyRecord = CurrentWordEntryWidget->GetCurrentVocabularyRecord();
+
+    FVocabularyEntry LegacyEntry;
+
+    const FString RecordLookupWord =
+        VocabularyRecord.NormalizedWord.IsEmpty() ? VocabularyRecord.Word : VocabularyRecord.NormalizedWord;
+
+    if (!EVGameInstance->GetVocabularyEntryByWord(RecordLookupWord, LegacyEntry))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to build the current detailed-view payload for word: %s"),
+               *VocabularyRecord.Word);
+        return;
+    }
+
     EVWordEntryActionInfo.ActionType = EEVWordEntryActionType::ViewEntry;
-    EVWordEntryActionInfo.EntryInfo = CurrentWordEntryWidget->GetCurrentWidgetVocabularyEnryItemInfo();
+    EVWordEntryActionInfo.EntryInfo = LegacyEntry;
 
     OnWordEntryWidgetControlsButtonPressed.Broadcast(EVWordEntryActionInfo);
 }
@@ -420,4 +456,53 @@ void UEVReviewWordsWidget::GoToPreviousPage()
     const FReviewPaginationState& ActivePaginationState = GetActivePaginationState();
 
     GoToPage(ActivePaginationState.CurrentPage - 1);
+}
+void UEVReviewWordsWidget::HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request)
+{
+    OnVocabularyValueActionRequested.Broadcast(Request);
+}
+
+void UEVReviewWordsWidget::ApplyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria)
+{
+    ActiveQueryCriteria = Criteria;
+    ActiveQueryCriteria.Normalize();
+    NormalPaginationState.CurrentPage = 1;
+    SearchPaginationState.CurrentPage = 1;
+    UpdateFilterStatusText();
+    RefreshReview();
+}
+
+void UEVReviewWordsWidget::HandleFilterButtonPressed()
+{
+    OnFiltersRequested.Broadcast();
+}
+
+void UEVReviewWordsWidget::UpdateFilterStatusText()
+{
+    if (!TextBlock_AreFiltersAppliedText)
+    {
+        return;
+    }
+
+    const bool bHasFilters = ActiveQueryCriteria.HasActiveFilters();
+    TextBlock_AreFiltersAppliedText->SetText(
+        bHasFilters ? NSLOCTEXT("EVReviewWordsWidget", "ActiveFilters", "ACTIVE FILTER/S")
+                    : NSLOCTEXT("EVReviewWordsWidget", "NoActiveFilters", "NO ACTIVE FILTERS"));
+    TextBlock_AreFiltersAppliedText->SetColorAndOpacity(bHasFilters
+                                                            ? EVVocabularyUiStyle::GetActiveFiltersTextFontColor()
+                                                            : EVVocabularyUiStyle::GetInactiveFiltersTextFontColor());
+}
+
+FEVVocabularyRecord UEVReviewWordsWidget::BuildFilteredRecordForDisplay(const FEVVocabularyRecord& SourceRecord) const
+{
+    if (!ActiveQueryCriteria.HasActiveFilters())
+    {
+        return SourceRecord;
+    }
+
+    FEVVocabularyRecord FilteredRecord = SourceRecord;
+    FilteredRecord.Meanings.RemoveAll(
+        [this](const FEVVocabularyMeaning& Meaning)
+        { return !EVVocabularyFilter::MeaningMatchesCriteria(Meaning, ActiveQueryCriteria); });
+    return FilteredRecord;
 }

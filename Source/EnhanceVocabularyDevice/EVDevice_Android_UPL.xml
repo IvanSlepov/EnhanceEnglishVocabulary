@@ -86,6 +86,27 @@
             private static final String EV_NOTIFICATION_WORD_EXTRA =
                 "com.epicgames.unreal.EV_NOTIFICATION_WORD";
 
+            private static final String EV_NOTIFICATION_NORMALIZED_WORD_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_NORMALIZED_WORD";
+
+            private static final String EV_NOTIFICATION_TRANSCRIPTION_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_TRANSCRIPTION";
+
+            private static final String EV_NOTIFICATION_PART_OF_SPEECH_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_PART_OF_SPEECH";
+
+            private static final String EV_NOTIFICATION_MEANING_DISPLAY_ORDER_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_MEANING_DISPLAY_ORDER";
+
+            private static final String EV_NOTIFICATION_DEFINITION_TEXT_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_DEFINITION_TEXT";
+
+            private static final String EV_NOTIFICATION_DEFINITION_DISPLAY_ORDER_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_DEFINITION_DISPLAY_ORDER";
+
+            private static final String EV_NOTIFICATION_MODE_EXTRA =
+                "com.epicgames.unreal.EV_NOTIFICATION_MODE";
+
             private static final String EV_PENDING_NOTIFICATION_WORD =
                 "PendingNotificationWord";
 
@@ -318,7 +339,7 @@
                 EVVocabularyAlarmReceiver.schedule(
                     this,
                     60,
-                    "Alarm fired!",
+                    "{\"records\":[{\"word\":\"Alarm\",\"normalizedWord\":\"alarm\",\"transcription\":\"/əˈlɑːm/\",\"meanings\":[{\"partOfSpeech\":\"test\",\"meaningDisplayOrder\":0,\"definitions\":[{\"definitionText\":\"Alarm fired!\",\"definitionDisplayOrder\":0}]}]}]}",
                     0);
             }
 
@@ -391,9 +412,18 @@
 
             
             public void AndroidThunkJava_EV_ShowVocabularyNotification(
-                final String word)
+                final String word,
+                final String normalizedWord,
+                final String transcription,
+                final String partOfSpeech,
+                final int meaningDisplayOrder,
+                final String definitionText,
+                final int definitionDisplayOrder,
+                final int notificationMode)
             {
-                if (word == null || word.isEmpty())
+                if (word == null || word.isEmpty() ||
+                    partOfSpeech == null || partOfSpeech.isEmpty() ||
+                    definitionText == null || definitionText.isEmpty())
                 {
                     return;
                 }
@@ -422,25 +452,29 @@
                             return;
                         }
 
-                        if (Build.VERSION.SDK_INT >=
-                            Build.VERSION_CODES.O)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                         {
-                            NotificationChannel channel =
-                                new NotificationChannel(
-                                    EV_VOCABULARY_CHANNEL_ID,
-                                    "Vocabulary reminders",
-                                    NotificationManager.IMPORTANCE_HIGH);
+                            NotificationChannel channel = new NotificationChannel(
+                                EV_VOCABULARY_CHANNEL_ID,
+                                "Vocabulary reminders",
+                                NotificationManager.IMPORTANCE_HIGH);
 
                             channel.setDescription(
                                 "Periodic vocabulary word reminders");
 
-                            notificationManager.createNotificationChannel(
-                                channel);
+                            notificationManager.createNotificationChannel(channel);
                         }
 
                         Intent openWordIntent =
                             new Intent(GameActivity.this, GameActivity.class)
                                 .putExtra(EV_NOTIFICATION_WORD_EXTRA, word)
+                                .putExtra(EV_NOTIFICATION_NORMALIZED_WORD_EXTRA, normalizedWord)
+                                .putExtra(EV_NOTIFICATION_TRANSCRIPTION_EXTRA, transcription)
+                                .putExtra(EV_NOTIFICATION_PART_OF_SPEECH_EXTRA, partOfSpeech)
+                                .putExtra(EV_NOTIFICATION_MEANING_DISPLAY_ORDER_EXTRA, meaningDisplayOrder)
+                                .putExtra(EV_NOTIFICATION_DEFINITION_TEXT_EXTRA, definitionText)
+                                .putExtra(EV_NOTIFICATION_DEFINITION_DISPLAY_ORDER_EXTRA, definitionDisplayOrder)
+                                .putExtra(EV_NOTIFICATION_MODE_EXTRA, notificationMode)
                                 .addFlags(
                                     Intent.FLAG_ACTIVITY_CLEAR_TOP |
                                     Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -460,36 +494,37 @@
 
                         Notification.Builder builder;
 
-                        if (Build.VERSION.SDK_INT >=
-                            Build.VERSION_CODES.O)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                         {
-                            builder =
-                                new Notification.Builder(
-                                    GameActivity.this,
-                                    EV_VOCABULARY_CHANNEL_ID);
+                            builder = new Notification.Builder(
+                                GameActivity.this,
+                                EV_VOCABULARY_CHANNEL_ID);
                         }
                         else
                         {
-                            builder =
-                                new Notification.Builder(
-                                    GameActivity.this);
-
-                            builder.setPriority(
-                                Notification.PRIORITY_HIGH);
+                            builder = new Notification.Builder(GameActivity.this);
+                            builder.setPriority(Notification.PRIORITY_HIGH);
                         }
 
+                        String numberedDefinition =
+                            (definitionDisplayOrder + 1) + ". " + definitionText;
+
+                        String displayedTranscription =
+                            transcription != null && !transcription.trim().isEmpty()
+                                ? transcription.trim()
+                                : "No transcription was provided";
+
+                        String body =
+                            displayedTranscription + "\n\n" +
+                            partOfSpeech + "\n\n" +
+                            numberedDefinition;
+
                         builder
-                            .setSmallIcon(
-                                getApplicationInfo().icon)
-                            .setContentTitle(
-                                "Enhance Vocabulary")
-                            .setContentText(
-                                word)
-                            .setStyle(
-                                new Notification.BigTextStyle()
-                                    .bigText(word))
-                            .setCategory(
-                                Notification.CATEGORY_REMINDER)
+                            .setSmallIcon(getApplicationInfo().icon)
+                            .setContentTitle(word)
+                            .setContentText(displayedTranscription + " — " + partOfSpeech)
+                            .setStyle(new Notification.BigTextStyle().bigText(body))
+                            .setCategory(Notification.CATEGORY_REMINDER)
                             .setAutoCancel(true)
                             .addAction(
                                 0,
@@ -500,15 +535,13 @@
                                     new Intent(
                                         GameActivity.this,
                                         EVVocabularyAlarmReceiver.class)
-                                        .setAction(
-                                            EVVocabularyAlarmReceiver.ACTION_CANCEL),
+                                        .setAction(EVVocabularyAlarmReceiver.ACTION_CANCEL),
                                     PendingIntent.FLAG_UPDATE_CURRENT |
                                     PendingIntent.FLAG_IMMUTABLE));
 
                         if (contentIntent != null)
                         {
-                            builder.setContentIntent(
-                                contentIntent);
+                            builder.setContentIntent(contentIntent);
                         }
 
                         notificationManager.notify(

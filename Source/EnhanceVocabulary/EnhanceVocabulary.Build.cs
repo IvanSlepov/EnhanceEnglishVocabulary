@@ -18,7 +18,8 @@ public class EnhanceVocabulary : ModuleRules
 			"EnhanceVocabularyCore",
             "EnhanceVocabularyWeb",
             "EnhanceVocabularyStorage",
-            "EnhanceVocabularyDevice"
+            "EnhanceVocabularyDevice",
+            "Json"
         });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {
@@ -33,7 +34,8 @@ public class EnhanceVocabulary : ModuleRules
             "EnhanceVocabularyCore",
             "EnhanceVocabularyWeb",
             "EnhanceVocabularyStorage",
-            "EnhanceVocabularyDevice"
+            "EnhanceVocabularyDevice",
+            "Json"
         });
 
 		// Uncomment if you are using online features
