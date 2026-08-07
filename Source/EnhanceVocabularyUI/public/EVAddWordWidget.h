@@ -48,6 +48,7 @@ public:
     // Disable/Enable or Get controls status on demand
     virtual void SetControlsEnabled(bool bEnabled) override;
     virtual bool GetControlsEnabled() override;
+    void SetInputEnabled(bool bSetInputEnabled);
 
     /*Events*/
 
@@ -74,6 +75,9 @@ public:
     // Putting this to public as it's being bound in the EVRootWidget.cpp
     UFUNCTION()
     void HandleWebProvidersChanged(EEVWebProvider DefinitionUsageProvider, EEVWebProvider TranslationProvider);
+
+    UFUNCTION(BlueprintCallable, Category = "Add Word")
+    void SetWordInput(const FString& Word);
 
 protected:
     virtual void NativeOnInitialized() override;

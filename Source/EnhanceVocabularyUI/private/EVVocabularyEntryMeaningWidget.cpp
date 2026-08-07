@@ -15,6 +15,17 @@
 
 namespace
 {
+void ApplyReadOnlyBackgroundTint(UMultiLineEditableTextBox* TextBox, const FSlateColor& TintColor)
+{
+    if (!TextBox)
+    {
+        return;
+    }
+
+    TextBox->WidgetStyle.BackgroundImageReadOnly.TintColor = TintColor;
+    TextBox->SynchronizeProperties();
+}
+
 FString RemoveNumberPrefix(const FString& SourceText)
 {
     FString Result = SourceText.TrimStartAndEnd();
@@ -131,6 +142,21 @@ void UEVVocabularyEntryMeaningWidget::NativeOnInitialized()
                     "in EVVocabularyEntryMeaningWidget."));
     }
 
+    if (MultiLineEditableTextBox_PartOfSpeech_Value)
+    {
+        OriginalPartOfSpeechStyle = MultiLineEditableTextBox_PartOfSpeech_Value->WidgetStyle;
+    }
+
+    if (MultiLineEditableTextBox_Definition_Value)
+    {
+        OriginalDefinitionStyle = MultiLineEditableTextBox_Definition_Value->WidgetStyle;
+    }
+
+    if (MultiLineEditableTextBox_Usage_Value)
+    {
+        OriginalUsageStyle = MultiLineEditableTextBox_Usage_Value->WidgetStyle;
+    }
+
     ApplyEditableState();
 }
 
@@ -157,6 +183,8 @@ void UEVVocabularyEntryMeaningWidget::NativeOnListItemObjectSet(UObject* ListIte
     }
 
     MeaningIndex = EntryItem->VocabularyMeaningIndex;
+    WidgetMode = EntryItem->MeaningWidgetMode;
+    bEditable = WidgetMode == EEVVocabularyMeaningWidgetMode::DetailedEditable;
     SetMeaning(EntryItem->VocabularyMeaning);
 }
 
@@ -174,14 +202,20 @@ const FEVVocabularyMeaning& UEVVocabularyEntryMeaningWidget::GetMeaning() const
 
 void UEVVocabularyEntryMeaningWidget::SetEditable(const bool bInEditable)
 {
-    if (bEditable == bInEditable)
-    {
-        ApplyEditableState();
-        return;
-    }
+    SetWidgetMode(bInEditable ? EEVVocabularyMeaningWidgetMode::DetailedEditable
+                              : EEVVocabularyMeaningWidgetMode::DetailedReadOnly);
+}
 
-    bEditable = bInEditable;
+void UEVVocabularyEntryMeaningWidget::SetWidgetMode(const EEVVocabularyMeaningWidgetMode InMode)
+{
+    WidgetMode = InMode;
+    bEditable = WidgetMode == EEVVocabularyMeaningWidgetMode::DetailedEditable;
     PopulateMeaning();
+}
+
+EEVVocabularyMeaningWidgetMode UEVVocabularyEntryMeaningWidget::GetWidgetMode() const
+{
+    return WidgetMode;
 }
 
 bool UEVVocabularyEntryMeaningWidget::IsEditable() const
@@ -269,7 +303,11 @@ void UEVVocabularyEntryMeaningWidget::PopulateTranslations()
         }
 
         TranslationWidget->SetTranslation(Translation);
-        TranslationWidget->SetEditable(bEditable);
+        TranslationWidget->SetItemMode(WidgetMode == EEVVocabularyMeaningWidgetMode::ReviewReadOnly
+                                           ? EEVVocabularyValueItemMode::ReviewReadOnly
+                                           : (bEditable ? EEVVocabularyValueItemMode::DetailedEditable
+                                                        : EEVVocabularyValueItemMode::DetailedReadOnly));
+        TranslationWidget->OnValuePressed.AddUniqueDynamic(this, &ThisClass::HandleTranslationPressed);
         TranslationWidget->OnValueChanged.AddUniqueDynamic(this, &ThisClass::HandleChildValueChanged);
         TranslationWidget->OnDeleteRequested.AddUniqueDynamic(this, &ThisClass::HandleTranslationDeleteRequested);
         WrapBox_TranslationItem->AddChildToWrapBox(TranslationWidget);
@@ -320,7 +358,11 @@ void UEVVocabularyEntryMeaningWidget::PopulateSynonyms()
         }
 
         SynonymWidget->SetRelation(Relation);
-        SynonymWidget->SetEditable(bEditable);
+        SynonymWidget->SetItemMode(WidgetMode == EEVVocabularyMeaningWidgetMode::ReviewReadOnly
+                                       ? EEVVocabularyValueItemMode::ReviewReadOnly
+                                       : (bEditable ? EEVVocabularyValueItemMode::DetailedEditable
+                                                    : EEVVocabularyValueItemMode::DetailedReadOnly));
+        SynonymWidget->OnValuePressed.AddUniqueDynamic(this, &ThisClass::HandleSynonymPressed);
         SynonymWidget->OnValueChanged.AddUniqueDynamic(this, &ThisClass::HandleChildValueChanged);
         SynonymWidget->OnDeleteRequested.AddUniqueDynamic(this, &ThisClass::HandleSynonymDeleteRequested);
         WrapBox_SynonymItem->AddChildToWrapBox(SynonymWidget);
@@ -371,7 +413,11 @@ void UEVVocabularyEntryMeaningWidget::PopulateAntonyms()
         }
 
         AntonymWidget->SetRelation(Relation);
-        AntonymWidget->SetEditable(bEditable);
+        AntonymWidget->SetItemMode(WidgetMode == EEVVocabularyMeaningWidgetMode::ReviewReadOnly
+                                       ? EEVVocabularyValueItemMode::ReviewReadOnly
+                                       : (bEditable ? EEVVocabularyValueItemMode::DetailedEditable
+                                                    : EEVVocabularyValueItemMode::DetailedReadOnly));
+        AntonymWidget->OnValuePressed.AddUniqueDynamic(this, &ThisClass::HandleAntonymPressed);
         AntonymWidget->OnValueChanged.AddUniqueDynamic(this, &ThisClass::HandleChildValueChanged);
         AntonymWidget->OnDeleteRequested.AddUniqueDynamic(this, &ThisClass::HandleAntonymDeleteRequested);
         WrapBox_AntonymItem->AddChildToWrapBox(AntonymWidget);
@@ -674,22 +720,39 @@ void UEVVocabularyEntryMeaningWidget::AddMissingValueText(UWrapBox* TargetWrapBo
 
 void UEVVocabularyEntryMeaningWidget::ApplyEditableState()
 {
+    const bool bIsReview = WidgetMode == EEVVocabularyMeaningWidgetMode::ReviewReadOnly;
+    const bool bIsDetailedEditable = WidgetMode == EEVVocabularyMeaningWidgetMode::DetailedEditable;
+
     if (MultiLineEditableTextBox_PartOfSpeech_Value)
     {
-        MultiLineEditableTextBox_PartOfSpeech_Value->SetIsReadOnly(!bEditable);
+        MultiLineEditableTextBox_PartOfSpeech_Value->SetIsReadOnly(!bIsDetailedEditable);
+        ApplyReadOnlyBackgroundTint(MultiLineEditableTextBox_PartOfSpeech_Value,
+                                    bIsReview ? OriginalPartOfSpeechStyle.BackgroundImageNormal.TintColor
+                                              : OriginalPartOfSpeechStyle.BackgroundImageReadOnly.TintColor);
     }
 
     if (MultiLineEditableTextBox_Definition_Value)
     {
-        MultiLineEditableTextBox_Definition_Value->SetIsReadOnly(!bEditable);
+        MultiLineEditableTextBox_Definition_Value->SetIsReadOnly(!bIsDetailedEditable);
+        ApplyReadOnlyBackgroundTint(MultiLineEditableTextBox_Definition_Value,
+                                    bIsReview ? OriginalDefinitionStyle.BackgroundImageNormal.TintColor
+                                              : OriginalDefinitionStyle.BackgroundImageReadOnly.TintColor);
     }
 
     if (MultiLineEditableTextBox_Usage_Value)
     {
-        MultiLineEditableTextBox_Usage_Value->SetIsReadOnly(!bEditable);
+        MultiLineEditableTextBox_Usage_Value->SetIsReadOnly(!bIsDetailedEditable);
+        ApplyReadOnlyBackgroundTint(MultiLineEditableTextBox_Usage_Value,
+                                    bIsReview ? OriginalUsageStyle.BackgroundImageNormal.TintColor
+                                              : OriginalUsageStyle.BackgroundImageReadOnly.TintColor);
     }
 
-    const auto ApplyStateToWrapBox = [this](UWrapBox* WrapBox)
+    const EEVVocabularyValueItemMode ItemMode =
+        bIsReview ? EEVVocabularyValueItemMode::ReviewReadOnly
+                  : (bIsDetailedEditable ? EEVVocabularyValueItemMode::DetailedEditable
+                                         : EEVVocabularyValueItemMode::DetailedReadOnly);
+
+    const auto ApplyStateToWrapBox = [ItemMode](UWrapBox* WrapBox)
     {
         if (!WrapBox)
         {
@@ -698,20 +761,16 @@ void UEVVocabularyEntryMeaningWidget::ApplyEditableState()
 
         for (int32 ChildIndex = 0; ChildIndex < WrapBox->GetChildrenCount(); ++ChildIndex)
         {
-            UEVVocabularyValueItemWidgetBase* ItemWidget =
-                Cast<UEVVocabularyValueItemWidgetBase>(WrapBox->GetChildAt(ChildIndex));
-
-            if (ItemWidget)
+            if (UEVVocabularyValueItemWidgetBase* ItemWidget =
+                    Cast<UEVVocabularyValueItemWidgetBase>(WrapBox->GetChildAt(ChildIndex)))
             {
-                ItemWidget->SetEditable(bEditable);
+                ItemWidget->SetItemMode(ItemMode);
             }
         }
     };
 
     ApplyStateToWrapBox(WrapBox_TranslationItem);
-
     ApplyStateToWrapBox(WrapBox_SynonymItem);
-
     ApplyStateToWrapBox(WrapBox_AntonymItem);
 }
 
@@ -723,6 +782,48 @@ void UEVVocabularyEntryMeaningWidget::BroadcastMeaningChanged()
     }
 
     OnMeaningChanged.Broadcast(this, CurrentMeaning);
+}
+
+void UEVVocabularyEntryMeaningWidget::HandleTranslationPressed(UEVVocabularyValueItemWidgetBase* ItemWidget,
+                                                               const FString& Value)
+{
+    if (WidgetMode != EEVVocabularyMeaningWidgetMode::ReviewReadOnly)
+    {
+        return;
+    }
+
+    if (const UEVVocabularyItemTranslations* TranslationWidget = Cast<UEVVocabularyItemTranslations>(ItemWidget))
+    {
+        OnTranslationPressed.Broadcast(TranslationWidget->GetTranslation());
+    }
+}
+
+void UEVVocabularyEntryMeaningWidget::HandleSynonymPressed(UEVVocabularyValueItemWidgetBase* ItemWidget,
+                                                           const FString& Value)
+{
+    if (WidgetMode != EEVVocabularyMeaningWidgetMode::ReviewReadOnly)
+    {
+        return;
+    }
+
+    if (const UEVVocabularyItemSynonyms* SynonymWidget = Cast<UEVVocabularyItemSynonyms>(ItemWidget))
+    {
+        OnRelationPressed.Broadcast(EEVVocabularyValueActionType::Synonym, SynonymWidget->GetRelation());
+    }
+}
+
+void UEVVocabularyEntryMeaningWidget::HandleAntonymPressed(UEVVocabularyValueItemWidgetBase* ItemWidget,
+                                                           const FString& Value)
+{
+    if (WidgetMode != EEVVocabularyMeaningWidgetMode::ReviewReadOnly)
+    {
+        return;
+    }
+
+    if (const UEVVocabularyValueAntonyms* AntonymWidget = Cast<UEVVocabularyValueAntonyms>(ItemWidget))
+    {
+        OnRelationPressed.Broadcast(EEVVocabularyValueActionType::Antonym, AntonymWidget->GetRelation());
+    }
 }
 
 FString UEVVocabularyEntryMeaningWidget::NormalizeRelationType(const FString& RelationType) const

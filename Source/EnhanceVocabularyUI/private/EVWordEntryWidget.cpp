@@ -4,6 +4,7 @@
 
 #include "EVEntryItem.h"
 #include "EVVocabularyUiStyle.h"
+#include "EVVocabularyEntryMeaningWidget.h"
 
 void UEVWordEntryWidget::NativeOnInitialized()
 {
@@ -15,6 +16,11 @@ void UEVWordEntryWidget::NativeOnInitialized()
     if (!bAreRequiredWidgetsCreated)
     {
         UE_LOG(LogTemp, Error, TEXT("UEVWordEntryWidget: one or more required widgets are missing."));
+    }
+
+    if (ListView_Meanings)
+    {
+        ListView_Meanings->OnEntryWidgetGenerated().AddUObject(this, &ThisClass::HandleMeaningEntryWidgetGenerated);
     }
 
     if (Button_ViewWord)
@@ -120,6 +126,8 @@ void UEVWordEntryWidget::PopulateMeanings()
 
         Item->PayloadType = EEVEntryItemPayloadType::VocabularyMeaning;
         Item->VocabularyMeaning = BuildMeaningForDisplay(Meaning, MeaningIndex == 0);
+        Item->VocabularyMeaningIndex = MeaningIndex;
+        Item->MeaningWidgetMode = EEVVocabularyMeaningWidgetMode::ReviewReadOnly;
         ListView_Meanings->AddItem(Item);
     }
 }
@@ -206,4 +214,32 @@ FEVVocabularyMeaning UEVWordEntryWidget::BuildMeaningForDisplay(const FEVVocabul
 void UEVWordEntryWidget::HandleOnWordEntry_ViewButtonPressed()
 {
     OnWordEntryViewButtonPressed.Broadcast(this);
+}
+
+void UEVWordEntryWidget::HandleMeaningEntryWidgetGenerated(UUserWidget& Widget)
+{
+    if (UEVVocabularyEntryMeaningWidget* MeaningWidget = Cast<UEVVocabularyEntryMeaningWidget>(&Widget))
+    {
+        MeaningWidget->OnTranslationPressed.AddUniqueDynamic(this, &ThisClass::HandleTranslationPressed);
+        MeaningWidget->OnRelationPressed.AddUniqueDynamic(this, &ThisClass::HandleRelationPressed);
+    }
+}
+
+void UEVWordEntryWidget::HandleTranslationPressed(const FEVVocabularyTranslation& Translation)
+{
+    FEVVocabularyValueActionRequest Request;
+    Request.ActionType = EEVVocabularyValueActionType::Translation;
+    Request.SourceWord = CurrentVocabularyRecord.Word;
+    Request.Translation = Translation;
+    OnValueActionRequested.Broadcast(Request);
+}
+
+void UEVWordEntryWidget::HandleRelationPressed(const EEVVocabularyValueActionType ActionType,
+                                               const FEVVocabularyRelation& Relation)
+{
+    FEVVocabularyValueActionRequest Request;
+    Request.ActionType = ActionType;
+    Request.SourceWord = CurrentVocabularyRecord.Word;
+    Request.Relation = Relation;
+    OnValueActionRequested.Broadcast(Request);
 }

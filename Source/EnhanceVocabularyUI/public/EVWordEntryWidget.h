@@ -11,6 +11,7 @@
 #include "EVEntryItem.h"
 #include "EVSearchResultsMeaningWidget.h"
 #include "EVVocabularyTypes.h"
+#include "EVVocabularyInteractionTypes.h"
 #include "EVWordEntryWidget.generated.h"
 
 class UEVWordEntryWidget;
@@ -19,6 +20,8 @@ class UEVWordEntryWidget;
  * Fired when the user presses View on a Review Words entry.
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryViewButtonPressed, UEVWordEntryWidget*, WordEntryWidget);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryValueActionRequested, const FEVVocabularyValueActionRequest&,
+                                            Request);
 
 /**
  * Read-only vocabulary entry used by Review Words.
@@ -54,6 +57,9 @@ public:
 
     UPROPERTY(BlueprintAssignable)
     FOnWordEntryViewButtonPressed OnWordEntryViewButtonPressed;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnWordEntryValueActionRequested OnValueActionRequested;
 
     /**
      * Returns the complete structured record represented by this widget.
@@ -123,6 +129,14 @@ private:
 
     UFUNCTION()
     void HandleOnWordEntry_ViewButtonPressed();
+
+    void HandleMeaningEntryWidgetGenerated(UUserWidget& Widget);
+
+    UFUNCTION()
+    void HandleTranslationPressed(const FEVVocabularyTranslation& Translation);
+
+    UFUNCTION()
+    void HandleRelationPressed(EEVVocabularyValueActionType ActionType, const FEVVocabularyRelation& Relation);
 
 private:
     UPROPERTY(Transient)

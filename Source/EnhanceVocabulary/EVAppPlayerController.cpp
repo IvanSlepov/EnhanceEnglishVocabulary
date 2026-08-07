@@ -144,6 +144,28 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                     UE_LOG(LogTemp, Error,
                            TEXT("FOnImportExportDownloadDBOperationIssued in EVAppPlayerController.cpp is nullptr"));
                 }
+
+                if (FOnVocabularyValueActionRequested* VocabularyValueActionRequested =
+                        WidgetCommonEvents->GetVocabularyValueActionRequestedEvent())
+                {
+                    VocabularyValueActionRequested->AddDynamic(this, &ThisClass::HandleVocabularyValueActionRequested);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnVocabularyValueActionRequested in EVAppPlayerController.cpp is nullptr"));
+                }
+
+                if (FOnVocabularyFiltersRequested* VocabularyFiltersRequested =
+                        WidgetCommonEvents->GetVocabularyFiltersRequestedEvent())
+                {
+                    VocabularyFiltersRequested->AddDynamic(this, &ThisClass::HandleVocabularyFiltersRequested);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                           TEXT("FOnVocabularyFiltersRequested in EVAppPlayerController.cpp is nullptr"));
+                }
             }
             else
             {
@@ -172,7 +194,9 @@ void AEVAppPlayerController::HandleWidgetErrors(const FEVErrorInfo& WidgetErrorI
         {
             if (IEVErrorDisplayWidget* ErrorDisplay = Cast<IEVErrorDisplayWidget>(ErrorWidgetInstance))
             {
-                ErrorDisplay->ShowError(WidgetErrorInfo.Message);
+                EVErrorInfo = WidgetErrorInfo;
+                ErrorDisplay->ShowError(EVErrorInfo.Message);
+                ErrorDisplay->OnErrorWidgetDestroyed().AddDynamic(this, &ThisClass::HandleErrorWidgetDestroyed);
             }
 
             ErrorWidgetInstance->AddToViewport(9999);
@@ -186,6 +210,11 @@ void AEVAppPlayerController::HandleWidgetErrors(const FEVErrorInfo& WidgetErrorI
     {
         UE_LOG(LogTemp, Error, TEXT("The ErrorWidgetClass was not provided to EVAppPlayerController"));
     }
+}
+
+void AEVAppPlayerController::HandleErrorWidgetDestroyed()
+{
+    OnWidgetsErrorResolved.Broadcast(EVErrorInfo);
 }
 
 void AEVAppPlayerController::HandleLoadingSpinner(bool bDisplayLoadingSpinner)
@@ -496,6 +525,21 @@ void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialo
 
     FEVConfirmationDialogInfo ConfirmationDialogInfo;
     ConfirmationDialogInfo.DialogType = DialogType;
+    if (DialogType == EEVConfirmationDialogType::ReviewExistingRelatedWord ||
+        DialogType == EEVConfirmationDialogType::AddMissingRelatedWord)
+    {
+        ConfirmationDialogInfo.SubjectValue = PendingVocabularyValueActionRequest.Relation.RelatedWord;
+    }
+    else if (DialogType == EEVConfirmationDialogType::UnsupportedTranslationLanguage ||
+             DialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext)
+    {
+        ConfirmationDialogInfo.SubjectValue = PendingVocabularyValueActionRequest.Translation.TargetLanguage;
+    }
+    else if (DialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord ||
+             DialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
+    {
+        ConfirmationDialogInfo.SubjectValue = PendingVocabularyValueActionRequest.Translation.TranslationText;
+    }
     ConfirmationDialogInfo.Generate();
 
     ConfirmationDialogWidget->SetConfirmationDialogInfo(ConfirmationDialogInfo);
@@ -521,6 +565,51 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
     /*
      * Change notification mode
      */
+    if (ConfirmedDialogType == EEVConfirmationDialogType::ReviewExistingRelatedWord)
+    {
+        if (bIsOperationConfirmed && WidgetCommonEvents)
+        {
+            WidgetCommonEvents->HandleOpenReviewWordsForNotification(
+                PendingVocabularyValueActionRequest.Relation.RelatedWord);
+        }
+        PendingVocabularyValueActionRequest = FEVVocabularyValueActionRequest{};
+        return;
+    }
+
+    if (ConfirmedDialogType == EEVConfirmationDialogType::AddMissingRelatedWord)
+    {
+        if (bIsOperationConfirmed && WidgetCommonEvents)
+        {
+            WidgetCommonEvents->HandleOpenAddWordWithWord(PendingVocabularyValueActionRequest.Relation.RelatedWord);
+        }
+        PendingVocabularyValueActionRequest = FEVVocabularyValueActionRequest{};
+        return;
+    }
+
+    if (ConfirmedDialogType == EEVConfirmationDialogType::UnsupportedTranslationLanguage ||
+        ConfirmedDialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext ||
+        ConfirmedDialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord ||
+        ConfirmedDialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
+    {
+        if (bIsOperationConfirmed)
+        {
+            if (ConfirmedDialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext)
+            {
+                HandleTranslationContextCreationConfirmed();
+            }
+            else if (ConfirmedDialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord)
+            {
+                HandleTranslationExistingWordConfirmed();
+            }
+            else if (ConfirmedDialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
+            {
+                HandleTranslationMissingWordConfirmed();
+            }
+        }
+        PendingVocabularyValueActionRequest = FEVVocabularyValueActionRequest{};
+        return;
+    }
+
     if (ConfirmedDialogType == EEVConfirmationDialogType::ChangeNotificationMode)
     {
         if (bIsOperationConfirmed)
@@ -1197,4 +1286,169 @@ void AEVAppPlayerController::SynchronizeNotificationSettingsFromDevice()
 
     CurrentAcceptedSettings = StoredSettings;
     ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
+}
+
+void AEVAppPlayerController::HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request)
+{
+    PendingVocabularyValueActionRequest = Request;
+
+    if (Request.ActionType == EEVVocabularyValueActionType::Synonym ||
+        Request.ActionType == EEVVocabularyValueActionType::Antonym)
+    {
+        HandleRelationValueAction(Request);
+        return;
+    }
+
+    if (Request.ActionType == EEVVocabularyValueActionType::Translation)
+    {
+        HandleTranslationValueAction(Request);
+    }
+}
+
+void AEVAppPlayerController::HandleRelationValueAction(const FEVVocabularyValueActionRequest& Request)
+{
+    if (!EVGameInstance)
+    {
+        return;
+    }
+
+    FString LookupWord = Request.Relation.NormalizedRelatedWord.TrimStartAndEnd();
+    if (LookupWord.IsEmpty())
+    {
+        LookupWord = Request.Relation.RelatedWord.TrimStartAndEnd();
+        LookupWord.ToLowerInline();
+    }
+
+    FVocabularyEntry ExistingEntry;
+    const bool bExists = EVGameInstance->GetVocabularyEntryByWord(LookupWord, ExistingEntry);
+    HandleCreateConfirmationDialog(bExists ? EEVConfirmationDialogType::ReviewExistingRelatedWord
+                                           : EEVConfirmationDialogType::AddMissingRelatedWord,
+                                   EEVWordEntryActionType::Unknown);
+}
+
+void AEVAppPlayerController::HandleTranslationValueAction(const FEVVocabularyValueActionRequest& Request)
+{
+    const EEVVocabularyLanguageSupportState SupportState =
+        ResolveTranslationLanguageSupport(Request.Translation.TargetLanguage);
+
+    if (SupportState == EEVVocabularyLanguageSupportState::Unsupported ||
+        SupportState == EEVVocabularyLanguageSupportState::Unknown)
+    {
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::UnsupportedTranslationLanguage,
+                                       EEVWordEntryActionType::Unknown);
+        return;
+    }
+
+    if (SupportState == EEVVocabularyLanguageSupportState::SupportedWithoutContext)
+    {
+        HandleCreateConfirmationDialog(EEVConfirmationDialogType::CreateTranslationLanguageContext,
+                                       EEVWordEntryActionType::Unknown);
+        return;
+    }
+
+    HandleCreateConfirmationDialog(DoesTranslationWordExistInTargetContext(Request.Translation)
+                                       ? EEVConfirmationDialogType::ReviewExistingTranslationWord
+                                       : EEVConfirmationDialogType::AddMissingTranslationWord,
+                                   EEVWordEntryActionType::Unknown);
+}
+
+bool AEVAppPlayerController::DoesTranslationWordExistInTargetContext(const FEVVocabularyTranslation& Translation) const
+{
+    if (!EVGameInstance || !Translation.TargetLanguage.Equals(TEXT("en"), ESearchCase::IgnoreCase))
+    {
+        return false;
+    }
+
+    FVocabularyEntry ExistingEntry;
+    return EVGameInstance->GetVocabularyEntryByWord(Translation.TranslationText, ExistingEntry);
+}
+
+EEVVocabularyLanguageSupportState
+AEVAppPlayerController::ResolveTranslationLanguageSupport(const FString& LanguageCode) const
+{
+    static const TSet<FString> SupportedLanguages = {TEXT("en"), TEXT("uk"), TEXT("ru"), TEXT("it"),
+                                                     TEXT("fr"), TEXT("es"), TEXT("de")};
+
+    FString NormalizedCode = LanguageCode.TrimStartAndEnd();
+    NormalizedCode.ToLowerInline();
+
+    if (!SupportedLanguages.Contains(NormalizedCode))
+    {
+        return EEVVocabularyLanguageSupportState::Unsupported;
+    }
+
+    return NormalizedCode == TEXT("en") ? EEVVocabularyLanguageSupportState::SupportedWithContext
+                                        : EEVVocabularyLanguageSupportState::SupportedWithoutContext;
+}
+
+void AEVAppPlayerController::HandleTranslationContextCreationConfirmed()
+{
+    // Future language-context creation entry point. Intentionally no action yet.
+}
+
+void AEVAppPlayerController::HandleTranslationExistingWordConfirmed()
+{
+    // Future cross-context Review Words entry point. Intentionally no action yet.
+}
+
+void AEVAppPlayerController::HandleTranslationMissingWordConfirmed()
+{
+    // Future cross-context Add Word entry point. Intentionally no action yet.
+}
+
+void AEVAppPlayerController::HandleVocabularyFiltersRequested()
+{
+    if (VocabularyFilterWidgetInstance)
+    {
+        return;
+    }
+
+    if (!VocabularyFilterWidgetClass || !EVGameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot open vocabulary filters: class or game instance is missing."));
+        return;
+    }
+
+    VocabularyFilterWidgetInstance = CreateWidget<UUserWidget>(this, VocabularyFilterWidgetClass);
+    if (!VocabularyFilterWidgetInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create VocabularyFilterWidgetClass."));
+        return;
+    }
+
+    VocabularyFilterWidgetProvider = Cast<IEVVocabularyFilterWidgetProvider>(VocabularyFilterWidgetInstance);
+    if (!VocabularyFilterWidgetProvider)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary filter widget does not implement its provider interface."));
+        VocabularyFilterWidgetInstance = nullptr;
+        return;
+    }
+
+    VocabularyFilterWidgetProvider->SetInitialCriteria(EVGameInstance->GetActiveVocabularyQueryCriteria());
+    VocabularyFilterWidgetProvider->GetFiltersAppliedEvent().AddUniqueDynamic(
+        this, &ThisClass::HandleVocabularyFiltersApplied);
+    VocabularyFilterWidgetProvider->GetCloseRequestedEvent().AddUniqueDynamic(
+        this, &ThisClass::HandleVocabularyFilterWidgetCloseRequested);
+    VocabularyFilterWidgetInstance->AddToViewport(9000);
+}
+
+void AEVAppPlayerController::HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->SetActiveVocabularyQueryCriteria(Criteria);
+    }
+
+    if (WidgetCommonEvents)
+    {
+        WidgetCommonEvents->HandleVocabularyFiltersApplied(Criteria);
+    }
+
+    HandleVocabularyFilterWidgetCloseRequested();
+}
+
+void AEVAppPlayerController::HandleVocabularyFilterWidgetCloseRequested()
+{
+    VocabularyFilterWidgetProvider = nullptr;
+    DestroyWidget(VocabularyFilterWidgetInstance);
 }

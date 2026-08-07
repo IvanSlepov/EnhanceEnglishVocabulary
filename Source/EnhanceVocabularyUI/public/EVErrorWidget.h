@@ -28,6 +28,11 @@ public:
 
     virtual void ShowError(const FText& ErrorText) override;
 
+    virtual FOnErrorWidgetDestroyed& OnErrorWidgetDestroyed() override
+    {
+        return ErrorWidgetDestroyed;
+    }
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
@@ -36,6 +41,9 @@ protected:
 private:
     UFUNCTION()
     void HandleRemoveFromParent();
+
+    UPROPERTY(BlueprintAssignable)
+    FOnErrorWidgetDestroyed ErrorWidgetDestroyed;
 
     FTimerHandle AutoCloseTimerHandler;
 

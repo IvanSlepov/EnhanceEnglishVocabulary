@@ -16,7 +16,13 @@ enum class EEVConfirmationDialogType : uint8
     ChangeNotificationMode UMETA(
         DisplayName = "Changing the notification mode will turn off the current notification interval. Continue?"),
     EnableAndroidNotifications UMETA(DisplayName =
-                                         "Notifications for the app are disabled. Would you like to Enable them?")
+                                         "Notifications for the app are disabled. Would you like to Enable them?"),
+    ReviewExistingRelatedWord,
+    AddMissingRelatedWord,
+    UnsupportedTranslationLanguage,
+    CreateTranslationLanguageContext,
+    ReviewExistingTranslationWord,
+    AddMissingTranslationWord
 };
 
 USTRUCT(BlueprintType)
@@ -35,6 +41,9 @@ struct FEVConfirmationDialogInfo
 
     UPROPERTY(BlueprintReadOnly)
     FText DiscardButtonText;
+
+    UPROPERTY(BlueprintReadOnly)
+    FString SubjectValue;
 
     UPROPERTY(BlueprintReadOnly)
     FLinearColor DialogTextColor = FLinearColor::White;
@@ -102,6 +111,55 @@ private:
             DiscardButtonText = FText::FromString(TEXT("CANCEL"));
             break;
 
+        case EEVConfirmationDialogType::ReviewExistingRelatedWord:
+            DialogText = FText::Format(NSLOCTEXT("EVConfirmationDialog", "ReviewExistingRelatedWord",
+                                                 "'{0}' exists in your vocabulary. Would you like to review it?"),
+                                       FText::FromString(SubjectValue));
+            ConfirmButtonText = NSLOCTEXT("EVConfirmationDialog", "ReviewButton", "REVIEW");
+            DiscardButtonText = NSLOCTEXT("EVConfirmationDialog", "StayButton", "STAY");
+            break;
+
+        case EEVConfirmationDialogType::AddMissingRelatedWord:
+            DialogText = FText::Format(NSLOCTEXT("EVConfirmationDialog", "AddMissingRelatedWord",
+                                                 "'{0}' is not in your vocabulary. Would you like to add it?"),
+                                       FText::FromString(SubjectValue));
+            ConfirmButtonText = NSLOCTEXT("EVConfirmationDialog", "AddButton", "ADD WORD");
+            DiscardButtonText = NSLOCTEXT("EVConfirmationDialog", "StayMissingButton", "STAY");
+            break;
+
+        case EEVConfirmationDialogType::UnsupportedTranslationLanguage:
+            DialogText = FText::Format(NSLOCTEXT("EVConfirmationDialog", "UnsupportedTranslationLanguage",
+                                                 "The language '{0}' is not supported as a vocabulary mode yet."),
+                                       FText::FromString(SubjectValue));
+            ConfirmButtonText = NSLOCTEXT("EVConfirmationDialog", "OkButton", "OK");
+            DiscardButtonText = NSLOCTEXT("EVConfirmationDialog", "CloseButton", "CLOSE");
+            break;
+
+        case EEVConfirmationDialogType::CreateTranslationLanguageContext:
+            DialogText =
+                FText::Format(NSLOCTEXT("EVConfirmationDialog", "CreateTranslationLanguageContext",
+                                        "The language context '{0}' does not exist yet. Would you like to create it?"),
+                              FText::FromString(SubjectValue));
+            ConfirmButtonText = NSLOCTEXT("EVConfirmationDialog", "CreateContextButton", "CREATE");
+            DiscardButtonText = NSLOCTEXT("EVConfirmationDialog", "CancelContextButton", "CANCEL");
+            break;
+
+        case EEVConfirmationDialogType::ReviewExistingTranslationWord:
+            DialogText = FText::Format(NSLOCTEXT("EVConfirmationDialog", "ReviewExistingTranslationWord",
+                                                 "'{0}' exists in the target vocabulary context. Review it?"),
+                                       FText::FromString(SubjectValue));
+            ConfirmButtonText = NSLOCTEXT("EVConfirmationDialog", "ReviewTranslationButton", "REVIEW");
+            DiscardButtonText = NSLOCTEXT("EVConfirmationDialog", "StayTranslationButton", "STAY");
+            break;
+
+        case EEVConfirmationDialogType::AddMissingTranslationWord:
+            DialogText = FText::Format(NSLOCTEXT("EVConfirmationDialog", "AddMissingTranslationWord",
+                                                 "'{0}' is missing from the target vocabulary context. Add it?"),
+                                       FText::FromString(SubjectValue));
+            ConfirmButtonText = NSLOCTEXT("EVConfirmationDialog", "AddTranslationWordButton", "ADD WORD");
+            DiscardButtonText = NSLOCTEXT("EVConfirmationDialog", "CancelTranslationWordButton", "CANCEL");
+            break;
+
         default:
             DialogText = FText::FromString(TEXT("Unknown"));
             ConfirmButtonText = FText::FromString(TEXT("CONFIRM"));
@@ -150,6 +208,12 @@ private:
             DiscardButtonColor = FLinearColor(0.15f, 0.75f, 0.20f);
             break;
 
+        case EEVConfirmationDialogType::ReviewExistingRelatedWord:
+        case EEVConfirmationDialogType::AddMissingRelatedWord:
+        case EEVConfirmationDialogType::UnsupportedTranslationLanguage:
+        case EEVConfirmationDialogType::CreateTranslationLanguageContext:
+        case EEVConfirmationDialogType::ReviewExistingTranslationWord:
+        case EEVConfirmationDialogType::AddMissingTranslationWord:
         case EEVConfirmationDialogType::EnableAndroidNotifications:
             DialogTextColor = FLinearColor(1.00f, 0.60f, 0.00f);
             ConfirmButtonColor = FLinearColor(1.00f, 0.60f, 0.00f);

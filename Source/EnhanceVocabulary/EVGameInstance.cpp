@@ -1373,3 +1373,40 @@ void UEVGameInstance::HandleNotificationPermissionResult(const bool bGranted)
 {
     NotificationPermissionResultDelegate.Broadcast(bGranted);
 }
+int32 UEVGameInstance::GetVocabularyEntryCountByCriteria(const FString& SearchPrefix,
+                                                         const FEVVocabularyQueryCriteria& Criteria) const
+{
+    if (!VocabularyStorageService)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GetVocabularyEntryCountByCriteria: VocabularyStorageService is null"));
+        return 0;
+    }
+    return VocabularyStorageService->GetVocabularyEntryCountByCriteria(SearchPrefix, Criteria);
+}
+
+bool UEVGameInstance::GetVocabularyEntriesPageByCriteria(TArray<FVocabularyEntry>& OutVocabularyEntries,
+                                                         const FString& SearchPrefix,
+                                                         const FEVVocabularyQueryCriteria& Criteria, const int32 Limit,
+                                                         const int32 Offset) const
+{
+    OutVocabularyEntries.Reset();
+    if (!VocabularyStorageService || Limit <= 0 || Offset < 0)
+    {
+        return false;
+    }
+
+    OutVocabularyEntries =
+        VocabularyStorageService->GetVocabularyEntriesPageByCriteria(SearchPrefix, Criteria, Limit, Offset);
+    return true;
+}
+
+void UEVGameInstance::SetActiveVocabularyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria)
+{
+    ActiveVocabularyQueryCriteria = Criteria;
+    ActiveVocabularyQueryCriteria.Normalize();
+}
+
+const FEVVocabularyQueryCriteria& UEVGameInstance::GetActiveVocabularyQueryCriteria() const
+{
+    return ActiveVocabularyQueryCriteria;
+}

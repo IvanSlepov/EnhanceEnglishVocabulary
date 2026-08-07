@@ -68,22 +68,37 @@ void UEVAddWordWidget::Init()
     Button_Clear->SetIsEnabled(false);
 }
 
-void UEVAddWordWidget::EnableEditableTextBox(bool bIsEditableTextFieldEnabled)
+void UEVAddWordWidget::SetWordInput(const FString& Word)
 {
-    if (bIsEditableTextFieldEnabled)
+    if (!EditableText_WordInput)
     {
-        if (!EditableText_WordInput->GetIsEnabled())
-        {
-            EditableText_WordInput->SetIsEnabled(bIsEditableTextFieldEnabled);
-        }
+        return;
     }
-    else
+
+    EnableEditableTextBox(true);
+    EditableText_WordInput->SetText(FText::FromString(Word));
+    EditableText_WordInput->SetKeyboardFocus();
+}
+
+void UEVAddWordWidget::EnableEditableTextBox(bool bEnable)
+{
+    if (EditableText_WordInput)
     {
-        if (EditableText_WordInput->GetIsEnabled())
-        {
-            EditableText_WordInput->SetIsEnabled(bIsEditableTextFieldEnabled);
-        }
+        EditableText_WordInput->SetIsReadOnly(!bEnable);
     }
+
+    if (Button_Search)
+    {
+        Button_Search->SetIsEnabled(bEnable);
+    }
+
+    if (Button_Clear)
+    {
+        Button_Clear->SetIsEnabled(bEnable);
+    }
+
+    // Any future controls that depend on the editable state
+    // should also be handled here.
 }
 
 void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
@@ -94,6 +109,11 @@ void UEVAddWordWidget::SetControlsEnabled(bool bEnabled)
 bool UEVAddWordWidget::GetControlsEnabled()
 {
     return bAreInteractionElementsEnabled;
+}
+
+void UEVAddWordWidget::SetInputEnabled(bool bSetInputEnabled)
+{
+    EnableEditableTextBox(bSetInputEnabled);
 }
 
 void UEVAddWordWidget::ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult)
@@ -190,7 +210,7 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
         EVErrorInfo.Message = FText::FromString(TEXT("We couldn't find that word. Please check the spelling "
                                                      "or change your dictionary provider in settings."));
 
-        EnableEditableTextBox(true);
+        EnableEditableTextBox(false);
         OnError.Broadcast(EVErrorInfo);
 
         return;

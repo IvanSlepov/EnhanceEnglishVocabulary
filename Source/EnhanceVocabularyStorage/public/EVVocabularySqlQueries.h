@@ -13,6 +13,8 @@ public:
     static FString GetSelectVocabularyEntriesQuery();
     static FString GetSelectVocabularyEntriesPageQuery();
     static FString GetSelectVocabularyEntriesPageByPrefixQuery();
+    static FString GetVocabularyEntryCountByCriteriaQuery(int32 PartOfSpeechCount, bool bHasPrefix);
+    static FString GetSelectVocabularyEntriesPageByCriteriaQuery(int32 PartOfSpeechCount, bool bHasPrefix);
     static FString GetRandomlySelectedWordQuery();
 
     static constexpr const TCHAR* DeleteVocabularyEntry =

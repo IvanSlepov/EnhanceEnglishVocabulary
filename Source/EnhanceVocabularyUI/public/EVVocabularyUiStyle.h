@@ -38,6 +38,29 @@ inline const FSlateColor& GetMissingWrodEntryTextFontColor()
     return Color;
 }
 
+/**
+ * Subtle background used by pressable translation/relation values in
+ * Review Words. It intentionally remains close to white so the values read
+ * as part of the meaning while still looking interactive.
+ */
+inline const FSlateColor& GetReviewValueItemBackgroundTint()
+{
+    static const FSlateColor Color(FLinearColor(0.818f, 0.818f, 0.818f, 0.227f));
+    return Color;
+}
+
+inline const FSlateColor& GetInactiveFiltersTextFontColor()
+{
+    static const FSlateColor Color(FLinearColor(FColor(0x00, 0x97, 0x21, 0xFF)));
+    return Color;
+}
+
+inline const FSlateColor& GetActiveFiltersTextFontColor()
+{
+    static const FSlateColor Color(FLinearColor::Red);
+    return Color;
+}
+
 inline FString BuildWrappedWordForDisplay(const FString& Word, int32 BreakInterval = 14)
 {
     if (Word.IsEmpty() || BreakInterval <= 0)

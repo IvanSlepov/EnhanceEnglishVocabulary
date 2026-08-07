@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "EVVocabularyTypes.h"
+#include "EVVocabularyFilterTypes.h"
 #include "SQLiteDatabase.h"
 #include "EVFileExchangeTypes.h"
 #include "EVImportValidationTypes.h"
@@ -80,6 +81,11 @@ public:
     int32 GetVocabularyEntryCountByPrefix(const FString& SearchPrefix);
 
     TArray<FVocabularyEntry> GetVocabularyEntriesPageByPrefix(const FString& SearchPrefix, int32 Limit, int32 Offset);
+
+    int32 GetVocabularyEntryCountByCriteria(const FString& SearchPrefix, const FEVVocabularyQueryCriteria& Criteria);
+    TArray<FVocabularyEntry> GetVocabularyEntriesPageByCriteria(const FString& SearchPrefix,
+                                                                const FEVVocabularyQueryCriteria& Criteria, int32 Limit,
+                                                                int32 Offset);
 
 private:
     FSQLiteDatabase Database;

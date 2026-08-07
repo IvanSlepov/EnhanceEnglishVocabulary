@@ -91,3 +91,41 @@ FString FEVVocabularySqlQueries::GetRandomlySelectedWordQuery()
 {
     return TEXT("SELECT Word FROM VocabularyEntries ORDER BY RANDOM() LIMIT 1;");
 }
+
+namespace
+{
+FString BuildFilterWhereClause(const int32 PartOfSpeechCount, const bool bHasPrefix)
+{
+    TArray<FString> Conditions;
+    if (bHasPrefix)
+    {
+        Conditions.Add(TEXT("e.NormalizedWord LIKE ? COLLATE NOCASE"));
+    }
+    if (PartOfSpeechCount > 0)
+    {
+        TArray<FString> Placeholders;
+        for (int32 Index = 0; Index < PartOfSpeechCount; ++Index)
+        {
+            Placeholders.Add(TEXT("?"));
+        }
+        Conditions.Add(FString::Printf(TEXT("EXISTS (SELECT 1 FROM VocabularyMeanings fm WHERE fm.EntryId = e.Id "
+                                            "AND lower(trim(fm.PartOfSpeech)) IN (%s))"),
+                                       *FString::Join(Placeholders, TEXT(", "))));
+    }
+    return Conditions.IsEmpty() ? FString() : TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
+}
+} // namespace
+
+FString FEVVocabularySqlQueries::GetVocabularyEntryCountByCriteriaQuery(const int32 PartOfSpeechCount,
+                                                                        const bool bHasPrefix)
+{
+    const FString WhereClause = BuildFilterWhereClause(PartOfSpeechCount, bHasPrefix);
+    return FString::Printf(TEXT("SELECT COUNT(*) FROM VocabularyEntries e %s;"), *WhereClause);
+}
+
+FString FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageByCriteriaQuery(const int32 PartOfSpeechCount,
+                                                                               const bool bHasPrefix)
+{
+    return GetSelectCompatibilityColumnsQuery(BuildFilterWhereClause(PartOfSpeechCount, bHasPrefix),
+                                              TEXT("ORDER BY e.Word COLLATE NOCASE ASC LIMIT ? OFFSET ?"));
+}

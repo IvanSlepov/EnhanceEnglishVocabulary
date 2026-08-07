@@ -2101,3 +2101,108 @@ void UEVVocabularyStorageService::CollectAppendValidationProblems(
         }
     }
 }
+int32 UEVVocabularyStorageService::GetVocabularyEntryCountByCriteria(const FString& SearchPrefix,
+                                                                     const FEVVocabularyQueryCriteria& Criteria)
+{
+    if (!Database.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot count vocabulary entries by criteria: database is invalid"));
+        return 0;
+    }
+
+    const TArray<FString> PartsOfSpeech = EVVocabularyFilter::GetPartOfSpeechDatabaseValues(Criteria);
+    const bool bHasPrefix = !SearchPrefix.TrimStartAndEnd().IsEmpty();
+
+    FSQLitePreparedStatement Statement;
+    const FString Query =
+        FEVVocabularySqlQueries::GetVocabularyEntryCountByCriteriaQuery(PartsOfSpeech.Num(), bHasPrefix);
+    if (!Statement.Create(Database, *Query, ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create vocabulary criteria COUNT statement"));
+        return 0;
+    }
+
+    int32 BindingIndex = 1;
+    if (bHasPrefix)
+    {
+        const FString SearchPattern = FEVWordInputValidator::NormalizeWordInput(SearchPrefix) + TEXT("%");
+        if (!Statement.SetBindingValueByIndex(BindingIndex++, SearchPattern))
+        {
+            return 0;
+        }
+    }
+    for (const FString& PartOfSpeech : PartsOfSpeech)
+    {
+        if (!Statement.SetBindingValueByIndex(BindingIndex++, PartOfSpeech))
+        {
+            return 0;
+        }
+    }
+
+    if (Statement.Step() != ESQLitePreparedStatementStepResult::Row)
+    {
+        return 0;
+    }
+
+    int32 EntryCount = 0;
+    return Statement.GetColumnValueByIndex(0, EntryCount) ? EntryCount : 0;
+}
+
+TArray<FVocabularyEntry> UEVVocabularyStorageService::GetVocabularyEntriesPageByCriteria(
+    const FString& SearchPrefix, const FEVVocabularyQueryCriteria& Criteria, const int32 Limit, const int32 Offset)
+{
+    TArray<FVocabularyEntry> Entries;
+    if (!Database.IsValid() || Limit <= 0 || Offset < 0)
+    {
+        return Entries;
+    }
+
+    const TArray<FString> PartsOfSpeech = EVVocabularyFilter::GetPartOfSpeechDatabaseValues(Criteria);
+    const bool bHasPrefix = !SearchPrefix.TrimStartAndEnd().IsEmpty();
+
+    FSQLitePreparedStatement Statement;
+    const FString Query =
+        FEVVocabularySqlQueries::GetSelectVocabularyEntriesPageByCriteriaQuery(PartsOfSpeech.Num(), bHasPrefix);
+    if (!Statement.Create(Database, *Query, ESQLitePreparedStatementFlags::Persistent))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create vocabulary criteria page statement"));
+        return Entries;
+    }
+
+    int32 BindingIndex = 1;
+    if (bHasPrefix)
+    {
+        const FString SearchPattern = FEVWordInputValidator::NormalizeWordInput(SearchPrefix) + TEXT("%");
+        if (!Statement.SetBindingValueByIndex(BindingIndex++, SearchPattern))
+        {
+            return Entries;
+        }
+    }
+    for (const FString& PartOfSpeech : PartsOfSpeech)
+    {
+        if (!Statement.SetBindingValueByIndex(BindingIndex++, PartOfSpeech))
+        {
+            return Entries;
+        }
+    }
+    if (!Statement.SetBindingValueByIndex(BindingIndex++, Limit) ||
+        !Statement.SetBindingValueByIndex(BindingIndex, Offset))
+    {
+        return Entries;
+    }
+
+    Entries.Reserve(Limit);
+    while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+    {
+        FVocabularyEntry Entry;
+        if (!ReadEntryFields(Statement, Entry))
+        {
+            Entries.Reset();
+            return Entries;
+        }
+        Entry.NormalizedWord = FEVWordInputValidator::NormalizeWordInput(Entry.Word);
+        Entry.bHasUsageExamples = EVVocabularyUsage::HasUsageExamples(Entry.Usage);
+        Entries.Add(MoveTemp(Entry));
+    }
+    return Entries;
+}

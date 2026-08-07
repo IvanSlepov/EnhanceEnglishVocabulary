@@ -2,6 +2,7 @@
 
 #include "Components/Button.h"
 #include "Components/MultiLineEditableTextBox.h"
+#include "EVVocabularyUiStyle.h"
 
 void UEVVocabularyValueItemWidgetBase::NativeOnInitialized()
 {
@@ -25,11 +26,20 @@ void UEVVocabularyValueItemWidgetBase::NativeOnInitialized()
         return;
     }
 
+    OriginalTextBoxStyle = MultiLineEditableTextBox_Value->WidgetStyle;
+
+    if (!Button_ValueAction)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Button_ValueAction is nullptr in EVVocabularyValueItemWidgetBase."));
+        return;
+    }
+
     MultiLineEditableTextBox_Value->OnTextChanged.AddUniqueDynamic(this, &ThisClass::HandleValueTextChanged);
 
     MultiLineEditableTextBox_Value->OnTextCommitted.AddUniqueDynamic(this, &ThisClass::HandleValueTextCommitted);
 
     Button_Delete->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleDeleteButtonClicked);
+    Button_ValueAction->OnPressed.AddUniqueDynamic(this, &ThisClass::HandleValueActionButtonPressed);
 
     MultiLineEditableTextBox_Value->SetText(FText::FromString(Value));
 }
@@ -53,6 +63,11 @@ void UEVVocabularyValueItemWidgetBase::NativeDestruct()
     if (Button_Delete)
     {
         Button_Delete->OnClicked.RemoveDynamic(this, &ThisClass::HandleDeleteButtonClicked);
+    }
+
+    if (Button_ValueAction)
+    {
+        Button_ValueAction->OnPressed.RemoveDynamic(this, &ThisClass::HandleValueActionButtonPressed);
     }
 
     Super::NativeDestruct();
@@ -82,14 +97,25 @@ const FString& UEVVocabularyValueItemWidgetBase::GetValue() const
 
 void UEVVocabularyValueItemWidgetBase::SetEditable(const bool bInEditable)
 {
-    bEditable = bInEditable;
-
-    ApplyEditableState();
+    SetItemMode(bInEditable ? EEVVocabularyValueItemMode::DetailedEditable
+                            : EEVVocabularyValueItemMode::DetailedReadOnly);
 }
 
 bool UEVVocabularyValueItemWidgetBase::IsEditable() const
 {
     return bEditable;
+}
+
+void UEVVocabularyValueItemWidgetBase::SetItemMode(const EEVVocabularyValueItemMode InMode)
+{
+    ItemMode = InMode;
+    bEditable = ItemMode == EEVVocabularyValueItemMode::DetailedEditable;
+    ApplyEditableState();
+}
+
+EEVVocabularyValueItemMode UEVVocabularyValueItemWidgetBase::GetItemMode() const
+{
+    return ItemMode;
 }
 
 void UEVVocabularyValueItemWidgetBase::SetHintText(const FText& InHintText)
@@ -126,9 +152,19 @@ void UEVVocabularyValueItemWidgetBase::HandleValueTextCommitted(const FText& Com
     OnValueCommitted.Broadcast(this, Value, CommitMethod);
 }
 
+void UEVVocabularyValueItemWidgetBase::HandleValueActionButtonPressed()
+{
+    if (ItemMode != EEVVocabularyValueItemMode::ReviewReadOnly || bPendingAddItem)
+    {
+        return;
+    }
+
+    OnValuePressed.Broadcast(this, Value);
+}
+
 void UEVVocabularyValueItemWidgetBase::HandleDeleteButtonClicked()
 {
-    if (!bEditable)
+    if (!bEditable && ItemMode != EEVVocabularyValueItemMode::FilterRemovableReadOnly)
     {
         return;
     }
@@ -138,14 +174,29 @@ void UEVVocabularyValueItemWidgetBase::HandleDeleteButtonClicked()
 
 void UEVVocabularyValueItemWidgetBase::ApplyEditableState()
 {
+    const bool bIsReview = ItemMode == EEVVocabularyValueItemMode::ReviewReadOnly;
+    const bool bIsDetailedEditable = ItemMode == EEVVocabularyValueItemMode::DetailedEditable;
+    const bool bIsFilterChip = ItemMode == EEVVocabularyValueItemMode::FilterRemovableReadOnly;
+
     if (MultiLineEditableTextBox_Value)
     {
-        MultiLineEditableTextBox_Value->SetIsReadOnly(!bEditable);
+        MultiLineEditableTextBox_Value->SetIsReadOnly(!bIsDetailedEditable);
+        MultiLineEditableTextBox_Value->WidgetStyle.BackgroundImageReadOnly.TintColor =
+            (bIsReview || bIsFilterChip) ? EVVocabularyUiStyle::GetReviewValueItemBackgroundTint()
+                                         : OriginalTextBoxStyle.BackgroundImageReadOnly.TintColor;
+        MultiLineEditableTextBox_Value->SynchronizeProperties();
+    }
+
+    if (Button_ValueAction)
+    {
+        Button_ValueAction->SetVisibility(bIsReview && !bPendingAddItem ? ESlateVisibility::Visible
+                                                                        : ESlateVisibility::Collapsed);
     }
 
     if (Button_Delete)
     {
-        Button_Delete->SetVisibility(bEditable && !bPendingAddItem ? ESlateVisibility::Visible
-                                                                   : ESlateVisibility::Collapsed);
+        Button_Delete->SetVisibility((bIsDetailedEditable || bIsFilterChip) && !bPendingAddItem
+                                         ? ESlateVisibility::Visible
+                                         : ESlateVisibility::Collapsed);
     }
 }

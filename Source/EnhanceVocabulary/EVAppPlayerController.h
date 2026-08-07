@@ -15,13 +15,16 @@
 #include "EVWidgetCommonEvents.h"
 #include "EVFileExchangeTypes.h"
 #include "EVPopUpSettingsTypes.h"
+#include "EVVocabularyInteractionTypes.h"
+#include "EVVocabularyFilterTypes.h"
+#include "EVVocabularyFilterWidgetProvider.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
  *
  */
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetsError, const FEVErrorInfo&, ErrorInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetsErrorResolved, const FEVErrorInfo&, ErrorInfo);
 
 UCLASS()
 class ENHANCEVOCABULARY_API AEVAppPlayerController : public APlayerController
@@ -71,13 +74,21 @@ public:
     UPROPERTY()
     TObjectPtr<UUserWidget> ConfirmationDialogWidgetInstance;
 
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> VocabularyFilterWidgetClass;
+
+    UPROPERTY()
+    TObjectPtr<UUserWidget> VocabularyFilterWidgetInstance;
+
+    IEVVocabularyFilterWidgetProvider* VocabularyFilterWidgetProvider = nullptr;
+
     IEVConfirmationDialogWidgetProvider* ConfirmationDialogWidget = nullptr;
 
     class UEVGameInstance* EVGameInstance;
 
     // Events
     UPROPERTY(BlueprintAssignable, Category = "PC Events")
-    FOnWidgetsError OnWidgetsError;
+    FOnWidgetsErrorResolved OnWidgetsErrorResolved;
 
     void HandleFileOperationCompleted(const FEVRequestedActionInfo& RequestedActionInfo);
     void HandleImportFilePickCompleted(const FEVFileExchangeResultInfo& ResultInfo);
@@ -92,6 +103,8 @@ private:
     void PollNotificationState();
     void SynchronizeNotificationSettingsFromDevice();
     void HandlePendingNotificationWord();
+
+    FEVErrorInfo EVErrorInfo;
 
     FDelegateHandle ApplicationEnteredForegroundHandle;
     FTimerHandle NotificationStatePollTimerHandle;
@@ -108,6 +121,7 @@ private:
     FEVFileOperationInfo PendingFileOperationInfo;
 
     EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
+    FEVVocabularyValueActionRequest PendingVocabularyValueActionRequest;
 
     // ======== Notification settings and transitions ===========
     // Settings that are currently accepted by the controller.
@@ -129,6 +143,9 @@ private:
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
 
     UFUNCTION()
+    void HandleErrorWidgetDestroyed();
+
+    UFUNCTION()
     void HandleLoadingSpinner(bool bDisplayLoadingSpinner);
 
     UFUNCTION()
@@ -139,6 +156,26 @@ private:
 
     UFUNCTION()
     void HandleIssuedFileOperation(const FEVFileOperationInfo& IssuedFileOperation);
+
+    UFUNCTION()
+    void HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request);
+
+    UFUNCTION()
+    void HandleVocabularyFiltersRequested();
+
+    UFUNCTION()
+    void HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria);
+
+    UFUNCTION()
+    void HandleVocabularyFilterWidgetCloseRequested();
+
+    void HandleRelationValueAction(const FEVVocabularyValueActionRequest& Request);
+    void HandleTranslationValueAction(const FEVVocabularyValueActionRequest& Request);
+    EEVVocabularyLanguageSupportState ResolveTranslationLanguageSupport(const FString& LanguageCode) const;
+    bool DoesTranslationWordExistInTargetContext(const FEVVocabularyTranslation& Translation) const;
+    void HandleTranslationContextCreationConfirmed();
+    void HandleTranslationExistingWordConfirmed();
+    void HandleTranslationMissingWordConfirmed();
 
     // Handlers for the "EVWordEntryWidgetDetailed.h" buttons
     UFUNCTION()

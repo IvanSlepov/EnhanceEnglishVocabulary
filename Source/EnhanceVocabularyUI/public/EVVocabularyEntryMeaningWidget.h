@@ -3,9 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Styling/SlateTypes.h"
 #include "Blueprint/IUserObjectListEntry.h"
 #include "Blueprint/UserWidget.h"
 #include "EVVocabularyTypes.h"
+#include "EVVocabularyInteractionTypes.h"
 #include "EVVocabularyEntryMeaningWidget.generated.h"
 
 class UMultiLineEditableTextBox;
@@ -20,6 +22,10 @@ class UEVVocabularyEntryMeaningWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVocabularyMeaningChanged, UEVVocabularyEntryMeaningWidget*,
                                              MeaningWidget, const FEVVocabularyMeaning&, UpdatedMeaning);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVocabularyTranslationPressed, const FEVVocabularyTranslation&,
+                                            Translation);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVocabularyRelationPressed, EEVVocabularyValueActionType, ActionType,
+                                             const FEVVocabularyRelation&, Relation);
 
 /**
  * Reusable widget representing one vocabulary meaning.
@@ -74,6 +80,12 @@ public:
     UFUNCTION(BlueprintPure, Category = "Vocabulary Meaning")
     bool IsEditable() const;
 
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Meaning")
+    void SetWidgetMode(EEVVocabularyMeaningWidgetMode InMode);
+
+    UFUNCTION(BlueprintPure, Category = "Vocabulary Meaning")
+    EEVVocabularyMeaningWidgetMode GetWidgetMode() const;
+
     /** Index inside the owning vocabulary record. */
     UFUNCTION(BlueprintPure, Category = "Vocabulary Meaning")
     int32 GetMeaningIndex() const;
@@ -84,6 +96,12 @@ public:
      */
     UPROPERTY(BlueprintAssignable, Category = "Vocabulary Meaning|Events")
     FOnVocabularyMeaningChanged OnMeaningChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "Vocabulary Meaning|Events")
+    FOnVocabularyTranslationPressed OnTranslationPressed;
+
+    UPROPERTY(BlueprintAssignable, Category = "Vocabulary Meaning|Events")
+    FOnVocabularyRelationPressed OnRelationPressed;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -177,6 +195,15 @@ private:
     UFUNCTION()
     void HandleChildValueChanged(UEVVocabularyValueItemWidgetBase* ItemWidget, const FString& NewValue);
 
+    UFUNCTION()
+    void HandleTranslationPressed(UEVVocabularyValueItemWidgetBase* ItemWidget, const FString& Value);
+
+    UFUNCTION()
+    void HandleSynonymPressed(UEVVocabularyValueItemWidgetBase* ItemWidget, const FString& Value);
+
+    UFUNCTION()
+    void HandleAntonymPressed(UEVVocabularyValueItemWidgetBase* ItemWidget, const FString& Value);
+
 private:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UMultiLineEditableTextBox> MultiLineEditableTextBox_PartOfSpeech_Value = nullptr;
@@ -213,6 +240,13 @@ private:
 
     UPROPERTY(Transient)
     bool bEditable = false;
+
+    UPROPERTY(Transient)
+    EEVVocabularyMeaningWidgetMode WidgetMode = EEVVocabularyMeaningWidgetMode::DetailedReadOnly;
+
+    FEditableTextBoxStyle OriginalPartOfSpeechStyle;
+    FEditableTextBoxStyle OriginalDefinitionStyle;
+    FEditableTextBoxStyle OriginalUsageStyle;
 
     UPROPERTY(Transient)
     int32 MeaningIndex = INDEX_NONE;

@@ -7,6 +7,8 @@
 #include "Components/ListView.h"
 #include "EVEntryItem.h"
 #include "EVWordEntryActionTypes.h"
+#include "EVVocabularyInteractionTypes.h"
+#include "EVVocabularyFilterTypes.h"
 #include "Components/ComboBoxString.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -22,6 +24,9 @@ class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryWidgetControlsButtonPressed, const FEVWordEntryActionInfo&,
                                             WordEntryActionInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReviewVocabularyValueActionRequested,
+                                            const FEVVocabularyValueActionRequest&, Request);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnReviewFiltersRequested);
 
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVReviewWordsWidget : public UUserWidget
@@ -50,11 +55,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     class UButton* Button_ClearSearch;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UButton> Button_Filter = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    TObjectPtr<UTextBlock> TextBlock_AreFiltersAppliedText = nullptr;
+
     class UEVGameInstance* EVGameInstance;
 
     void DisplayCurrentPage();
     void RefreshReview();
     void SetSearchWord(const FString& Word);
+    void ApplyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria);
 
     void UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry);
     void RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry);
@@ -84,6 +96,12 @@ public:
     UPROPERTY(BlueprintAssignable)
     FOnWordEntryWidgetControlsButtonPressed OnWordEntryWidgetControlsButtonPressed;
 
+    UPROPERTY(BlueprintAssignable)
+    FOnReviewVocabularyValueActionRequested OnVocabularyValueActionRequested;
+
+    UPROPERTY(BlueprintAssignable)
+    FOnReviewFiltersRequested OnFiltersRequested;
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
@@ -100,6 +118,9 @@ private:
     UFUNCTION()
     void HandleWordEntryViewButtonPressed(UEVWordEntryWidget* CurrentWordEntryWidget);
 
+    UFUNCTION()
+    void HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request);
+
     void PopulateEntriesPerPageComboBox();
 
     UFUNCTION()
@@ -110,6 +131,12 @@ private:
 
     UFUNCTION()
     void ClearSearch();
+
+    UFUNCTION()
+    void HandleFilterButtonPressed();
+
+    void UpdateFilterStatusText();
+    FEVVocabularyRecord BuildFilteredRecordForDisplay(const FEVVocabularyRecord& SourceRecord) const;
 
     static constexpr int32 DefaultEntriesPerPage = 10;
 
@@ -127,6 +154,9 @@ private:
 
     FReviewPaginationState NormalPaginationState;
     FReviewPaginationState SearchPaginationState;
+
+    UPROPERTY(Transient)
+    FEVVocabularyQueryCriteria ActiveQueryCriteria;
 
     FReviewPaginationState& GetActivePaginationState();
     const FReviewPaginationState& GetActivePaginationState() const;

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "EVVocabularyTypes.h"
+#include "EVVocabularyInteractionTypes.h"
 #include "EVEntryItem.generated.h"
 
 /**
@@ -59,6 +60,9 @@ public:
     /** Index of VocabularyMeaning inside its owning FEVVocabularyRecord. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vocabulary Entry Item")
     int32 VocabularyMeaningIndex = INDEX_NONE;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vocabulary Entry Item")
+    EEVVocabularyMeaningWidgetMode MeaningWidgetMode = EEVVocabularyMeaningWidgetMode::DetailedReadOnly;
 
     /**
      * Temporary compatibility payload for the current flat ReviewWords UI.

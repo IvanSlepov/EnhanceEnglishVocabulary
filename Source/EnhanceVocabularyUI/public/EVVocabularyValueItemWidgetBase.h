@@ -1,7 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Styling/SlateTypes.h"
 #include "Blueprint/UserWidget.h"
+#include "EVVocabularyInteractionTypes.h"
 #include "EVVocabularyValueItemWidgetBase.generated.h"
 
 class UButton;
@@ -16,6 +18,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnVocabularyValueItemCommitted, 
                                                CommitMethod);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVocabularyValueItemDeleteRequested, UEVVocabularyValueItemWidgetBase*,
+                                             ItemWidget, const FString&, Value);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVocabularyValueItemPressed, UEVVocabularyValueItemWidgetBase*,
                                              ItemWidget, const FString&, Value);
 
 /**
@@ -70,6 +75,12 @@ public:
     UFUNCTION(BlueprintPure, Category = "Vocabulary Value Item")
     bool IsEditable() const;
 
+    UFUNCTION(BlueprintCallable, Category = "Vocabulary Value Item")
+    void SetItemMode(EEVVocabularyValueItemMode InMode);
+
+    UFUNCTION(BlueprintPure, Category = "Vocabulary Value Item")
+    EEVVocabularyValueItemMode GetItemMode() const;
+
     /** Sets the input hint shown when this item is empty. */
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Value Item")
     void SetHintText(const FText& InHintText);
@@ -102,6 +113,9 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Vocabulary Value Item|Events")
     FOnVocabularyValueItemDeleteRequested OnDeleteRequested;
 
+    UPROPERTY(BlueprintAssignable, Category = "Vocabulary Value Item|Events")
+    FOnVocabularyValueItemPressed OnValuePressed;
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeConstruct() override;
@@ -116,6 +130,9 @@ private:
 
     UFUNCTION()
     void HandleDeleteButtonClicked();
+
+    UFUNCTION()
+    void HandleValueActionButtonPressed();
 
     void ApplyEditableState();
 
@@ -134,6 +151,9 @@ private:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> Button_Delete = nullptr;
 
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UButton> Button_ValueAction = nullptr;
+
     UPROPERTY(Transient)
     FString Value;
 
@@ -142,4 +162,9 @@ private:
 
     UPROPERTY(Transient)
     bool bPendingAddItem = false;
+
+    UPROPERTY(Transient)
+    EEVVocabularyValueItemMode ItemMode = EEVVocabularyValueItemMode::DetailedReadOnly;
+
+    FEditableTextBoxStyle OriginalTextBoxStyle;
 };
