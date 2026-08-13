@@ -147,6 +147,59 @@ void UEVRootWidget::NativeConstruct()
     }
 }
 
+void UEVRootWidget::ApplyVocabularySearchOutcome(const FEVVocabularySearchOutcome&)
+{
+    // Feature-level routing is introduced with the approved consumer migration.
+}
+
+void UEVRootWidget::ApplyVocabularyRecordOutcome(const FEVVocabularyRecordOutcome&)
+{
+    // Feature-level routing is introduced with the approved consumer migration.
+}
+
+void UEVRootWidget::ApplyVocabularyQueryOutcome(const FEVVocabularyQueryOutcome&)
+{
+    // Feature-level routing is introduced with the approved consumer migration.
+}
+
+void UEVRootWidget::ApplyVocabularyMutationOutcome(const FEVVocabularyMutationOutcome&)
+{
+    // Feature-level routing is introduced with the approved consumer migration.
+}
+
+void UEVRootWidget::ApplyVocabularyChanged(const FEVVocabularyChangeInfo&)
+{
+    // Feature-level routing is introduced with the approved consumer migration.
+}
+
+void UEVRootWidget::ApplyVocabularyPreferencesState(const FEVVocabularyPreferencesState&)
+{
+    // Feature-level routing is introduced with the approved consumer migration.
+}
+
+void UEVRootWidget::ApplyNetworkConnectivityState(const EEVApplicationConnectivityState State)
+{
+    switch (State)
+    {
+    case EEVApplicationConnectivityState::Online:
+        HandleOnConnectionStateChanged(EEVConnectionState::Online);
+        break;
+
+    case EEVApplicationConnectivityState::Connecting:
+        HandleOnConnectionStateChanged(EEVConnectionState::Connecting);
+        break;
+
+    default:
+        HandleOnConnectionStateChanged(EEVConnectionState::Offline);
+        break;
+    }
+}
+
+void UEVRootWidget::ApplyGlobalErrorResolution(const FEVErrorInfo& ErrorInfo)
+{
+    HandleOnErrorMessageResolved(ErrorInfo);
+}
+
 void UEVRootWidget::ButtonMenuPressed()
 {
     if (MenuSwitcherCount == 0)

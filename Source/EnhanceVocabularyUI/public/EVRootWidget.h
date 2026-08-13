@@ -26,6 +26,11 @@
 #include "EVWordEntryActionTypes.h"
 #include "EVFileExchangeTypes.h"
 #include "EVPopUpSettingsTypes.h"
+#include "EVVocabularySearchApplicationPort.h"
+#include "EVVocabularyLibraryApplicationPort.h"
+#include "EVVocabularyPreferencesApplicationPort.h"
+#include "EVNetworkConnectivityApplicationPort.h"
+#include "EVGlobalPresentationResolutionPort.h"
 
 #include "EVRootWidget.generated.h"
 
@@ -34,7 +39,14 @@
  */
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget, public IEVErrorProvider, public IEVWidgetCommonEvents
+class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget,
+                                              public IEVErrorProvider,
+                                              public IEVWidgetCommonEvents,
+                                              public IEVVocabularySearchApplicationPort,
+                                              public IEVVocabularyLibraryApplicationPort,
+                                              public IEVVocabularyPreferencesApplicationPort,
+                                              public IEVNetworkConnectivityApplicationPort,
+                                              public IEVGlobalPresentationResolutionPort
 {
     GENERATED_BODY()
 
@@ -132,6 +144,42 @@ public:
     virtual void
     HandleVocabularyLanguagePreferencesApplied(const FEVVocabularyLanguagePreferences& Preferences) override;
 
+    virtual FOnEVVocabularySearchRequested& GetVocabularySearchRequestedEvent() override
+    {
+        return OnVocabularySearchRequested;
+    }
+
+    virtual void ApplyVocabularySearchOutcome(const FEVVocabularySearchOutcome& Outcome) override;
+
+    virtual FOnEVVocabularyRecordRequested& GetVocabularyRecordRequestedEvent() override
+    {
+        return OnVocabularyRecordRequested;
+    }
+
+    virtual FOnEVVocabularyQueryRequested& GetVocabularyQueryRequestedEvent() override
+    {
+        return OnVocabularyQueryRequested;
+    }
+
+    virtual FOnEVVocabularyMutationRequested& GetVocabularyMutationRequestedEvent() override
+    {
+        return OnVocabularyMutationRequested;
+    }
+
+    virtual void ApplyVocabularyRecordOutcome(const FEVVocabularyRecordOutcome& Outcome) override;
+    virtual void ApplyVocabularyQueryOutcome(const FEVVocabularyQueryOutcome& Outcome) override;
+    virtual void ApplyVocabularyMutationOutcome(const FEVVocabularyMutationOutcome& Outcome) override;
+    virtual void ApplyVocabularyChanged(const FEVVocabularyChangeInfo& ChangeInfo) override;
+
+    virtual FOnEVVocabularyPreferencesChangeRequested& GetVocabularyPreferencesChangeRequestedEvent() override
+    {
+        return OnVocabularyPreferencesChangeRequested;
+    }
+
+    virtual void ApplyVocabularyPreferencesState(const FEVVocabularyPreferencesState& State) override;
+    virtual void ApplyNetworkConnectivityState(EEVApplicationConnectivityState State) override;
+    virtual void ApplyGlobalErrorResolution(const FEVErrorInfo& ErrorInfo) override;
+
     // This method is getting called from the PC to
     // confirm a user-selected Pop-up Interval. And it always forces the
     // EEVPopUpIntervals::TurnedOff, regardless of WHAT user has selected other than this option
@@ -200,6 +248,12 @@ private:
 
     UPROPERTY(BlueprintAssignable)
     FOnVocabularyLanguagePreferencesChangedFromWidgets OnVocabularyLanguagePreferencesChanged;
+
+    FOnEVVocabularySearchRequested OnVocabularySearchRequested;
+    FOnEVVocabularyRecordRequested OnVocabularyRecordRequested;
+    FOnEVVocabularyQueryRequested OnVocabularyQueryRequested;
+    FOnEVVocabularyMutationRequested OnVocabularyMutationRequested;
+    FOnEVVocabularyPreferencesChangeRequested OnVocabularyPreferencesChangeRequested;
 
     UFUNCTION()
     void HandleOnConnectionErrorDetected();

@@ -19,6 +19,11 @@
 #include "EVVocabularyFilterTypes.h"
 #include "EVVocabularyFilterWidgetProvider.h"
 #include "EVVocabularyLanguageTypes.h"
+#include "EVVocabularySearchApplicationPort.h"
+#include "EVVocabularyLibraryApplicationPort.h"
+#include "EVVocabularyPreferencesApplicationPort.h"
+#include "EVNetworkConnectivityApplicationPort.h"
+#include "EVGlobalPresentationResolutionPort.h"
 #include "EVAppPlayerController.generated.h"
 
 /**
@@ -104,6 +109,27 @@ private:
     void PollNotificationState();
     void SynchronizeNotificationSettingsFromDevice();
     void HandlePendingNotificationWord();
+    void BindApplicationPorts();
+    void UnbindApplicationPorts();
+
+    void HandleVocabularySearchRequested(const FEVVocabularySearchRequest& Request);
+    void HandleVocabularyRecordRequested(const FEVVocabularyRecordRequest& Request);
+    void HandleVocabularyQueryRequested(const FEVVocabularyQueryRequest& Request);
+    void HandleVocabularyMutationRequested(const FEVVocabularyMutationRequest& Request);
+    void HandleVocabularyPreferencesChangeRequested(const FEVVocabularyPreferencesChangeRequest& Request);
+
+    void HandleVocabularySearchOutcomeReady(const FEVVocabularySearchOutcome& Outcome);
+    void HandleVocabularyRecordOutcomeReady(const FEVVocabularyRecordOutcome& Outcome);
+    void HandleVocabularyQueryOutcomeReady(const FEVVocabularyQueryOutcome& Outcome);
+    void HandleVocabularyMutationOutcomeReady(const FEVVocabularyMutationOutcome& Outcome);
+    void HandleVocabularyChanged(const FEVVocabularyChangeInfo& ChangeInfo);
+    void HandleVocabularyPreferencesStateReady(const FEVVocabularyPreferencesState& State);
+
+    IEVVocabularySearchApplicationPort* VocabularySearchApplicationPort = nullptr;
+    IEVVocabularyLibraryApplicationPort* VocabularyLibraryApplicationPort = nullptr;
+    IEVVocabularyPreferencesApplicationPort* VocabularyPreferencesApplicationPort = nullptr;
+    IEVNetworkConnectivityApplicationPort* NetworkConnectivityApplicationPort = nullptr;
+    IEVGlobalPresentationResolutionPort* GlobalPresentationResolutionPort = nullptr;
 
     FEVErrorInfo EVErrorInfo;
 

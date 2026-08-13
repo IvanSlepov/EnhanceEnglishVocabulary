@@ -12,6 +12,7 @@
 #include "EVPopUpSettingsTypes.h"
 #include "EVVocabularyFilterTypes.h"
 #include "EVVocabularyLanguageTypes.h"
+#include "EVApplicationRequestTypes.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -29,6 +30,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInst
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVImportFilePickCompleted, const FEVFileExchangeResultInfo&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVNotificationPermissionResultFromGameInstance, bool /* bGranted */);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularySearchOutcomeReady, const FEVVocabularySearchOutcome&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyRecordOutcomeReady, const FEVVocabularyRecordOutcome&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyQueryOutcomeReady, const FEVVocabularyQueryOutcome&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyMutationOutcomeReady, const FEVVocabularyMutationOutcome&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyChanged, const FEVVocabularyChangeInfo&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyPreferencesStateReady, const FEVVocabularyPreferencesState&);
 
 UENUM()
 enum class EEVVocabularyStorageServiceResult : uint8
@@ -129,6 +136,12 @@ public:
     void SearchWordOnline(const FString& Word, EEVWebProvider DefinitionUsageProvider,
                           EEVWebProvider TranslationProvider);
 
+    void RequestVocabularySearch(const FEVVocabularySearchRequest& Request);
+    void RequestVocabularyRecord(const FEVVocabularyRecordRequest& Request);
+    void RequestVocabularyQuery(const FEVVocabularyQueryRequest& Request);
+    void RequestVocabularyMutation(const FEVVocabularyMutationRequest& Request);
+    void RequestVocabularyPreferencesChange(const FEVVocabularyPreferencesChangeRequest& Request);
+
     UFUNCTION(BlueprintCallable, Category = "File Exchange")
     FEVRequestedActionInfo HandleFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo);
 
@@ -152,6 +165,36 @@ public:
     FEVNotificationPermissionResultFromGameInstance& OnNotificationPermissionResult()
     {
         return NotificationPermissionResultDelegate;
+    }
+
+    FEVVocabularySearchOutcomeReady& OnVocabularySearchOutcomeReady()
+    {
+        return VocabularySearchOutcomeReadyDelegate;
+    }
+
+    FEVVocabularyRecordOutcomeReady& OnVocabularyRecordOutcomeReady()
+    {
+        return VocabularyRecordOutcomeReadyDelegate;
+    }
+
+    FEVVocabularyQueryOutcomeReady& OnVocabularyQueryOutcomeReady()
+    {
+        return VocabularyQueryOutcomeReadyDelegate;
+    }
+
+    FEVVocabularyMutationOutcomeReady& OnVocabularyMutationOutcomeReady()
+    {
+        return VocabularyMutationOutcomeReadyDelegate;
+    }
+
+    FEVVocabularyChanged& OnVocabularyChanged()
+    {
+        return VocabularyChangedDelegate;
+    }
+
+    FEVVocabularyPreferencesStateReady& OnVocabularyPreferencesStateReady()
+    {
+        return VocabularyPreferencesStateReadyDelegate;
     }
 
 public:
@@ -231,6 +274,14 @@ private:
     FEVVocabularyQueryCriteria ActiveVocabularyQueryCriteria;
 
     FEVNotificationPermissionResultFromGameInstance NotificationPermissionResultDelegate;
+
+    FEVVocabularySearchOutcomeReady VocabularySearchOutcomeReadyDelegate;
+    FEVVocabularyRecordOutcomeReady VocabularyRecordOutcomeReadyDelegate;
+    FEVVocabularyQueryOutcomeReady VocabularyQueryOutcomeReadyDelegate;
+    FEVVocabularyMutationOutcomeReady VocabularyMutationOutcomeReadyDelegate;
+    FEVVocabularyChanged VocabularyChangedDelegate;
+    FEVVocabularyPreferencesStateReady VocabularyPreferencesStateReadyDelegate;
+    FGuid PendingVocabularySearchRequestId;
 
     UPROPERTY(Transient)
     FEVVocabularyLanguagePreferences VocabularyLanguagePreferences;

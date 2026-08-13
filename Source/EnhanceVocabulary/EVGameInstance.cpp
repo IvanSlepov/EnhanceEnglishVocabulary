@@ -17,6 +17,33 @@
 
 namespace
 {
+bool TryResolveWebProviderId(const FName ProviderId, const EEVWebProvider DefaultProvider, EEVWebProvider& OutProvider)
+{
+    if (ProviderId.IsNone())
+    {
+        OutProvider = DefaultProvider;
+        return true;
+    }
+
+    if (ProviderId == FName(TEXT("FreeDictionary")))
+    {
+        OutProvider = EEVWebProvider::FreeDictionary;
+        return true;
+    }
+    if (ProviderId == FName(TEXT("MyMemory")))
+    {
+        OutProvider = EEVWebProvider::MyMemory;
+        return true;
+    }
+    if (ProviderId == FName(TEXT("Datamuse")))
+    {
+        OutProvider = EEVWebProvider::Datamuse;
+        return true;
+    }
+
+    return false;
+}
+
 struct FEVRandomWordNotificationSelection
 {
     FString Word;
@@ -719,6 +746,248 @@ void UEVGameInstance::SearchWordOnline(const FString& Word, EEVWebProvider Defin
                                         VocabularyLanguagePreferences.SelectedTranslations);
 }
 
+void UEVGameInstance::RequestVocabularySearch(const FEVVocabularySearchRequest& Request)
+{
+    FEVVocabularySearchOutcome Outcome;
+    Outcome.RequestId = Request.RequestId;
+
+    if (!Request.RequestId.IsValid() || Request.Word.TrimStartAndEnd().IsEmpty())
+    {
+        Outcome.Result = EEVApplicationOperationResult::Failed;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary search request is invalid."));
+        VocabularySearchOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    if (PendingVocabularySearchRequestId.IsValid())
+    {
+        Outcome.Result = EEVApplicationOperationResult::Busy;
+        Outcome.Message = FText::FromString(TEXT("A vocabulary search is already in progress."));
+        VocabularySearchOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    if (!WordSearchService)
+    {
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary search is unavailable."));
+        VocabularySearchOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    EEVWebProvider DefinitionProvider = EEVWebProvider::FreeDictionary;
+    EEVWebProvider TranslationProvider = EEVWebProvider::MyMemory;
+    if (!TryResolveWebProviderId(Request.DefinitionProviderId, EEVWebProvider::FreeDictionary, DefinitionProvider) ||
+        !TryResolveWebProviderId(Request.TranslationProviderId, EEVWebProvider::MyMemory, TranslationProvider))
+    {
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("The requested vocabulary provider is unavailable."));
+        VocabularySearchOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    PendingVocabularySearchRequestId = Request.RequestId;
+    SearchWordOnline(Request.Word.TrimStartAndEnd(), DefinitionProvider, TranslationProvider);
+}
+
+void UEVGameInstance::RequestVocabularyRecord(const FEVVocabularyRecordRequest& Request)
+{
+    FEVVocabularyRecordOutcome Outcome;
+    Outcome.RequestId = Request.RequestId;
+
+    if (!Request.RequestId.IsValid() || Request.Word.TrimStartAndEnd().IsEmpty())
+    {
+        Outcome.Result = EEVApplicationOperationResult::Failed;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary record request is invalid."));
+        VocabularyRecordOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    FText ErrorMessage;
+    switch (DoesWordExist(Request.Word, ErrorMessage))
+    {
+    case EEVVocabularyStorageServiceResult::WordDoesNotExist:
+        Outcome.Result = EEVApplicationOperationResult::Succeeded;
+        Outcome.bExists = false;
+        break;
+
+    case EEVVocabularyStorageServiceResult::WordExists:
+        Outcome.bExists = GetVocabularyRecordByWord(Request.Word, Outcome.Record);
+        Outcome.Result =
+            Outcome.bExists ? EEVApplicationOperationResult::Succeeded : EEVApplicationOperationResult::Failed;
+        if (!Outcome.bExists)
+        {
+            Outcome.Message = FText::FromString(TEXT("The vocabulary record could not be loaded."));
+        }
+        break;
+
+    case EEVVocabularyStorageServiceResult::VocabularyStorageInstanceError:
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary storage is unavailable."));
+        break;
+
+    default:
+        Outcome.Result = EEVApplicationOperationResult::Failed;
+        Outcome.Message =
+            ErrorMessage.IsEmpty() ? FText::FromString(TEXT("The vocabulary lookup failed.")) : ErrorMessage;
+        break;
+    }
+
+    VocabularyRecordOutcomeReadyDelegate.Broadcast(Outcome);
+}
+
+void UEVGameInstance::RequestVocabularyQuery(const FEVVocabularyQueryRequest& Request)
+{
+    FEVVocabularyQueryOutcome Outcome;
+    Outcome.RequestId = Request.RequestId;
+
+    if (!Request.RequestId.IsValid() || Request.Limit <= 0 || Request.Offset < 0)
+    {
+        Outcome.Result = EEVApplicationOperationResult::Failed;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary query request is invalid."));
+        VocabularyQueryOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    if (!VocabularyStorageService)
+    {
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary storage is unavailable."));
+        VocabularyQueryOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    FEVVocabularyQueryCriteria Criteria = Request.Criteria;
+    Criteria.Normalize();
+    Outcome.TotalEntries = GetVocabularyEntryCountByCriteria(Request.SearchPrefix, Criteria);
+
+    TArray<FVocabularyEntry> Entries;
+    if (!GetVocabularyEntriesPageByCriteria(Entries, Request.SearchPrefix, Criteria, Request.Limit, Request.Offset))
+    {
+        Outcome.Result = EEVApplicationOperationResult::Failed;
+        Outcome.Message = FText::FromString(TEXT("The vocabulary query failed."));
+        VocabularyQueryOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    Outcome.Records.Reserve(Entries.Num());
+    for (const FVocabularyEntry& Entry : Entries)
+    {
+        FEVVocabularyRecord Record;
+        const FString RecordKey = Entry.NormalizedWord.IsEmpty() ? Entry.Word : Entry.NormalizedWord;
+        if (!GetVocabularyRecordByWord(RecordKey, Record))
+        {
+            Outcome.Records.Reset();
+            Outcome.Result = EEVApplicationOperationResult::Failed;
+            Outcome.Message = FText::FromString(TEXT("A vocabulary record in the query could not be loaded."));
+            VocabularyQueryOutcomeReadyDelegate.Broadcast(Outcome);
+            return;
+        }
+        Outcome.Records.Add(MoveTemp(Record));
+    }
+
+    Outcome.Result = EEVApplicationOperationResult::Succeeded;
+    VocabularyQueryOutcomeReadyDelegate.Broadcast(Outcome);
+}
+
+void UEVGameInstance::RequestVocabularyMutation(const FEVVocabularyMutationRequest& Request)
+{
+    FEVVocabularyMutationOutcome Outcome;
+    Outcome.RequestId = Request.RequestId;
+    Outcome.MutationType = Request.MutationType;
+    Outcome.Record = Request.Record;
+
+    const FString RecordKey =
+        Request.Record.NormalizedWord.IsEmpty() ? Request.Record.Word : Request.Record.NormalizedWord;
+    if (!Request.RequestId.IsValid() || RecordKey.TrimStartAndEnd().IsEmpty())
+    {
+        Outcome.Result = EEVApplicationOperationResult::Failed;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary mutation request is invalid."));
+        VocabularyMutationOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    if (!VocabularyStorageService)
+    {
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Vocabulary storage is unavailable."));
+        VocabularyMutationOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    bool bSucceeded = false;
+    EEVVocabularyChangeType ChangeType = EEVVocabularyChangeType::BulkChanged;
+    switch (Request.MutationType)
+    {
+    case EEVVocabularyMutationType::Save:
+        bSucceeded = VocabularyStorageService->SaveVocabularyRecord(Request.Record);
+        ChangeType = EEVVocabularyChangeType::Added;
+        break;
+
+    case EEVVocabularyMutationType::Update:
+        bSucceeded = VocabularyStorageService->UpdateVocabularyRecord(Request.Record);
+        ChangeType = EEVVocabularyChangeType::Updated;
+        break;
+
+    case EEVVocabularyMutationType::Delete:
+        bSucceeded = VocabularyStorageService->DeleteVocabularyRecord(RecordKey);
+        ChangeType = EEVVocabularyChangeType::Removed;
+        break;
+    }
+
+    Outcome.Result = bSucceeded ? EEVApplicationOperationResult::Succeeded : EEVApplicationOperationResult::Failed;
+    if (!bSucceeded)
+    {
+        Outcome.Message = FText::FromString(TEXT("The vocabulary mutation failed."));
+        VocabularyMutationOutcomeReadyDelegate.Broadcast(Outcome);
+        return;
+    }
+
+    if (Request.MutationType != EEVVocabularyMutationType::Delete)
+    {
+        FEVVocabularyRecord StoredRecord;
+        if (GetVocabularyRecordByWord(RecordKey, StoredRecord))
+        {
+            Outcome.Record = MoveTemp(StoredRecord);
+        }
+    }
+
+    VocabularyMutationOutcomeReadyDelegate.Broadcast(Outcome);
+
+    FEVVocabularyChangeInfo ChangeInfo;
+    ChangeInfo.ChangeId = FGuid::NewGuid();
+    ChangeInfo.CorrelationId = Request.RequestId;
+    ChangeInfo.OriginId = FName(TEXT("LocalApplication"));
+    ChangeInfo.ChangeType = ChangeType;
+    ChangeInfo.AffectedNormalizedWords.Add(Outcome.Record.NormalizedWord.IsEmpty() ? RecordKey
+                                                                                   : Outcome.Record.NormalizedWord);
+    VocabularyChangedDelegate.Broadcast(ChangeInfo);
+}
+
+void UEVGameInstance::RequestVocabularyPreferencesChange(const FEVVocabularyPreferencesChangeRequest& Request)
+{
+    FEVVocabularyPreferencesState State;
+    State.RequestId = Request.RequestId;
+
+    if (!Request.RequestId.IsValid())
+    {
+        State.Result = EEVApplicationOperationResult::Failed;
+        State.Preferences = VocabularyLanguagePreferences;
+        State.Message = FText::FromString(TEXT("Vocabulary preferences request is invalid."));
+        VocabularyPreferencesStateReadyDelegate.Broadcast(State);
+        return;
+    }
+
+    const bool bApplied = SetVocabularyLanguagePreferences(Request.Preferences);
+    State.Result = bApplied ? EEVApplicationOperationResult::Succeeded : EEVApplicationOperationResult::Failed;
+    State.Preferences = VocabularyLanguagePreferences;
+    if (!bApplied)
+    {
+        State.Message = FText::FromString(TEXT("Vocabulary preferences could not be applied."));
+    }
+    VocabularyPreferencesStateReadyDelegate.Broadcast(State);
+}
+
 FEVRequestedActionInfo UEVGameInstance::HandleFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo)
 {
     switch (FileOperationInfo.OperationType)
@@ -878,7 +1147,21 @@ void UEVGameInstance::HandleConnectionStateChanged(EEVConnectionState NewState)
 void UEVGameInstance::HandleEVWordSearchCompletedFromEVGameInstance(
     const FWordSearchResult& SearchWordResultPassedByGameInstance)
 {
+    const FGuid CompletedRequestId = PendingVocabularySearchRequestId;
+    PendingVocabularySearchRequestId = FGuid();
+
     OnEVWordSearchCompletedFromEVGameInstance.Broadcast(SearchWordResultPassedByGameInstance);
+
+    if (CompletedRequestId.IsValid())
+    {
+        FEVVocabularySearchOutcome Outcome;
+        Outcome.RequestId = CompletedRequestId;
+        Outcome.Result = SearchWordResultPassedByGameInstance.bSuccess ? EEVApplicationOperationResult::Succeeded
+                                                                       : EEVApplicationOperationResult::Failed;
+        Outcome.Record = SearchWordResultPassedByGameInstance.VocabularyRecord;
+        Outcome.Message = FText::FromString(SearchWordResultPassedByGameInstance.ErrorMessage);
+        VocabularySearchOutcomeReadyDelegate.Broadcast(Outcome);
+    }
 }
 
 void UEVGameInstance::HandlePopUpTimerExpired()

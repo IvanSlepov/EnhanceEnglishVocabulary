@@ -48,6 +48,8 @@ void AEVAppPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     GetWorldTimerManager().ClearTimer(NotificationStatePollTimerHandle);
 
+    UnbindApplicationPorts();
+
     if (EVGameInstance)
     {
         EVGameInstance->OnNotificationPermissionResult().RemoveAll(this);
@@ -191,6 +193,8 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                 UE_LOG(LogTemp, Error,
                        TEXT("Failed to create instance of IEVWidgetCommonEvents in EVAppPlayerController"));
             }
+
+            BindApplicationPorts();
         }
         else
         {
@@ -200,6 +204,235 @@ void AEVAppPlayerController::InitEVAppPlayerController()
     else
     {
         UE_LOG(LogTemp, Error, TEXT("The RootWidgetClass was not provided to EVAppPlayerController"));
+    }
+}
+
+void AEVAppPlayerController::BindApplicationPorts()
+{
+    UnbindApplicationPorts();
+
+    if (!RootWidgetInstance)
+    {
+        return;
+    }
+
+    VocabularySearchApplicationPort = Cast<IEVVocabularySearchApplicationPort>(RootWidgetInstance);
+    VocabularyLibraryApplicationPort = Cast<IEVVocabularyLibraryApplicationPort>(RootWidgetInstance);
+    VocabularyPreferencesApplicationPort = Cast<IEVVocabularyPreferencesApplicationPort>(RootWidgetInstance);
+    NetworkConnectivityApplicationPort = Cast<IEVNetworkConnectivityApplicationPort>(RootWidgetInstance);
+    GlobalPresentationResolutionPort = Cast<IEVGlobalPresentationResolutionPort>(RootWidgetInstance);
+
+    if (VocabularySearchApplicationPort)
+    {
+        VocabularySearchApplicationPort->GetVocabularySearchRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularySearchRequested);
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->GetVocabularyRecordRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyRecordRequested);
+        VocabularyLibraryApplicationPort->GetVocabularyQueryRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyQueryRequested);
+        VocabularyLibraryApplicationPort->GetVocabularyMutationRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyMutationRequested);
+    }
+
+    if (VocabularyPreferencesApplicationPort)
+    {
+        VocabularyPreferencesApplicationPort->GetVocabularyPreferencesChangeRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyPreferencesChangeRequested);
+    }
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnVocabularySearchOutcomeReady().AddUObject(this,
+                                                                    &ThisClass::HandleVocabularySearchOutcomeReady);
+        EVGameInstance->OnVocabularyRecordOutcomeReady().AddUObject(this,
+                                                                    &ThisClass::HandleVocabularyRecordOutcomeReady);
+        EVGameInstance->OnVocabularyQueryOutcomeReady().AddUObject(this, &ThisClass::HandleVocabularyQueryOutcomeReady);
+        EVGameInstance->OnVocabularyMutationOutcomeReady().AddUObject(this,
+                                                                      &ThisClass::HandleVocabularyMutationOutcomeReady);
+        EVGameInstance->OnVocabularyChanged().AddUObject(this, &ThisClass::HandleVocabularyChanged);
+        EVGameInstance->OnVocabularyPreferencesStateReady().AddUObject(
+            this, &ThisClass::HandleVocabularyPreferencesStateReady);
+    }
+}
+
+void AEVAppPlayerController::UnbindApplicationPorts()
+{
+    if (VocabularySearchApplicationPort)
+    {
+        VocabularySearchApplicationPort->GetVocabularySearchRequestedEvent().RemoveAll(this);
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->GetVocabularyRecordRequestedEvent().RemoveAll(this);
+        VocabularyLibraryApplicationPort->GetVocabularyQueryRequestedEvent().RemoveAll(this);
+        VocabularyLibraryApplicationPort->GetVocabularyMutationRequestedEvent().RemoveAll(this);
+    }
+
+    if (VocabularyPreferencesApplicationPort)
+    {
+        VocabularyPreferencesApplicationPort->GetVocabularyPreferencesChangeRequestedEvent().RemoveAll(this);
+    }
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnVocabularySearchOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyRecordOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyQueryOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyMutationOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyChanged().RemoveAll(this);
+        EVGameInstance->OnVocabularyPreferencesStateReady().RemoveAll(this);
+    }
+
+    VocabularySearchApplicationPort = nullptr;
+    VocabularyLibraryApplicationPort = nullptr;
+    VocabularyPreferencesApplicationPort = nullptr;
+    NetworkConnectivityApplicationPort = nullptr;
+    GlobalPresentationResolutionPort = nullptr;
+}
+
+void AEVAppPlayerController::HandleVocabularySearchRequested(const FEVVocabularySearchRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularySearch(Request);
+        return;
+    }
+
+    if (VocabularySearchApplicationPort)
+    {
+        FEVVocabularySearchOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularySearchApplicationPort->ApplyVocabularySearchOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyRecordRequested(const FEVVocabularyRecordRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyRecord(Request);
+        return;
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        FEVVocabularyRecordOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyLibraryApplicationPort->ApplyVocabularyRecordOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyQueryRequested(const FEVVocabularyQueryRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyQuery(Request);
+        return;
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        FEVVocabularyQueryOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyLibraryApplicationPort->ApplyVocabularyQueryOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyMutationRequested(const FEVVocabularyMutationRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyMutation(Request);
+        return;
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        FEVVocabularyMutationOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.MutationType = Request.MutationType;
+        Outcome.Record = Request.Record;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyLibraryApplicationPort->ApplyVocabularyMutationOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyPreferencesChangeRequested(
+    const FEVVocabularyPreferencesChangeRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyPreferencesChange(Request);
+        return;
+    }
+
+    if (VocabularyPreferencesApplicationPort)
+    {
+        FEVVocabularyPreferencesState State;
+        State.RequestId = Request.RequestId;
+        State.Result = EEVApplicationOperationResult::Unavailable;
+        State.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyPreferencesApplicationPort->ApplyVocabularyPreferencesState(State);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularySearchOutcomeReady(const FEVVocabularySearchOutcome& Outcome)
+{
+    if (VocabularySearchApplicationPort)
+    {
+        VocabularySearchApplicationPort->ApplyVocabularySearchOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyRecordOutcomeReady(const FEVVocabularyRecordOutcome& Outcome)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyRecordOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyQueryOutcomeReady(const FEVVocabularyQueryOutcome& Outcome)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyQueryOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyMutationOutcomeReady(const FEVVocabularyMutationOutcome& Outcome)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyMutationOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyChanged(const FEVVocabularyChangeInfo& ChangeInfo)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyChanged(ChangeInfo);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyPreferencesStateReady(const FEVVocabularyPreferencesState& State)
+{
+    if (VocabularyPreferencesApplicationPort)
+    {
+        VocabularyPreferencesApplicationPort->ApplyVocabularyPreferencesState(State);
     }
 }
 
