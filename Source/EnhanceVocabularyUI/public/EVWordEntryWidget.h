@@ -11,6 +11,8 @@
 #include "EVEntryItem.h"
 #include "EVSearchResultsMeaningWidget.h"
 #include "EVVocabularyTypes.h"
+#include "EVVocabularyFilterTypes.h"
+#include "EVVocabularyLanguageTypes.h"
 #include "EVVocabularyInteractionTypes.h"
 #include "EVWordEntryWidget.generated.h"
 
@@ -20,6 +22,7 @@ class UEVWordEntryWidget;
  * Fired when the user presses View on a Review Words entry.
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryViewButtonPressed, UEVWordEntryWidget*, WordEntryWidget);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnEVWordEntryDetailsRequested, const FEVVocabularyRecord&);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWordEntryValueActionRequested, const FEVVocabularyValueActionRequest&,
                                             Request);
 
@@ -65,6 +68,14 @@ public:
      * Returns the complete structured record represented by this widget.
      */
     const FEVVocabularyRecord& GetCurrentVocabularyRecord() const;
+
+    FOnEVWordEntryDetailsRequested& GetEntryDetailsRequestedEvent()
+    {
+        return OnEntryDetailsRequested;
+    }
+
+    void ApplyPresentationContext(const FEVVocabularyQueryCriteria& Criteria,
+                                  const FEVVocabularyLanguagePreferences& Preferences);
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -141,6 +152,14 @@ private:
 private:
     UPROPERTY(Transient)
     FEVVocabularyRecord CurrentVocabularyRecord;
+
+    UPROPERTY(Transient)
+    FEVVocabularyQueryCriteria ActiveQueryCriteria;
+
+    UPROPERTY(Transient)
+    FEVVocabularyLanguagePreferences VocabularyPreferences;
+
+    FOnEVWordEntryDetailsRequested OnEntryDetailsRequested;
 
     bool bAreRequiredWidgetsCreated = false;
 };

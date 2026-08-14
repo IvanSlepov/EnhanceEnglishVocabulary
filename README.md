@@ -81,7 +81,6 @@ EnhanceVocabulary
     `-- EnhanceVocabularyDevice
 
 EnhanceVocabularyUI
-    |-- EnhanceVocabulary
     |-- EnhanceVocabularyCore
     |-- EnhanceVocabularyWeb
     `-- EnhanceVocabularyStorage
@@ -99,7 +98,7 @@ When adding code:
 
 ## C++ and UI asset separation
 
-C++ classes in `EnhanceVocabularyUI` own reusable widget behavior, state coordination, validation, formatting, and service interaction.
+C++ classes in `EnhanceVocabularyUI` own reusable widget behavior, state coordination, validation, formatting, and communication through application contracts. UI code does not access Game Instance, Player Controller, or capability implementations directly.
 
 Assets under `Content/Widgets` own Blueprint composition, visual layout, styling, animation, and editor-configured bindings.
 
@@ -110,6 +109,26 @@ General rules:
 - UI-only types should not be moved into Core solely to make them globally accessible.
 - Blueprint-visible types should expose only the API needed by their Blueprint consumers.
 - Moving existing behavior between C++ and Blueprint requires architectural review and explicit approval.
+
+## Application composition baseline
+
+The implemented V2 communication chain is:
+
+```text
+Child <-> Feature <-> Root <-> Player Controller <-> Game Instance <-> capability implementation
+```
+
+The permanent rules and extension model are defined in [`Docs/Architecture/Application_Responsibility_and_Communication_Model.md`](Docs/Architecture/Application_Responsibility_and_Communication_Model.md).
+
+Current composition points:
+
+- Root owns and registers the Features in `WidgetSwitcher_Main`, including Entry Details and Vocabulary Filters.
+- Player Controller owns Root plus global dialogs, errors, loading, and status presentation.
+- Player Controller delegates cohesive file-exchange, notification, and vocabulary-interaction workflow state to focused helpers in `EnhanceVocabulary`.
+- Game Instance remains the application composition root and delegates file-exchange and notification capability orchestration to focused coordinators.
+- `EnhanceVocabularyCore` owns the neutral application ports, Feature identifiers, and cross-module payloads used at the Root/Player Controller boundary.
+- Optional Features are registered by role and may be absent; Main Menu availability follows the registered Feature set.
+- Existing Blueprint-facing delegates and function names remain compatibility adapters during incremental migration. New application routing uses the semantic contracts.
 
 ## Naming conventions
 

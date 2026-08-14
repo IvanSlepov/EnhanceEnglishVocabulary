@@ -6,6 +6,10 @@
 #include "EVGameInstance.h"
 #include "EVErrorDisplayWidget.h"
 #include "EVDisplayStatusProvider.h"
+#include "EVFileExchangeWorkflowCoordinator.h"
+#include "EVNotificationWorkflowCoordinator.h"
+#include "EVVocabularyInteractionCoordinator.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Misc/CoreDelegates.h"
 #include "TimerManager.h"
 
@@ -24,8 +28,11 @@ void AEVAppPlayerController::BeginPlay()
 
     EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
     InitEVAppPlayerController();
+    InitializeWorkflowCoordinators();
     if (EVGameInstance)
     {
+        EVGameInstance->OnConnectionStateChanged.AddUniqueDynamic(this, &ThisClass::HandleConnectionStateChanged);
+        HandleConnectionStateChanged(EVGameInstance->GetConnectionState());
         EVGameInstance->OnFileOperationCompleted().AddUObject(this, &ThisClass::HandleFileOperationCompleted);
         EVGameInstance->OnImportFilePickCompleted().AddUObject(this, &ThisClass::HandleImportFilePickCompleted);
         EVGameInstance->OnNotificationPermissionResult().AddUObject(this,
@@ -48,8 +55,11 @@ void AEVAppPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     GetWorldTimerManager().ClearTimer(NotificationStatePollTimerHandle);
 
+    UnbindApplicationPorts();
+
     if (EVGameInstance)
     {
+        EVGameInstance->OnConnectionStateChanged.RemoveAll(this);
         EVGameInstance->OnNotificationPermissionResult().RemoveAll(this);
 
         EVGameInstance->OnFileOperationCompleted().RemoveAll(this);
@@ -60,6 +70,24 @@ void AEVAppPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
     if (ApplicationEnteredForegroundHandle.IsValid())
     {
         FCoreDelegates::ApplicationHasEnteredForegroundDelegate.Remove(ApplicationEnteredForegroundHandle);
+    }
+
+    if (FileExchangeWorkflowCoordinator)
+    {
+        FileExchangeWorkflowCoordinator->OnConfirmationRequested().RemoveAll(this);
+        FileExchangeWorkflowCoordinator->OnLoadingChanged().RemoveAll(this);
+        FileExchangeWorkflowCoordinator->OnStatusRequested().RemoveAll(this);
+    }
+    if (NotificationWorkflowCoordinator)
+    {
+        NotificationWorkflowCoordinator->OnConfirmationRequested().RemoveAll(this);
+        NotificationWorkflowCoordinator->OnStatusRequested().RemoveAll(this);
+    }
+    if (VocabularyInteractionCoordinator)
+    {
+        VocabularyInteractionCoordinator->OnConfirmationRequested().RemoveAll(this);
+        VocabularyInteractionCoordinator->OnLoadingChanged().RemoveAll(this);
+        VocabularyInteractionCoordinator->OnStatusRequested().RemoveAll(this);
     }
 
     Super::EndPlay(EndPlayReason);
@@ -191,6 +219,8 @@ void AEVAppPlayerController::InitEVAppPlayerController()
                 UE_LOG(LogTemp, Error,
                        TEXT("Failed to create instance of IEVWidgetCommonEvents in EVAppPlayerController"));
             }
+
+            BindApplicationPorts();
         }
         else
         {
@@ -201,6 +231,446 @@ void AEVAppPlayerController::InitEVAppPlayerController()
     {
         UE_LOG(LogTemp, Error, TEXT("The RootWidgetClass was not provided to EVAppPlayerController"));
     }
+}
+
+void AEVAppPlayerController::BindApplicationPorts()
+{
+    UnbindApplicationPorts();
+
+    if (!RootWidgetInstance)
+    {
+        return;
+    }
+
+    VocabularySearchApplicationPort = Cast<IEVVocabularySearchApplicationPort>(RootWidgetInstance);
+    VocabularyLibraryApplicationPort = Cast<IEVVocabularyLibraryApplicationPort>(RootWidgetInstance);
+    VocabularyPreferencesApplicationPort = Cast<IEVVocabularyPreferencesApplicationPort>(RootWidgetInstance);
+    NetworkConnectivityApplicationPort = Cast<IEVNetworkConnectivityApplicationPort>(RootWidgetInstance);
+    GlobalPresentationResolutionPort = Cast<IEVGlobalPresentationResolutionPort>(RootWidgetInstance);
+    EntryDetailsApplicationPort = Cast<IEVEntryDetailsApplicationPort>(RootWidgetInstance);
+    VocabularyFilterApplicationPort = Cast<IEVVocabularyFilterApplicationPort>(RootWidgetInstance);
+    GlobalPresentationApplicationPort = Cast<IEVGlobalPresentationApplicationPort>(RootWidgetInstance);
+    FileExchangeApplicationPort = Cast<IEVFileExchangeApplicationPort>(RootWidgetInstance);
+    NotificationSettingsApplicationPort = Cast<IEVNotificationSettingsApplicationPort>(RootWidgetInstance);
+    VocabularyValueApplicationPort = Cast<IEVVocabularyValueApplicationPort>(RootWidgetInstance);
+    ApplicationLifecyclePort = Cast<IEVApplicationLifecyclePort>(RootWidgetInstance);
+    FeatureNavigationApplicationPort = Cast<IEVFeatureNavigationApplicationPort>(RootWidgetInstance);
+
+    if (VocabularySearchApplicationPort)
+    {
+        VocabularySearchApplicationPort->GetVocabularySearchRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularySearchRequested);
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->GetVocabularyRecordRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyRecordRequested);
+        VocabularyLibraryApplicationPort->GetVocabularyQueryRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyQueryRequested);
+        VocabularyLibraryApplicationPort->GetVocabularyMutationRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyMutationRequested);
+    }
+
+    if (VocabularyPreferencesApplicationPort)
+    {
+        VocabularyPreferencesApplicationPort->GetVocabularyPreferencesChangeRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyPreferencesChangeRequested);
+    }
+
+    if (EntryDetailsApplicationPort)
+    {
+        EntryDetailsApplicationPort->GetEntryDetailsRequestedEvent().AddUObject(
+            this, &ThisClass::HandleEntryDetailsRequested);
+        EntryDetailsApplicationPort->GetEntryDetailsCloseRequestedEvent().AddUObject(
+            this, &ThisClass::HandleEntryDetailsCloseRequested);
+        EntryDetailsApplicationPort->GetEntryDetailsDeleteRequestedEvent().AddUObject(
+            this, &ThisClass::HandleEntryDetailsDeleteRequested);
+        EntryDetailsApplicationPort->GetEntryDetailsSaveRequestedEvent().AddUObject(
+            this, &ThisClass::HandleEntryDetailsSaveRequested);
+    }
+
+    if (VocabularyFilterApplicationPort)
+    {
+        VocabularyFilterApplicationPort->GetVocabularyFilterPresentationRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyFiltersRequested);
+        VocabularyFilterApplicationPort->GetVocabularyFilterCriteriaChangeRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyFiltersApplied);
+    }
+
+    if (GlobalPresentationApplicationPort)
+    {
+        GlobalPresentationApplicationPort->GetGlobalErrorRequestedEvent().AddUObject(this,
+                                                                                     &ThisClass::HandleWidgetErrors);
+        GlobalPresentationApplicationPort->GetGlobalLoadingStateChangedEvent().AddUObject(
+            this, &ThisClass::HandleLoadingSpinner);
+        GlobalPresentationApplicationPort->GetGlobalStatusRequestedEvent().AddUObject(
+            this, &ThisClass::HandleActionStatusWidget);
+    }
+
+    if (FileExchangeApplicationPort)
+    {
+        FileExchangeApplicationPort->GetFileOperationRequestedEvent().AddUObject(this,
+                                                                                 &ThisClass::HandleIssuedFileOperation);
+    }
+
+    if (NotificationSettingsApplicationPort)
+    {
+        NotificationSettingsApplicationPort->GetNotificationSettingsChangeRequestedEvent().AddUObject(
+            this, &ThisClass::HandleNotificationSettingsChanged);
+    }
+
+    if (VocabularyValueApplicationPort)
+    {
+        VocabularyValueApplicationPort->GetVocabularyValueApplicationRequestedEvent().AddUObject(
+            this, &ThisClass::HandleVocabularyValueActionRequested);
+    }
+
+    if (ApplicationLifecyclePort)
+    {
+        ApplicationLifecyclePort->GetApplicationExitRequestedEvent().AddUObject(
+            this, &ThisClass::HandleApplicationExitRequested);
+    }
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnVocabularySearchOutcomeReady().AddUObject(this,
+                                                                    &ThisClass::HandleVocabularySearchOutcomeReady);
+        EVGameInstance->OnVocabularyRecordOutcomeReady().AddUObject(this,
+                                                                    &ThisClass::HandleVocabularyRecordOutcomeReady);
+        EVGameInstance->OnVocabularyQueryOutcomeReady().AddUObject(this, &ThisClass::HandleVocabularyQueryOutcomeReady);
+        EVGameInstance->OnVocabularyMutationOutcomeReady().AddUObject(this,
+                                                                      &ThisClass::HandleVocabularyMutationOutcomeReady);
+        EVGameInstance->OnVocabularyChanged().AddUObject(this, &ThisClass::HandleVocabularyChanged);
+        EVGameInstance->OnVocabularyPreferencesStateReady().AddUObject(
+            this, &ThisClass::HandleVocabularyPreferencesStateReady);
+
+        if (VocabularyPreferencesApplicationPort)
+        {
+            FEVVocabularyPreferencesState InitialPreferencesState;
+            InitialPreferencesState.Preferences = EVGameInstance->GetVocabularyLanguagePreferences();
+            VocabularyPreferencesApplicationPort->ApplyVocabularyPreferencesState(InitialPreferencesState);
+        }
+    }
+
+    UpdateWorkflowCoordinatorPorts();
+}
+
+void AEVAppPlayerController::UnbindApplicationPorts()
+{
+    if (VocabularySearchApplicationPort)
+    {
+        VocabularySearchApplicationPort->GetVocabularySearchRequestedEvent().RemoveAll(this);
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->GetVocabularyRecordRequestedEvent().RemoveAll(this);
+        VocabularyLibraryApplicationPort->GetVocabularyQueryRequestedEvent().RemoveAll(this);
+        VocabularyLibraryApplicationPort->GetVocabularyMutationRequestedEvent().RemoveAll(this);
+    }
+
+    if (VocabularyPreferencesApplicationPort)
+    {
+        VocabularyPreferencesApplicationPort->GetVocabularyPreferencesChangeRequestedEvent().RemoveAll(this);
+    }
+
+    if (EntryDetailsApplicationPort)
+    {
+        EntryDetailsApplicationPort->GetEntryDetailsRequestedEvent().RemoveAll(this);
+        EntryDetailsApplicationPort->GetEntryDetailsCloseRequestedEvent().RemoveAll(this);
+        EntryDetailsApplicationPort->GetEntryDetailsDeleteRequestedEvent().RemoveAll(this);
+        EntryDetailsApplicationPort->GetEntryDetailsSaveRequestedEvent().RemoveAll(this);
+    }
+
+    if (VocabularyFilterApplicationPort)
+    {
+        VocabularyFilterApplicationPort->GetVocabularyFilterPresentationRequestedEvent().RemoveAll(this);
+        VocabularyFilterApplicationPort->GetVocabularyFilterCriteriaChangeRequestedEvent().RemoveAll(this);
+    }
+
+    if (GlobalPresentationApplicationPort)
+    {
+        GlobalPresentationApplicationPort->GetGlobalErrorRequestedEvent().RemoveAll(this);
+        GlobalPresentationApplicationPort->GetGlobalLoadingStateChangedEvent().RemoveAll(this);
+        GlobalPresentationApplicationPort->GetGlobalStatusRequestedEvent().RemoveAll(this);
+    }
+
+    if (FileExchangeApplicationPort)
+    {
+        FileExchangeApplicationPort->GetFileOperationRequestedEvent().RemoveAll(this);
+    }
+
+    if (NotificationSettingsApplicationPort)
+    {
+        NotificationSettingsApplicationPort->GetNotificationSettingsChangeRequestedEvent().RemoveAll(this);
+    }
+
+    if (VocabularyValueApplicationPort)
+    {
+        VocabularyValueApplicationPort->GetVocabularyValueApplicationRequestedEvent().RemoveAll(this);
+    }
+
+    if (ApplicationLifecyclePort)
+    {
+        ApplicationLifecyclePort->GetApplicationExitRequestedEvent().RemoveAll(this);
+    }
+
+    if (EVGameInstance)
+    {
+        EVGameInstance->OnVocabularySearchOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyRecordOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyQueryOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyMutationOutcomeReady().RemoveAll(this);
+        EVGameInstance->OnVocabularyChanged().RemoveAll(this);
+        EVGameInstance->OnVocabularyPreferencesStateReady().RemoveAll(this);
+    }
+
+    VocabularySearchApplicationPort = nullptr;
+    VocabularyLibraryApplicationPort = nullptr;
+    VocabularyPreferencesApplicationPort = nullptr;
+    NetworkConnectivityApplicationPort = nullptr;
+    GlobalPresentationResolutionPort = nullptr;
+    EntryDetailsApplicationPort = nullptr;
+    VocabularyFilterApplicationPort = nullptr;
+    GlobalPresentationApplicationPort = nullptr;
+    FileExchangeApplicationPort = nullptr;
+    NotificationSettingsApplicationPort = nullptr;
+    VocabularyValueApplicationPort = nullptr;
+    ApplicationLifecyclePort = nullptr;
+    FeatureNavigationApplicationPort = nullptr;
+    UpdateWorkflowCoordinatorPorts();
+}
+
+void AEVAppPlayerController::InitializeWorkflowCoordinators()
+{
+    FileExchangeWorkflowCoordinator = NewObject<UEVFileExchangeWorkflowCoordinator>(this);
+    NotificationWorkflowCoordinator = NewObject<UEVNotificationWorkflowCoordinator>(this);
+    VocabularyInteractionCoordinator = NewObject<UEVVocabularyInteractionCoordinator>(this);
+
+    if (FileExchangeWorkflowCoordinator)
+    {
+        FileExchangeWorkflowCoordinator->Initialize(EVGameInstance, VocabularyLibraryApplicationPort,
+                                                    WidgetCommonEvents);
+        FileExchangeWorkflowCoordinator->OnConfirmationRequested().AddUObject(
+            this, &ThisClass::HandleCreateConfirmationDialog);
+        FileExchangeWorkflowCoordinator->OnLoadingChanged().AddUObject(this, &ThisClass::HandleLoadingSpinner);
+        FileExchangeWorkflowCoordinator->OnStatusRequested().AddUObject(this, &ThisClass::HandleActionStatusWidget);
+    }
+
+    if (NotificationWorkflowCoordinator)
+    {
+        NotificationWorkflowCoordinator->Initialize(EVGameInstance, NotificationSettingsApplicationPort,
+                                                    FeatureNavigationApplicationPort, WidgetCommonEvents);
+        NotificationWorkflowCoordinator->OnConfirmationRequested().AddUObject(
+            this, &ThisClass::HandleCreateConfirmationDialog);
+        NotificationWorkflowCoordinator->OnStatusRequested().AddUObject(this, &ThisClass::HandleActionStatusWidget);
+    }
+
+    if (VocabularyInteractionCoordinator)
+    {
+        VocabularyInteractionCoordinator->Initialize(EVGameInstance, EntryDetailsApplicationPort,
+                                                     VocabularyFilterApplicationPort, FeatureNavigationApplicationPort,
+                                                     VocabularyLibraryApplicationPort, WidgetCommonEvents);
+        VocabularyInteractionCoordinator->OnConfirmationRequested().AddUObject(
+            this, &ThisClass::HandleCreateConfirmationDialog);
+        VocabularyInteractionCoordinator->OnLoadingChanged().AddUObject(this, &ThisClass::HandleLoadingSpinner);
+        VocabularyInteractionCoordinator->OnStatusRequested().AddUObject(this, &ThisClass::HandleActionStatusWidget);
+    }
+}
+
+void AEVAppPlayerController::UpdateWorkflowCoordinatorPorts()
+{
+    if (FileExchangeWorkflowCoordinator)
+    {
+        FileExchangeWorkflowCoordinator->UpdatePresentationPorts(VocabularyLibraryApplicationPort, WidgetCommonEvents);
+    }
+    if (NotificationWorkflowCoordinator)
+    {
+        NotificationWorkflowCoordinator->UpdatePresentationPorts(NotificationSettingsApplicationPort,
+                                                                 FeatureNavigationApplicationPort, WidgetCommonEvents);
+    }
+    if (VocabularyInteractionCoordinator)
+    {
+        VocabularyInteractionCoordinator->UpdatePresentationPorts(
+            EntryDetailsApplicationPort, VocabularyFilterApplicationPort, FeatureNavigationApplicationPort,
+            VocabularyLibraryApplicationPort, WidgetCommonEvents);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularySearchRequested(const FEVVocabularySearchRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularySearch(Request);
+        return;
+    }
+
+    if (VocabularySearchApplicationPort)
+    {
+        FEVVocabularySearchOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularySearchApplicationPort->ApplyVocabularySearchOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyRecordRequested(const FEVVocabularyRecordRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyRecord(Request);
+        return;
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        FEVVocabularyRecordOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyLibraryApplicationPort->ApplyVocabularyRecordOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyQueryRequested(const FEVVocabularyQueryRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyQuery(Request);
+        return;
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        FEVVocabularyQueryOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyLibraryApplicationPort->ApplyVocabularyQueryOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyMutationRequested(const FEVVocabularyMutationRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyMutation(Request);
+        return;
+    }
+
+    if (VocabularyLibraryApplicationPort)
+    {
+        FEVVocabularyMutationOutcome Outcome;
+        Outcome.RequestId = Request.RequestId;
+        Outcome.MutationType = Request.MutationType;
+        Outcome.Record = Request.Record;
+        Outcome.Result = EEVApplicationOperationResult::Unavailable;
+        Outcome.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyLibraryApplicationPort->ApplyVocabularyMutationOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyPreferencesChangeRequested(
+    const FEVVocabularyPreferencesChangeRequest& Request)
+{
+    if (EVGameInstance)
+    {
+        EVGameInstance->RequestVocabularyPreferencesChange(Request);
+        return;
+    }
+
+    if (VocabularyPreferencesApplicationPort)
+    {
+        FEVVocabularyPreferencesState State;
+        State.RequestId = Request.RequestId;
+        State.Result = EEVApplicationOperationResult::Unavailable;
+        State.Message = FText::FromString(TEXT("Application services are unavailable."));
+        VocabularyPreferencesApplicationPort->ApplyVocabularyPreferencesState(State);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularySearchOutcomeReady(const FEVVocabularySearchOutcome& Outcome)
+{
+    if (VocabularySearchApplicationPort)
+    {
+        VocabularySearchApplicationPort->ApplyVocabularySearchOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyRecordOutcomeReady(const FEVVocabularyRecordOutcome& Outcome)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyRecordOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyQueryOutcomeReady(const FEVVocabularyQueryOutcome& Outcome)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyQueryOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyMutationOutcomeReady(const FEVVocabularyMutationOutcome& Outcome)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyMutationOutcome(Outcome);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyChanged(const FEVVocabularyChangeInfo& ChangeInfo)
+{
+    if (VocabularyLibraryApplicationPort)
+    {
+        VocabularyLibraryApplicationPort->ApplyVocabularyChanged(ChangeInfo);
+    }
+}
+
+void AEVAppPlayerController::HandleVocabularyPreferencesStateReady(const FEVVocabularyPreferencesState& State)
+{
+    if (VocabularyPreferencesApplicationPort)
+    {
+        VocabularyPreferencesApplicationPort->ApplyVocabularyPreferencesState(State);
+    }
+}
+
+void AEVAppPlayerController::HandleEntryDetailsRequested(const FEVVocabularyRecord& Record)
+{
+    if (VocabularyInteractionCoordinator)
+    {
+        VocabularyInteractionCoordinator->PresentEntryDetails(Record);
+    }
+}
+
+void AEVAppPlayerController::HandleConnectionStateChanged(const EEVConnectionState State)
+{
+    if (!NetworkConnectivityApplicationPort)
+    {
+        return;
+    }
+
+    switch (State)
+    {
+    case EEVConnectionState::Online:
+        NetworkConnectivityApplicationPort->ApplyNetworkConnectivityState(EEVApplicationConnectivityState::Online);
+        break;
+    case EEVConnectionState::Connecting:
+        NetworkConnectivityApplicationPort->ApplyNetworkConnectivityState(EEVApplicationConnectivityState::Connecting);
+        break;
+    default:
+        NetworkConnectivityApplicationPort->ApplyNetworkConnectivityState(EEVApplicationConnectivityState::Offline);
+        break;
+    }
+}
+
+void AEVAppPlayerController::HandleApplicationExitRequested()
+{
+    UKismetSystemLibrary::QuitGame(GetWorld(), this, EQuitPreference::Quit, false);
 }
 
 void AEVAppPlayerController::HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo)
@@ -233,6 +703,10 @@ void AEVAppPlayerController::HandleWidgetErrors(const FEVErrorInfo& WidgetErrorI
 
 void AEVAppPlayerController::HandleErrorWidgetDestroyed()
 {
+    if (GlobalPresentationResolutionPort)
+    {
+        GlobalPresentationResolutionPort->ApplyGlobalErrorResolution(EVErrorInfo);
+    }
     OnWidgetsErrorResolved.Broadcast(EVErrorInfo);
 }
 
@@ -305,60 +779,9 @@ void AEVAppPlayerController::HandleActionStatusWidget(const FEVRequestedActionIn
 
 void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo& CurrentWordEntryWidgetInfo)
 {
-    CachedWordEntryWidgetInfo = CurrentWordEntryWidgetInfo;
-
-    if (!EVGameInstance)
+    if (VocabularyInteractionCoordinator)
     {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in HandleWordEntryWidget"));
-        return;
-    }
-
-    FEVVocabularyRecord VocabularyRecord;
-
-    if (!EVGameInstance->GetVocabularyRecordByWord(CurrentWordEntryWidgetInfo.EntryInfo.NormalizedWord.IsEmpty()
-                                                       ? CurrentWordEntryWidgetInfo.EntryInfo.Word
-                                                       : CurrentWordEntryWidgetInfo.EntryInfo.NormalizedWord,
-                                                   VocabularyRecord))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to load structured vocabulary record for Detailed View: %s"),
-               *CurrentWordEntryWidgetInfo.EntryInfo.Word);
-        return;
-    }
-
-    CachedConfirmedVocabularyRecord = VocabularyRecord;
-    CachedPendingVocabularyRecord = FEVVocabularyRecord{};
-
-    if (DetailedWordEntryWidgetClass)
-    {
-        DetailedWordEntryWidgetInstance = CreateWidget<UUserWidget>(this, DetailedWordEntryWidgetClass);
-
-        if (DetailedWordEntryWidgetInstance)
-        {
-            DetailedWordEntryWidgetInstance->AddToViewport(9999);
-            DetailedWordEntryDisplay = Cast<IEVWordEntryDisplayWidgetProvider>(DetailedWordEntryWidgetInstance);
-
-            if (DetailedWordEntryDisplay)
-            {
-                DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedVocabularyRecord);
-                DetailedWordEntryDisplay->GetViewPressedDelegate().AddUObject(
-                    this, &ThisClass::HandleDetailedViewButtonPressed);
-                DetailedWordEntryDisplay->GetEditPressedDelegate().AddUObject(
-                    this, &ThisClass::HandleDetailedEditButtonPressed);
-                DetailedWordEntryDisplay->GetDeletePressedDelegate().AddUObject(
-                    this, &ThisClass::HandleDetailedDeleteButtonPressed);
-                DetailedWordEntryDisplay->GetSaveChangesSubmittedDelegate().AddUObject(
-                    this, &ThisClass::HandleDetailedSaveChangesButtonPressed);
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error,
-                   TEXT("Failed to create instance of DetailedWordEntryWidgetClass in EVAppPlayerController"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("The DetailedWordEntryWidgetClass was not provided to EVAppPlayerController"));
+        VocabularyInteractionCoordinator->PresentLegacyEntryDetails(CurrentWordEntryWidgetInfo);
     }
 }
 
@@ -367,150 +790,57 @@ void AEVAppPlayerController::HandleWordEntryWidget(const FEVWordEntryActionInfo&
 // what we have now we'll try to refactor other parts of the app to implement it.
 void AEVAppPlayerController::HandleIssuedFileOperation(const FEVFileOperationInfo& IssuedFileOperation)
 {
-    if (!EVGameInstance)
+    if (FileExchangeWorkflowCoordinator)
     {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is nullptr in EVAppPlayerController"));
-
-        return;
-    }
-
-    switch (IssuedFileOperation.OperationType)
-    {
-    case EEVFileOperationType::ImportDBOverwrite:
-    {
-        PendingFileOperationInfo = IssuedFileOperation;
-
-        // Do not show the spinner while waiting for confirmation.
-        HandleCreateConfirmationDialog(EEVConfirmationDialogType::OverwriteDB, EEVWordEntryActionType::Unknown);
-
-        return;
-    }
-    case EEVFileOperationType::ImportDBAppend:
-    {
-        PendingFileOperationInfo = IssuedFileOperation;
-
-        HandleCreateConfirmationDialog(EEVConfirmationDialogType::AppendDB, EEVWordEntryActionType::Unknown);
-
-        return;
-    }
-
-    default:
-        break;
-    }
-
-    // Existing Download Template / Export flow.
-    HandleLoadingSpinner(true);
-
-    const FEVRequestedActionInfo RequestedActionInfo =
-        EVGameInstance->HandleFileOperationRequested(IssuedFileOperation);
-
-    if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
-    {
-        HandleLoadingSpinner(false);
-        HandleActionStatusWidget(RequestedActionInfo);
+        FileExchangeWorkflowCoordinator->RequestOperation(IssuedFileOperation);
     }
 }
 
 void AEVAppPlayerController::HandleFileOperationCompleted(const FEVRequestedActionInfo& RequestedActionInfo)
 {
-    HandleLoadingSpinner(false);
-    HandleActionStatusWidget(RequestedActionInfo);
+    if (FileExchangeWorkflowCoordinator)
+    {
+        FileExchangeWorkflowCoordinator->HandleOperationCompleted(RequestedActionInfo);
+    }
 }
 
 void AEVAppPlayerController::HandleImportFilePickCompleted(const FEVFileExchangeResultInfo& ResultInfo)
 {
-    HandleLoadingSpinner(false);
-
-    if (ResultInfo.Result == EEVFileExchangeResult::CancelledByUser)
+    if (FileExchangeWorkflowCoordinator)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Import file selection cancelled by user."));
-
-        PendingFileOperationInfo = FEVFileOperationInfo();
-        return;
-    }
-
-    if (!ResultInfo.IsSuccess())
-    {
-        FEVRequestedActionInfo ActionInfo;
-        ActionInfo.Source = EEVRequestedActionSource::ImportExport;
-        ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
-        ActionInfo.Status = EEVRequestedActionStatus::Failed;
-        ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
-        ActionInfo.GenerateColor();
-
-        HandleActionStatusWidget(ActionInfo);
-
-        PendingFileOperationInfo = FEVFileOperationInfo();
-        return;
-    }
-
-    FEVRequestedActionInfo ActionInfo;
-
-    ActionInfo.Source = EEVRequestedActionSource::ImportExport;
-
-    ActionInfo.Type = EEVRequestedActionType::ImportDBOverwrite;
-
-    ActionInfo.Status = EEVRequestedActionStatus::Completed;
-
-    ActionInfo.Message = FText::FromString(ResultInfo.UserMessage);
-
-    ActionInfo.GenerateColor();
-
-    HandleActionStatusWidget(ActionInfo);
-
-    PendingFileOperationInfo = FEVFileOperationInfo();
-
-    if (WidgetCommonEvents)
-    {
-        WidgetCommonEvents->HandleReviewWordsRefresh();
+        FileExchangeWorkflowCoordinator->HandleImportFilePickCompleted(ResultInfo);
     }
 }
 
-void AEVAppPlayerController::HandleDetailedViewButtonPressed()
+void AEVAppPlayerController::HandleEntryDetailsCloseRequested()
 {
-    if (DetailedWordEntryWidgetInstance)
+    if (VocabularyInteractionCoordinator)
     {
-        HandleCreateConfirmationDialog(EEVConfirmationDialogType::ExitViewWord, EEVWordEntryActionType::CloseEntry);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryWidgetInstance is nullptr in PC"));
+        VocabularyInteractionCoordinator->RequestEntryDetailsClose();
     }
 }
 
-void AEVAppPlayerController::HandleDetailedEditButtonPressed()
+void AEVAppPlayerController::HandleEntryDetailsSaveRequested(const FEVVocabularyRecord& NewVocabularyRecord)
 {
-    if (DetailedWordEntryDisplay)
+    if (VocabularyInteractionCoordinator)
     {
-        DetailedWordEntryDisplay->SetButtonsDisabled(true, true, true, false);
-        DetailedWordEntryDisplay->SetEditableFieldsReadOnly(false);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryDisplay is nullptr in PC"));
+        VocabularyInteractionCoordinator->RequestEntryDetailsSave(NewVocabularyRecord);
     }
 }
 
-void AEVAppPlayerController::HandleDetailedSaveChangesButtonPressed(const FEVVocabularyRecord& NewVocabularyRecord)
+void AEVAppPlayerController::HandleEntryDetailsDeleteRequested()
 {
-    CachedPendingVocabularyRecord = NewVocabularyRecord;
-
-    HandleCreateConfirmationDialog(EEVConfirmationDialogType::EditWord, EEVWordEntryActionType::SaveEditedEntry);
-}
-
-void AEVAppPlayerController::HandleDetailedDeleteButtonPressed()
-{
-    HandleCreateConfirmationDialog(EEVConfirmationDialogType::DeleteWord, EEVWordEntryActionType::DeleteEntry);
+    if (VocabularyInteractionCoordinator)
+    {
+        VocabularyInteractionCoordinator->RequestEntryDetailsDelete();
+    }
 }
 
 void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialogType DialogType,
                                                             EEVWordEntryActionType PendingActionType)
 {
     PendingConfirmationDialogType = DialogType;
-
-    CachedWordEntryWidgetInfo.ActionType = PendingActionType;
-
-    // Existing implementation continues unchanged...
+    (void)PendingActionType;
 
     if (!ConfirmationDialogWidgetClass)
     {
@@ -544,25 +874,9 @@ void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialo
 
     FEVConfirmationDialogInfo ConfirmationDialogInfo;
     ConfirmationDialogInfo.DialogType = DialogType;
-    if (DialogType == EEVConfirmationDialogType::ReviewExistingRelatedWord ||
-        DialogType == EEVConfirmationDialogType::AddMissingRelatedWord)
+    if (VocabularyInteractionCoordinator)
     {
-        ConfirmationDialogInfo.SubjectValue = PendingVocabularyValueActionRequest.Relation.RelatedWord;
-    }
-    else if (DialogType == EEVConfirmationDialogType::UnsupportedTranslationLanguage ||
-             DialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext)
-    {
-        EEVVocabularyTranslationLanguage Language = EEVVocabularyTranslationLanguage::None;
-        ConfirmationDialogInfo.SubjectValue =
-            EVVocabularyLanguage::TryParseTranslationLanguage(
-                PendingVocabularyValueActionRequest.Translation.TargetLanguage, Language)
-                ? EVVocabularyLanguage::GetTranslationLanguageDisplayText(Language).ToString()
-                : PendingVocabularyValueActionRequest.Translation.TargetLanguage;
-    }
-    else if (DialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord ||
-             DialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
-    {
-        ConfirmationDialogInfo.SubjectValue = PendingVocabularyValueActionRequest.Translation.TranslationText;
+        ConfirmationDialogInfo.SubjectValue = VocabularyInteractionCoordinator->GetConfirmationSubject(DialogType);
     }
     ConfirmationDialogInfo.Generate();
 
@@ -576,7 +890,6 @@ void AEVAppPlayerController::HandleCreateConfirmationDialog(EEVConfirmationDialo
 void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed)
 {
     const EEVConfirmationDialogType ConfirmedDialogType = PendingConfirmationDialogType;
-
     PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
 
     if (ConfirmationDialogWidgetInstance)
@@ -586,746 +899,79 @@ void AEVAppPlayerController::HandleConfirmationDialog_ButtonPressed(bool bIsOper
         ConfirmationDialogWidget = nullptr;
     }
 
-    /*
-     * Change notification mode
-     */
-    if (ConfirmedDialogType == EEVConfirmationDialogType::ReviewExistingRelatedWord)
+    if (FileExchangeWorkflowCoordinator &&
+        FileExchangeWorkflowCoordinator->ResolveConfirmation(ConfirmedDialogType, bIsOperationConfirmed))
     {
-        if (bIsOperationConfirmed && WidgetCommonEvents)
-        {
-            WidgetCommonEvents->HandleOpenReviewWordsForNotification(
-                PendingVocabularyValueActionRequest.Relation.RelatedWord);
-        }
-        PendingVocabularyValueActionRequest = FEVVocabularyValueActionRequest{};
         return;
     }
-
-    if (ConfirmedDialogType == EEVConfirmationDialogType::AddMissingRelatedWord)
+    if (NotificationWorkflowCoordinator &&
+        NotificationWorkflowCoordinator->ResolveConfirmation(ConfirmedDialogType, bIsOperationConfirmed))
     {
-        if (bIsOperationConfirmed && WidgetCommonEvents)
-        {
-            WidgetCommonEvents->HandleOpenAddWordWithWord(PendingVocabularyValueActionRequest.Relation.RelatedWord);
-        }
-        PendingVocabularyValueActionRequest = FEVVocabularyValueActionRequest{};
         return;
     }
-
-    if (ConfirmedDialogType == EEVConfirmationDialogType::UnsupportedTranslationLanguage ||
-        ConfirmedDialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext ||
-        ConfirmedDialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord ||
-        ConfirmedDialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
-    {
-        if (bIsOperationConfirmed)
-        {
-            if (ConfirmedDialogType == EEVConfirmationDialogType::CreateTranslationLanguageContext)
-            {
-                HandleTranslationContextCreationConfirmed();
-            }
-            else if (ConfirmedDialogType == EEVConfirmationDialogType::ReviewExistingTranslationWord)
-            {
-                HandleTranslationExistingWordConfirmed();
-            }
-            else if (ConfirmedDialogType == EEVConfirmationDialogType::AddMissingTranslationWord)
-            {
-                HandleTranslationMissingWordConfirmed();
-            }
-        }
-        PendingVocabularyValueActionRequest = FEVVocabularyValueActionRequest{};
-        return;
-    }
-
-    if (ConfirmedDialogType == EEVConfirmationDialogType::ChangeNotificationMode)
-    {
-        if (bIsOperationConfirmed)
-        {
-            CommitPendingModeChange();
-        }
-        else
-        {
-            RejectPendingModeChange();
-        }
-
-        return;
-    }
-
-    /*
-     * Enable Android notifications
-     */
-    if (ConfirmedDialogType == EEVConfirmationDialogType::EnableAndroidNotifications)
-    {
-        if (!bIsOperationConfirmed)
-        {
-            RejectPendingNotificationRequest();
-            return;
-        }
-
-        if (!EVGameInstance)
-        {
-            UE_LOG(LogTemp, Error, TEXT("Cannot open notification settings: EVGameInstance is nullptr."));
-
-            RejectPendingNotificationRequest();
-            return;
-        }
-
-        bWaitingForNotificationSettings = true;
-
-        EVGameInstance->OpenNotificationSettings();
-
-        return;
-    }
-
-    /*
-     * Import DB — Overwrite
-     */
-    if (ConfirmedDialogType == EEVConfirmationDialogType::OverwriteDB)
-    {
-        if (!bIsOperationConfirmed)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite cancelled by user."));
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-            return;
-        }
-
-        if (PendingFileOperationInfo.OperationType != EEVFileOperationType::ImportDBOverwrite)
-        {
-            UE_LOG(LogTemp, Error, TEXT("Overwrite confirmation received without a pending overwrite operation."));
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-            return;
-        }
-
-        if (!EVGameInstance)
-        {
-            UE_LOG(LogTemp, Error, TEXT("Cannot start overwrite import: EVGameInstance is null."));
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-            return;
-        }
-
-        UE_LOG(LogTemp, Warning, TEXT("Import DB overwrite confirmed. Extension: %d"),
-               static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
-
-        HandleLoadingSpinner(true);
-
-        const FEVRequestedActionInfo RequestedActionInfo =
-            EVGameInstance->HandleFileOperationRequested(PendingFileOperationInfo);
-
-        // Start before invoking GameInstance.
-        //
-        // Editor picker is synchronous, so its completion callback may execute
-        // before HandleFileOperationRequested() returns.
-        //
-        // Android will later be asynchronous, and the same spinner will remain
-        // visible until its callback arrives.
-
-        if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
-        {
-            HandleLoadingSpinner(false);
-            HandleActionStatusWidget(RequestedActionInfo);
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-        }
-
-        return;
-    }
-
-    /*
-     * Import DB — Append
-     */
-    /*
-     * Import DB — Append
-     */
-    if (ConfirmedDialogType == EEVConfirmationDialogType::AppendDB)
-    {
-        if (!bIsOperationConfirmed)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Import DB append cancelled by user."));
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-            return;
-        }
-
-        if (PendingFileOperationInfo.OperationType != EEVFileOperationType::ImportDBAppend)
-        {
-            UE_LOG(LogTemp, Error, TEXT("Append confirmation received without a pending append operation."));
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-            return;
-        }
-
-        if (!EVGameInstance)
-        {
-            UE_LOG(LogTemp, Error, TEXT("Cannot start append import: EVGameInstance is null."));
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-            return;
-        }
-
-        UE_LOG(LogTemp, Warning, TEXT("Import DB append confirmed. Extension: %d"),
-               static_cast<int32>(PendingFileOperationInfo.FileExtensionType));
-
-        HandleLoadingSpinner(true);
-
-        const FEVRequestedActionInfo RequestedActionInfo =
-            EVGameInstance->HandleFileOperationRequested(PendingFileOperationInfo);
-
-        if (RequestedActionInfo.Status != EEVRequestedActionStatus::InProgress)
-        {
-            HandleLoadingSpinner(false);
-            HandleActionStatusWidget(RequestedActionInfo);
-
-            PendingFileOperationInfo = FEVFileOperationInfo();
-        }
-
-        return;
-    }
-
-    /*
-     * Existing word-entry confirmation flow
-     */
-    if (!bIsOperationConfirmed)
-    {
-        if (CachedWordEntryWidgetInfo.ActionType == EEVWordEntryActionType::SaveEditedEntry)
-        {
-            CachedPendingVocabularyRecord = FEVVocabularyRecord{};
-
-            if (DetailedWordEntryDisplay)
-            {
-                DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedVocabularyRecord);
-
-                DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
-
-                DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
-            }
-        }
-
-        return;
-    }
-
-    switch (CachedWordEntryWidgetInfo.ActionType)
-    {
-    case EEVWordEntryActionType::CloseEntry:
-        if (DetailedWordEntryWidgetInstance)
-        {
-            DetailedWordEntryWidgetInstance->RemoveFromParent();
-
-            DetailedWordEntryWidgetInstance = nullptr;
-            DetailedWordEntryDisplay = nullptr;
-        }
-        break;
-
-    case EEVWordEntryActionType::SaveEditedEntry:
-        ProcessConfirmedWordUpdate();
-        break;
-
-    case EEVWordEntryActionType::DeleteEntry:
-        ProcessConfirmedWordDelete();
-        break;
-
-    default:
-        break;
-    }
-}
-
-void AEVAppPlayerController::ProcessConfirmedWordUpdate()
-{
-    HandleLoadingSpinner(true);
-
-    FEVVocabularyRecord UpdatedRecord;
-
-    const bool bUpdated =
-        EVGameInstance && EVGameInstance->UpdateVocabularyRecord(CachedPendingVocabularyRecord, UpdatedRecord);
-
-    HandleLoadingSpinner(false);
-
-    FEVRequestedActionInfo StatusInfo;
-    StatusInfo.Source = EEVRequestedActionSource::ReviewWords;
-    StatusInfo.Type = EEVRequestedActionType::EditWord;
-    StatusInfo.Status = bUpdated ? EEVRequestedActionStatus::Saved : EEVRequestedActionStatus::Failed;
-    StatusInfo.GenerateMessage();
-    StatusInfo.GenerateColor();
-
-    HandleActionStatusWidget(StatusInfo);
-
-    if (!bUpdated)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to update structured vocabulary record."));
-        return;
-    }
-
-    CachedConfirmedVocabularyRecord = UpdatedRecord;
-    CachedPendingVocabularyRecord = FEVVocabularyRecord{};
-
-    FVocabularyEntry UpdatedLegacyEntry;
-
-    if (!EVGameInstance->GetVocabularyEntryByWord(UpdatedRecord.NormalizedWord, UpdatedLegacyEntry))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to load compatibility entry after structured update: %s"),
-               *UpdatedRecord.Word);
-        return;
-    }
-
-    CachedWordEntryWidgetInfo.ActionType = EEVWordEntryActionType::SaveEditedEntry;
-    CachedWordEntryWidgetInfo.EntryInfo = UpdatedLegacyEntry;
-
-    if (DetailedWordEntryDisplay)
-    {
-        DetailedWordEntryDisplay->ShowWordEntry(CachedConfirmedVocabularyRecord);
-        DetailedWordEntryDisplay->SetEditableFieldsReadOnly(true);
-        DetailedWordEntryDisplay->SetButtonsDisabled(false, false, false, true);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("DetailedWordEntryDisplay is false in ProcessConfirmedWordUpdate"));
-    }
-
-    if (WidgetCommonEvents)
-    {
-        WidgetCommonEvents->HandleWordEntryChanged(CachedWordEntryWidgetInfo);
-    }
-}
-
-void AEVAppPlayerController::ProcessConfirmedWordDelete()
-{
-    HandleLoadingSpinner(true);
-
-    const bool bDeleted = EVGameInstance && EVGameInstance->DeleteVocabularyEntry(CachedWordEntryWidgetInfo.EntryInfo);
-
-    HandleLoadingSpinner(false);
-
-    FEVRequestedActionInfo StatusInfo;
-    StatusInfo.Source = EEVRequestedActionSource::ReviewWords;
-    StatusInfo.Type = EEVRequestedActionType::DeleteWord;
-    StatusInfo.Status = bDeleted ? EEVRequestedActionStatus::Done : EEVRequestedActionStatus::Failed;
-    StatusInfo.GenerateMessage();
-    StatusInfo.GenerateColor();
-
-    HandleActionStatusWidget(StatusInfo);
-
-    if (!bDeleted)
+    if (VocabularyInteractionCoordinator &&
+        VocabularyInteractionCoordinator->ResolveConfirmation(ConfirmedDialogType, bIsOperationConfirmed))
     {
         return;
     }
 
-    CachedWordEntryWidgetInfo.ActionType = EEVWordEntryActionType::DeleteEntry;
-
-    if (WidgetCommonEvents)
-    {
-        WidgetCommonEvents->HandleWordEntryChanged(CachedWordEntryWidgetInfo);
-    }
-
-    DestroyWidget(DetailedWordEntryWidgetInstance);
-    DetailedWordEntryDisplay = nullptr;
-}
-
-void AEVAppPlayerController::DestroyWidget(TObjectPtr<UUserWidget>& Widget)
-{
-    if (Widget)
-    {
-        Widget->RemoveFromParent();
-        Widget = nullptr;
-    }
+    UE_LOG(LogTemp, Warning, TEXT("No workflow coordinator accepted confirmation dialog type %d."),
+           static_cast<int32>(ConfirmedDialogType));
 }
 
 void AEVAppPlayerController::HandleNotificationSettingsChanged(const FEVPopUpSettingsInfo& RequestedSettings)
 {
-    if (bNotificationTransitionInProgress)
+    if (NotificationWorkflowCoordinator)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Ignoring notification settings change while another transition is pending."));
-        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-        return;
+        NotificationWorkflowCoordinator->RequestSettingsChange(RequestedSettings);
     }
-
-    PendingRequestedSettings = RequestedSettings;
-    bHasPendingRequestedSettings = true;
-    bNotificationTransitionInProgress = true;
-
-    EvaluateNotificationSettingsChange();
 }
 
-void AEVAppPlayerController::EvaluateNotificationSettingsChange()
+void AEVAppPlayerController::HandleNotificationPermissionResult(const bool bGranted)
 {
-    if (!bHasPendingRequestedSettings)
+    if (NotificationWorkflowCoordinator)
     {
-        bNotificationTransitionInProgress = false;
-        return;
+        NotificationWorkflowCoordinator->HandlePermissionResult(bGranted);
     }
-
-    const bool bIntervalChanged = HasNotificationIntervalChanged();
-    const bool bModeChanged = HasNotificationModeChanged();
-
-    if (!bIntervalChanged && !bModeChanged)
-    {
-        ClearPendingNotificationRequest();
-        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-        return;
-    }
-
-    if (bModeChanged)
-    {
-        switch (PendingRequestedSettings.NotificationMode)
-        {
-        case EEVNotificationMode::RandomWord:
-            EvaluateRandomWordModeChange();
-            return;
-
-        case EEVNotificationMode::TestMode:
-            EvaluateTestModeChange();
-            return;
-
-        default:
-            ensureMsgf(false, TEXT("Unsupported notification mode."));
-            RejectPendingModeChange();
-            return;
-        }
-    }
-
-    HandleNotificationIntervalChange();
-}
-
-void AEVAppPlayerController::EvaluateRandomWordModeChange()
-{
-    RequestNotificationModeChange();
-}
-
-void AEVAppPlayerController::EvaluateTestModeChange()
-{
-    RequestNotificationModeChange();
-}
-
-void AEVAppPlayerController::HandleNotificationIntervalChange()
-{
-    if (!bHasPendingRequestedSettings)
-    {
-        ClearPendingNotificationRequest();
-        return;
-    }
-
-    ProcessNotificationSettingsRequest(PendingRequestedSettings);
-}
-
-void AEVAppPlayerController::RequestNotificationModeChange()
-{
-    if (!bHasPendingRequestedSettings)
-    {
-        ClearPendingNotificationRequest();
-        return;
-    }
-
-    HandleCreateConfirmationDialog(EEVConfirmationDialogType::ChangeNotificationMode, EEVWordEntryActionType::Unknown);
-}
-
-void AEVAppPlayerController::CommitPendingModeChange()
-{
-    if (!bHasPendingRequestedSettings)
-    {
-        ClearPendingNotificationRequest();
-        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-        return;
-    }
-
-    if (!EVGameInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot change notification mode: EVGameInstance is nullptr."));
-        RejectPendingModeChange();
-        return;
-    }
-
-    FEVPopUpSettingsInfo ResolvedSettings = PendingRequestedSettings;
-    ResolvedSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
-
-    if (!EVGameInstance->HandlePopUpIntervalSelected(ResolvedSettings))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to stop the notification schedule while changing mode."));
-        RejectPendingModeChange();
-        return;
-    }
-
-    CurrentAcceptedSettings = ResolvedSettings;
-    ClearPendingNotificationRequest();
-    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-
-    FEVRequestedActionInfo ActionInfo;
-    ActionInfo.Source = EEVRequestedActionSource::PopUpSettings;
-    ActionInfo.Type = EEVRequestedActionType::EnableNotifications;
-    ActionInfo.Status = EEVRequestedActionStatus::Warning;
-    ActionInfo.Message =
-        FText::FromString(TEXT("Notification mode changed. Select a notification interval to start the new mode."));
-    ActionInfo.GenerateColor();
-    HandleActionStatusWidget(ActionInfo);
-}
-
-void AEVAppPlayerController::RejectPendingModeChange()
-{
-    ClearPendingNotificationRequest();
-    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-}
-
-void AEVAppPlayerController::ProcessNotificationSettingsRequest(const FEVPopUpSettingsInfo& RequestedSettings)
-{
-    if (!EVGameInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot process notification settings: EVGameInstance is nullptr."));
-        RejectPendingNotificationRequest();
-        return;
-    }
-
-    const EEVPopUpIntervals SelectedInterval = RequestedSettings.PopUpIntervals;
-
-    if (SelectedInterval == EEVPopUpIntervals::TurnedOff)
-    {
-        if (!EVGameInstance->HandlePopUpIntervalSelected(RequestedSettings))
-        {
-            UE_LOG(LogTemp, Error, TEXT("Failed to stop the notification schedule."));
-            RejectPendingNotificationRequest();
-            return;
-        }
-
-        CurrentAcceptedSettings = RequestedSettings;
-        ClearPendingNotificationRequest();
-        ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-        return;
-    }
-
-    PendingPermissionSettings = RequestedSettings;
-    bHasPendingPermissionSettings = true;
-
-    FEVPopUpSettingsInfo InactiveSettings = RequestedSettings;
-    InactiveSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
-    ApplyResolvedNotificationSettings(InactiveSettings);
-
-    if (EVGameInstance->AreNotificationsEnabled())
-    {
-        CommitPendingPermissionSettings();
-        return;
-    }
-
-    if (!EVGameInstance->HasRequestedNotificationPermission())
-    {
-        if (!EVGameInstance->RequestNotificationPermission())
-        {
-            RejectPendingNotificationRequest();
-        }
-
-        return;
-    }
-
-    HandleCreateConfirmationDialog(EEVConfirmationDialogType::EnableAndroidNotifications,
-                                   EEVWordEntryActionType::Unknown);
-}
-
-void AEVAppPlayerController::ApplyResolvedNotificationSettings(const FEVPopUpSettingsInfo& ResolvedSettings)
-{
-    if (!WidgetCommonEvents)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot update notification settings: WidgetCommonEvents is nullptr."));
-        return;
-    }
-
-    WidgetCommonEvents->HandleApplyResolvedPopUpSettings(ResolvedSettings);
-}
-
-void AEVAppPlayerController::CommitPendingPermissionSettings()
-{
-    if (!bHasPendingPermissionSettings)
-    {
-        return;
-    }
-
-    if (!EVGameInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot commit notification settings: EVGameInstance is nullptr."));
-        RejectPendingNotificationRequest();
-        return;
-    }
-
-    const FEVPopUpSettingsInfo SettingsToCommit = PendingPermissionSettings;
-
-    if (!EVGameInstance->HandlePopUpIntervalSelected(SettingsToCommit))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to apply the pending notification settings."));
-        RejectPendingNotificationRequest();
-        return;
-    }
-
-    CurrentAcceptedSettings = SettingsToCommit;
-    ClearPendingNotificationRequest();
-    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-}
-
-void AEVAppPlayerController::RejectPendingNotificationRequest()
-{
-    bWaitingForNotificationSettings = false;
-    bHasPendingPermissionSettings = false;
-    PendingPermissionSettings = FEVPopUpSettingsInfo();
-
-    FEVPopUpSettingsInfo DisabledSettings = CurrentAcceptedSettings;
-
-    if (bHasPendingRequestedSettings)
-    {
-        DisabledSettings.NotificationMode = PendingRequestedSettings.NotificationMode;
-    }
-
-    DisabledSettings.PopUpIntervals = EEVPopUpIntervals::TurnedOff;
-
-    if (EVGameInstance)
-    {
-        EVGameInstance->HandlePopUpIntervalSelected(DisabledSettings);
-    }
-
-    CurrentAcceptedSettings = DisabledSettings;
-    ClearPendingNotificationRequest();
-    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
-}
-
-void AEVAppPlayerController::ClearPendingNotificationRequest()
-{
-    bHasPendingRequestedSettings = false;
-    bHasPendingPermissionSettings = false;
-    bWaitingForNotificationSettings = false;
-    bNotificationTransitionInProgress = false;
-
-    PendingRequestedSettings = FEVPopUpSettingsInfo();
-    PendingPermissionSettings = FEVPopUpSettingsInfo();
-}
-
-bool AEVAppPlayerController::HasActiveNotificationSchedule() const
-{
-    return CurrentAcceptedSettings.PopUpIntervals != EEVPopUpIntervals::TurnedOff;
-}
-
-bool AEVAppPlayerController::HasNotificationIntervalChanged() const
-{
-    return bHasPendingRequestedSettings &&
-           PendingRequestedSettings.PopUpIntervals != CurrentAcceptedSettings.PopUpIntervals;
-}
-
-bool AEVAppPlayerController::HasNotificationModeChanged() const
-{
-    return bHasPendingRequestedSettings &&
-           PendingRequestedSettings.NotificationMode != CurrentAcceptedSettings.NotificationMode;
-}
-
-void AEVAppPlayerController::HandleNotificationPermissionResult(bool bGranted)
-{
-    if (!bHasPendingPermissionSettings)
-    {
-        UE_LOG(LogTemp, Warning,
-               TEXT("Notification permission result received without pending notification settings."));
-        return;
-    }
-
-    if (!EVGameInstance)
-    {
-        RejectPendingNotificationRequest();
-        return;
-    }
-
-    if (bGranted && EVGameInstance->AreNotificationsEnabled())
-    {
-        CommitPendingPermissionSettings();
-        return;
-    }
-
-    RejectPendingNotificationRequest();
 }
 
 void AEVAppPlayerController::HandleApplicationEnteredForeground()
 {
-    SynchronizeNotificationSettingsFromDevice();
-    HandlePendingNotificationWord();
-
-    if (!bWaitingForNotificationSettings || !bHasPendingPermissionSettings)
+    if (NotificationWorkflowCoordinator)
     {
-        return;
+        NotificationWorkflowCoordinator->HandleApplicationEnteredForeground();
     }
-
-    UE_LOG(LogTemp, Log, TEXT("Returned from Android notification settings."));
-
-    bWaitingForNotificationSettings = false;
-
-    if (EVGameInstance && EVGameInstance->AreNotificationsEnabled())
-    {
-        CommitPendingPermissionSettings();
-        return;
-    }
-
-    RejectPendingNotificationRequest();
 }
 
 void AEVAppPlayerController::PollNotificationState()
 {
-    if (bNotificationTransitionInProgress)
+    if (NotificationWorkflowCoordinator)
     {
-        return;
+        NotificationWorkflowCoordinator->PollDeviceState();
     }
-
-    SynchronizeNotificationSettingsFromDevice();
-    HandlePendingNotificationWord();
 }
 
 void AEVAppPlayerController::HandlePendingNotificationWord()
 {
-    if (!EVGameInstance || !WidgetCommonEvents)
+    if (NotificationWorkflowCoordinator)
     {
-        return;
+        NotificationWorkflowCoordinator->HandlePendingNotificationWord();
     }
-
-    if (CurrentAcceptedSettings.NotificationMode != EEVNotificationMode::RandomWord)
-    {
-        return;
-    }
-
-    FString NotificationWord;
-
-    if (!EVGameInstance->ConsumePendingNotificationWord(NotificationWord) || NotificationWord.IsEmpty())
-    {
-        return;
-    }
-
-    WidgetCommonEvents->HandleOpenReviewWordsForNotification(NotificationWord);
 }
 
 void AEVAppPlayerController::SynchronizeNotificationSettingsFromDevice()
 {
-    if (!EVGameInstance || !WidgetCommonEvents)
+    if (NotificationWorkflowCoordinator)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Cannot synchronize notification settings: controller is not initialized."));
-        return;
+        NotificationWorkflowCoordinator->SynchronizeFromDevice();
     }
-
-    FEVPopUpSettingsInfo StoredSettings;
-    if (!EVGameInstance->GetStoredNotificationSettings(StoredSettings))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Failed to read stored notification settings from the device."));
-        return;
-    }
-
-    if (StoredSettings.PopUpIntervals == CurrentAcceptedSettings.PopUpIntervals &&
-        StoredSettings.NotificationMode == CurrentAcceptedSettings.NotificationMode)
-    {
-        return;
-    }
-
-    CurrentAcceptedSettings = StoredSettings;
-    ApplyResolvedNotificationSettings(CurrentAcceptedSettings);
 }
 
 void AEVAppPlayerController::HandleVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request)
 {
-    PendingVocabularyValueActionRequest = Request;
-
-    if (Request.ActionType == EEVVocabularyValueActionType::Synonym ||
-        Request.ActionType == EEVVocabularyValueActionType::Antonym)
+    if (VocabularyInteractionCoordinator)
     {
-        HandleRelationValueAction(Request);
-        return;
-    }
-
-    if (Request.ActionType == EEVVocabularyValueActionType::Translation)
-    {
-        HandleTranslationValueAction(Request);
+        VocabularyInteractionCoordinator->RequestVocabularyValueAction(Request);
     }
 }
 
@@ -1350,156 +996,18 @@ void AEVAppPlayerController::HandleVocabularyLanguagePreferencesChanged(
     }
 }
 
-void AEVAppPlayerController::HandleRelationValueAction(const FEVVocabularyValueActionRequest& Request)
-{
-    if (!EVGameInstance)
-    {
-        return;
-    }
-
-    FString LookupWord = Request.Relation.NormalizedRelatedWord.TrimStartAndEnd();
-    if (LookupWord.IsEmpty())
-    {
-        LookupWord = Request.Relation.RelatedWord.TrimStartAndEnd();
-        LookupWord.ToLowerInline();
-    }
-
-    FVocabularyEntry ExistingEntry;
-    const bool bExists = EVGameInstance->GetVocabularyEntryByWord(LookupWord, ExistingEntry);
-    HandleCreateConfirmationDialog(bExists ? EEVConfirmationDialogType::ReviewExistingRelatedWord
-                                           : EEVConfirmationDialogType::AddMissingRelatedWord,
-                                   EEVWordEntryActionType::Unknown);
-}
-
-void AEVAppPlayerController::HandleTranslationValueAction(const FEVVocabularyValueActionRequest& Request)
-{
-    const EEVVocabularyLanguageSupportState SupportState =
-        ResolveTranslationLanguageSupport(Request.Translation.TargetLanguage);
-
-    if (SupportState == EEVVocabularyLanguageSupportState::Unsupported ||
-        SupportState == EEVVocabularyLanguageSupportState::Unknown)
-    {
-        HandleCreateConfirmationDialog(EEVConfirmationDialogType::UnsupportedTranslationLanguage,
-                                       EEVWordEntryActionType::Unknown);
-        return;
-    }
-
-    if (SupportState == EEVVocabularyLanguageSupportState::SupportedWithoutContext)
-    {
-        HandleCreateConfirmationDialog(EEVConfirmationDialogType::CreateTranslationLanguageContext,
-                                       EEVWordEntryActionType::Unknown);
-        return;
-    }
-
-    HandleCreateConfirmationDialog(DoesTranslationWordExistInTargetContext(Request.Translation)
-                                       ? EEVConfirmationDialogType::ReviewExistingTranslationWord
-                                       : EEVConfirmationDialogType::AddMissingTranslationWord,
-                                   EEVWordEntryActionType::Unknown);
-}
-
-bool AEVAppPlayerController::DoesTranslationWordExistInTargetContext(const FEVVocabularyTranslation& Translation) const
-{
-    if (!EVGameInstance)
-    {
-        return false;
-    }
-
-    EEVVocabularyTranslationLanguage TranslationLanguage = EEVVocabularyTranslationLanguage::None;
-    EEVVocabularyDBContext TargetContext = EEVVocabularyDBContext::None;
-    if (!EVVocabularyLanguage::TryParseTranslationLanguage(Translation.TargetLanguage, TranslationLanguage) ||
-        !EVVocabularyLanguage::TryResolveDatabaseContextForTranslation(TranslationLanguage, TargetContext) ||
-        TargetContext != EVGameInstance->GetVocabularyLanguagePreferences().DatabaseContext)
-    {
-        return false;
-    }
-
-    FVocabularyEntry ExistingEntry;
-    return EVGameInstance->GetVocabularyEntryByWord(Translation.TranslationText, ExistingEntry);
-}
-
-EEVVocabularyLanguageSupportState
-AEVAppPlayerController::ResolveTranslationLanguageSupport(const FString& LanguageCode) const
-{
-    EEVVocabularyTranslationLanguage TranslationLanguage = EEVVocabularyTranslationLanguage::None;
-    if (!EVVocabularyLanguage::TryParseTranslationLanguage(LanguageCode, TranslationLanguage))
-    {
-        return EEVVocabularyLanguageSupportState::Unsupported;
-    }
-
-    EEVVocabularyDBContext TargetContext = EEVVocabularyDBContext::None;
-    return EVVocabularyLanguage::TryResolveDatabaseContextForTranslation(TranslationLanguage, TargetContext)
-               ? EEVVocabularyLanguageSupportState::SupportedWithContext
-               : EEVVocabularyLanguageSupportState::SupportedWithoutContext;
-}
-
-void AEVAppPlayerController::HandleTranslationContextCreationConfirmed()
-{
-    // Future language-context creation entry point. Intentionally no action yet.
-}
-
-void AEVAppPlayerController::HandleTranslationExistingWordConfirmed()
-{
-    // Future cross-context Review Words entry point. Intentionally no action yet.
-}
-
-void AEVAppPlayerController::HandleTranslationMissingWordConfirmed()
-{
-    // Future cross-context Add Word entry point. Intentionally no action yet.
-}
-
 void AEVAppPlayerController::HandleVocabularyFiltersRequested()
 {
-    if (VocabularyFilterWidgetInstance)
+    if (VocabularyInteractionCoordinator)
     {
-        return;
+        VocabularyInteractionCoordinator->RequestVocabularyFilters();
     }
-
-    if (!VocabularyFilterWidgetClass || !EVGameInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot open vocabulary filters: class or game instance is missing."));
-        return;
-    }
-
-    VocabularyFilterWidgetInstance = CreateWidget<UUserWidget>(this, VocabularyFilterWidgetClass);
-    if (!VocabularyFilterWidgetInstance)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create VocabularyFilterWidgetClass."));
-        return;
-    }
-
-    VocabularyFilterWidgetProvider = Cast<IEVVocabularyFilterWidgetProvider>(VocabularyFilterWidgetInstance);
-    if (!VocabularyFilterWidgetProvider)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Vocabulary filter widget does not implement its provider interface."));
-        VocabularyFilterWidgetInstance = nullptr;
-        return;
-    }
-
-    VocabularyFilterWidgetProvider->SetInitialCriteria(EVGameInstance->GetActiveVocabularyQueryCriteria());
-    VocabularyFilterWidgetProvider->GetFiltersAppliedEvent().AddUniqueDynamic(
-        this, &ThisClass::HandleVocabularyFiltersApplied);
-    VocabularyFilterWidgetProvider->GetCloseRequestedEvent().AddUniqueDynamic(
-        this, &ThisClass::HandleVocabularyFilterWidgetCloseRequested);
-    VocabularyFilterWidgetInstance->AddToViewport(9000);
 }
 
 void AEVAppPlayerController::HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria)
 {
-    if (EVGameInstance)
+    if (VocabularyInteractionCoordinator)
     {
-        EVGameInstance->SetActiveVocabularyQueryCriteria(Criteria);
+        VocabularyInteractionCoordinator->ApplyVocabularyFilters(Criteria);
     }
-
-    if (WidgetCommonEvents)
-    {
-        WidgetCommonEvents->HandleVocabularyFiltersApplied(Criteria);
-    }
-
-    HandleVocabularyFilterWidgetCloseRequested();
-}
-
-void AEVAppPlayerController::HandleVocabularyFilterWidgetCloseRequested()
-{
-    VocabularyFilterWidgetProvider = nullptr;
-    DestroyWidget(VocabularyFilterWidgetInstance);
 }

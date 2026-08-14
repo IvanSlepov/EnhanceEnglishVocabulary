@@ -31,4 +31,5 @@ void UEVImportExportDBWidget::HandleOnImportExportDownloadDBIssued(
     const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget)
 {
     OnImportExportDownloadDBIssued.Broadcast(FileOperationInfoFromSelectorWidget);
+    OnFeatureFileOperationRequested.Broadcast(FileOperationInfoFromSelectorWidget);
 }

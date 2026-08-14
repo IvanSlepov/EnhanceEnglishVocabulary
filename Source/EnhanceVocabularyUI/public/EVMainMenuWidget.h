@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "EVFeatureRoles.h"
 #include "EVMainMenuWidget.generated.h"
 
 /**
@@ -18,29 +19,29 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnMenuButtonsPressed, bool, IsAdd
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnQuitButtonPressed);
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVMainMenuWidget : public UUserWidget
+class ENHANCEVOCABULARYUI_API UEVMainMenuWidget : public UUserWidget, public IEVMainMenuFeatureRole
 {
     GENERATED_BODY()
 
 public:
     // Each button represents either a separate EV app's UI Widget
     // or the direct functionality i.e., QuitButton
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     class UButton* Button_AddWord;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     class UButton* Button_ReviewWords;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     class UButton* Button_PopupSettings;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     class UButton* Button_ImportExport;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     class UButton* Button_AppSettings;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     class UButton* Button_Quit;
 
     // Events
@@ -50,12 +51,27 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Main Menu Events")
     FOnQuitButtonPressed OnQuitButtonPressed;
 
+    virtual FOnEVFeatureNavigationRequested& GetFeatureNavigationRequestedEvent() override
+    {
+        return OnFeatureNavigationRequested;
+    }
+
+    virtual FOnEVApplicationExitRequested& GetApplicationExitRequestedEvent() override
+    {
+        return OnApplicationExitRequested;
+    }
+
+    virtual void SetFeatureAvailable(FName FeatureId, bool bAvailable) override;
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
     virtual void NativeConstruct() override;
 
 private:
+    FOnEVFeatureNavigationRequested OnFeatureNavigationRequested;
+    FOnEVApplicationExitRequested OnApplicationExitRequested;
+
     bool bIsAddWordActivated;
     bool bIsReviewWordsActivated;
     bool bIsPopupSettingsActivated;

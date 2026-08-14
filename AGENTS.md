@@ -92,6 +92,37 @@ Put new code in the narrowest appropriate module.
 
 Do not move existing code between modules or alter module dependencies without explicit approval.
 
+## Application responsibility and communication contract
+
+Before inspecting, planning, or changing application composition, UI ownership, widget communication, Player Controller, Game Instance, or module boundaries, read the entire `Docs/Architecture/Application_Responsibility_and_Communication_Model.md`.
+
+The approved communication chain is:
+
+```text
+Child <-> Feature <-> Root <-> Player Controller <-> Game Instance <-> capability implementation
+```
+
+- Communicate only between immediate neighboring layers through stable, role-based contracts.
+- Do not introduce skipped-layer access, concrete descendant control, sibling control, or a global event bus.
+- Name contracts after intent, capability, or state rather than a concrete widget, control, layout, or provider.
+- Optional Features, Children, and capability implementations must be removable without breaking unrelated behavior.
+- Keep shared contracts implementation-neutral and in the narrowest appropriate module.
+
+The architecture document defines the target model. It does not authorize broad migration or incidental refactoring. Any exception or adoption work requires explicitly approved files and behavior.
+
+## Mandatory UI binding and behavior-preservation rules
+
+These rules are mandatory for every UI change, migration, refactor, and architectural adoption task:
+
+- Never rename a widget bound through `BindWidget` or `BindWidgetOptional`. Preserve both the C++ property name and the corresponding Widget Blueprint widget name, including spelling and casing.
+- Do not change the existing logic, meaning, observable behavior, payload, sequencing, or side effects of any function, event, delegate, or interface unless it contradicts the approved application responsibility and communication contract.
+- Replacing a prohibited communication path must preserve the behavior of the existing function, event, delegate, or interface. Prefer adapters and forwarding boundaries over redesigning existing behavior.
+- Do not rename, consolidate, remove, repurpose, or otherwise clean up existing functions, events, delegates, or interfaces as part of a migration.
+- If existing logic contradicts `Docs/Architecture/Application_Responsibility_and_Communication_Model.md`, stop before changing it. Report the exact file, symbol, current behavior, contradiction, proposed change, and expected impact, then wait for explicit user approval.
+- A contradiction with the architecture document establishes a need for discussion; it does not authorize a change by itself.
+
+Approval to migrate a communication path does not imply approval to alter the behavior carried by that path.
+
 ## UI and reusable types
 
 - Keep widget-specific behavior and presentation types in `EnhanceVocabularyUI`.

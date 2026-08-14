@@ -18,6 +18,7 @@ class ENHANCEVOCABULARYUI_API UEVDBLanguageContextAndTranslationsWidget : public
 
 public:
     void SetInitialPreferences(const FEVVocabularyLanguagePreferences& InPreferences);
+    void ResetPendingChanges();
     const FEVVocabularyLanguagePreferences& GetWorkingPreferences() const
     {
         return WorkingPreferences;

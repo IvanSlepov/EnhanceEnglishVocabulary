@@ -2,30 +2,33 @@
 
 #include "EVAddWordWidget.h"
 #include "EVSearchResultsPanel.h"
-#include "EnhanceVocabulary/EVGameInstance.h"
-#include "EnhanceVocabularyStorage/public/EVEntryItem.h"
 #include "EVWordInputValidator.h"
 #include "EVErrorTypes.h"
 #include "EVRequestedActionTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "EVVocabularyUiStyle.h"
 
+namespace
+{
+FName GetWebProviderId(const EEVWebProvider Provider)
+{
+    switch (Provider)
+    {
+    case EEVWebProvider::FreeDictionary:
+        return FName(TEXT("FreeDictionary"));
+    case EEVWebProvider::MyMemory:
+        return FName(TEXT("MyMemory"));
+    case EEVWebProvider::Datamuse:
+        return FName(TEXT("Datamuse"));
+    default:
+        return NAME_None;
+    }
+}
+} // namespace
+
 void UEVAddWordWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
-
-    EVGameInstance = Cast<UEVGameInstance>(GetGameInstance());
-
-    if (EVGameInstance)
-    {
-        EVGameInstance->OnEVWordSearchCompletedFromEVGameInstance.AddDynamic(this,
-                                                                             &ThisClass::HandleSearchWordCompleted);
-    }
-
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance is null"));
-    }
 
     if (WBP_SearchResultsPanel && Button_Search && Button_Clear && EditableText_WordInput)
     {
@@ -58,12 +61,14 @@ void UEVAddWordWidget::Init()
 {
     ThisWidgetName = GetName();
 
-    if (!WBP_SearchResultsPanel)
+    if (WBP_SearchResultsPanel)
+    {
+        WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
+    }
+    else
     {
         UE_LOG(LogTemp, Error, TEXT("WBP_SearchResultsPanel is nullptr"));
     }
-
-    WBP_SearchResultsPanel->SetVisibility(ESlateVisibility::Hidden);
     Button_Search->SetIsEnabled(false);
     Button_Clear->SetIsEnabled(false);
 }
@@ -139,9 +144,9 @@ void UEVAddWordWidget::HandleOnSearchPressed()
 
     EnableEditableTextBox(false);
 
-    if (!EVGameInstance)
+    if (!OnVocabularySearchRequested.IsBound())
     {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary search application port in EVAddWordWidget.cpp is unavailable"));
 
         EnableEditableTextBox(true);
         return;
@@ -156,11 +161,20 @@ void UEVAddWordWidget::HandleOnSearchPressed()
     switch (FEVWordInputValidator::ValidateSearchInput(WordToSearch, NormalizedWord, WordInputError))
     {
     case EEVInputValidationResult::Valid:
+    {
+        FEVVocabularySearchRequest Request;
+        Request.RequestId = FGuid::NewGuid();
+        Request.Word = NormalizedWord;
+        Request.DefinitionProviderId = GetWebProviderId(ActiveDefinitionUsageProvider);
+        Request.TranslationProviderId = GetWebProviderId(ActiveTranslationProvider);
+
+        PendingVocabularySearchRequestId = Request.RequestId;
         HandleOnLoadingDataTriggerred(true);
 
-        EVGameInstance->SearchWordOnline(NormalizedWord, ActiveDefinitionUsageProvider, ActiveTranslationProvider);
+        OnVocabularySearchRequested.Broadcast(Request);
 
         break;
+    }
 
     case EEVInputValidationResult::EmptyInput:
         EVErrorInfo.Source = EEVErrorSource::AddWord;
@@ -169,6 +183,7 @@ void UEVAddWordWidget::HandleOnSearchPressed()
 
         EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
+        OnFeatureError.Broadcast(EVErrorInfo);
 
         break;
 
@@ -179,6 +194,7 @@ void UEVAddWordWidget::HandleOnSearchPressed()
 
         EnableEditableTextBox(true);
         OnError.Broadcast(EVErrorInfo);
+        OnFeatureError.Broadcast(EVErrorInfo);
 
         break;
 
@@ -186,6 +202,25 @@ void UEVAddWordWidget::HandleOnSearchPressed()
         EnableEditableTextBox(true);
         break;
     }
+}
+
+void UEVAddWordWidget::ApplyVocabularySearchOutcome(const FEVVocabularySearchOutcome& Outcome)
+{
+    if (!PendingVocabularySearchRequestId.IsValid() || Outcome.RequestId != PendingVocabularySearchRequestId)
+    {
+        return;
+    }
+
+    PendingVocabularySearchRequestId = FGuid();
+
+    FWordSearchResult Result;
+    Result.Word = Outcome.Record.Word;
+    Result.NormalizedWord = Outcome.Record.NormalizedWord;
+    Result.bSuccess = Outcome.Result == EEVApplicationOperationResult::Succeeded;
+    Result.ErrorMessage = Outcome.Message.ToString();
+    Result.VocabularyRecord = Outcome.Record;
+
+    HandleSearchWordCompleted(Result);
 }
 
 void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result)
@@ -212,6 +247,7 @@ void UEVAddWordWidget::HandleSearchWordCompleted(const FWordSearchResult& Result
 
         EnableEditableTextBox(false);
         OnError.Broadcast(EVErrorInfo);
+        OnFeatureError.Broadcast(EVErrorInfo);
 
         return;
     }
@@ -285,23 +321,40 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         return;
     }
 
-    if (!EVGameInstance)
+    if (!OnVocabularyRecordRequested.IsBound())
     {
-        UE_LOG(LogTemp, Error, TEXT("EVGameInstance in EVAddWordWidget.cpp is nullptr"));
-
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary library application port in EVAddWordWidget.cpp is unavailable"));
         return;
     }
 
-    FEVRequestedActionInfo EVRequestedActionInfo;
-    FEVErrorInfo EVErrorInfo;
-    FText OutErrorMessage;
-
-    if (EVGameInstance->DoesWordExist(WordSearchResult.Word, OutErrorMessage) ==
-        EEVVocabularyStorageServiceResult::WordExists)
+    if (PendingVocabularyRecordRequestId.IsValid() || PendingVocabularyMutationRequestId.IsValid())
     {
+        return;
+    }
+
+    FEVVocabularyRecordRequest Request;
+    Request.RequestId = FGuid::NewGuid();
+    Request.Word = WordSearchResult.Word;
+
+    PendingVocabularyRecordRequestId = Request.RequestId;
+    OnVocabularyRecordRequested.Broadcast(Request);
+}
+
+void UEVAddWordWidget::ApplyVocabularyRecordOutcome(const FEVVocabularyRecordOutcome& Outcome)
+{
+    if (!PendingVocabularyRecordRequestId.IsValid() || Outcome.RequestId != PendingVocabularyRecordRequestId)
+    {
+        return;
+    }
+
+    PendingVocabularyRecordRequestId = FGuid();
+
+    if (Outcome.bExists)
+    {
+        FEVErrorInfo EVErrorInfo;
         EVErrorInfo.Source = EEVErrorSource::Database;
         EVErrorInfo.Type = EEVErrorType::DuplicateWord;
-        EVErrorInfo.Message = OutErrorMessage;
+        EVErrorInfo.Message = Outcome.Message;
 
         Button_Search->SetIsEnabled(true);
         Button_Clear->SetIsEnabled(true);
@@ -317,16 +370,41 @@ void UEVAddWordWidget::HandleOnSaveSearchResultPressed()
         ClearStoredSearchResultVariable(WordSearchResult);
 
         OnError.Broadcast(EVErrorInfo);
-
+        OnFeatureError.Broadcast(EVErrorInfo);
         return;
     }
 
-    if (!EVGameInstance->SaveVocabularyEntry(WordSearchResult))
+    if (!OnVocabularyMutationRequested.IsBound())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Vocabulary mutation application port in EVAddWordWidget.cpp is unavailable"));
+        return;
+    }
+
+    FEVVocabularyMutationRequest Request;
+    Request.RequestId = FGuid::NewGuid();
+    Request.MutationType = EEVVocabularyMutationType::Save;
+    Request.Record = WordSearchResult.VocabularyRecord;
+
+    PendingVocabularyMutationRequestId = Request.RequestId;
+    OnVocabularyMutationRequested.Broadcast(Request);
+}
+
+void UEVAddWordWidget::ApplyVocabularyMutationOutcome(const FEVVocabularyMutationOutcome& Outcome)
+{
+    if (!PendingVocabularyMutationRequestId.IsValid() || Outcome.RequestId != PendingVocabularyMutationRequestId)
+    {
+        return;
+    }
+
+    PendingVocabularyMutationRequestId = FGuid();
+
+    if (Outcome.Result != EEVApplicationOperationResult::Succeeded)
     {
         UE_LOG(LogTemp, Error, TEXT("Cannot save the entry in WBP_AddWord."));
-
         return;
     }
+
+    FEVRequestedActionInfo EVRequestedActionInfo;
 
     EVRequestedActionInfo.Source = EEVRequestedActionSource::AddWord;
 
@@ -382,4 +460,36 @@ void UEVAddWordWidget::HandleWebProvidersChanged(EEVWebProvider DefinitionUsageP
 {
     ActiveDefinitionUsageProvider = DefinitionUsageProvider;
     ActiveTranslationProvider = TranslationProvider;
+}
+
+void UEVAddWordWidget::ApplyFeatureErrorResolution(const FEVErrorInfo& ErrorInfo)
+{
+    if (ErrorInfo.Source == EEVErrorSource::AddWord && ErrorInfo.Type == EEVErrorType::SearchError)
+    {
+        SetInputEnabled(true);
+    }
+}
+
+void UEVAddWordWidget::ApplyNetworkConnectivityState(const EEVApplicationConnectivityState State)
+{
+    SetControlsEnabled(State == EEVApplicationConnectivityState::Online);
+}
+
+void UEVAddWordWidget::ApplyWebProviderSelection(const EEVWebProvider DefinitionProvider,
+                                                 const EEVWebProvider TranslationProvider)
+{
+    HandleWebProvidersChanged(DefinitionProvider, TranslationProvider);
+}
+
+void UEVAddWordWidget::ApplyVocabularyPreferences(const FEVVocabularyLanguagePreferences& Preferences)
+{
+    if (WBP_SearchResultsPanel)
+    {
+        WBP_SearchResultsPanel->ApplyVocabularyPreferences(Preferences);
+    }
+}
+
+void UEVAddWordWidget::PresentWordContext(const FString& Word)
+{
+    SetWordInput(Word);
 }

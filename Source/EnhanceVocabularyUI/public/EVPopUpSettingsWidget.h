@@ -8,6 +8,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "EVPopUpSettingsTypes.h"
+#include "EVFeatureRoles.h"
 #include "EVPopUpSettingsWidget.generated.h"
 
 /**
@@ -18,7 +19,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNotificationSettingsChanged, cons
                                             EVPopUpSettingsInfo);
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVPopUpSettingsWidget : public UUserWidget
+class ENHANCEVOCABULARYUI_API UEVPopUpSettingsWidget : public UUserWidget, public IEVNotificationSettingsFeatureRole
 {
     GENERATED_BODY()
 
@@ -34,12 +35,24 @@ public:
     /*Events*/
     FOnNotificationSettingsChanged OnNotificationSettingsChanged;
 
+    virtual FOnEVFeatureNotificationSettingsChanged& GetNotificationSettingsChangedEvent() override
+    {
+        return OnFeatureNotificationSettingsChanged;
+    }
+
+    virtual void ApplyNotificationSettings(const FEVPopUpSettingsInfo& Settings) override
+    {
+        SetSelectedSettings(Settings);
+    }
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
     virtual void NativeConstruct() override;
 
 private:
+    FOnEVFeatureNotificationSettingsChanged OnFeatureNotificationSettingsChanged;
+
     bool bApplyingSettingsFromController = false;
 
     void PopulateNotificationIntervals();

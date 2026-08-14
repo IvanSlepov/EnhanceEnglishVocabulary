@@ -8,6 +8,8 @@
 #include "EVWidgetControllable.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVVocabularyLanguageTypes.h"
+#include "EVVocabularyPreferencesApplicationPort.h"
+#include "EVFeatureRoles.h"
 #include "EVAppSettingsWidget.generated.h"
 
 class UEVDBLanguageContextAndTranslationsWidget;
@@ -22,18 +24,19 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVocabularyLanguagePreferencesChan
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVAppSettingsWidget : public UUserWidget,
                                                      public IEVWidgetControllable,
-                                                     public IEVWidgetCommonEvents
+                                                     public IEVWidgetCommonEvents,
+                                                     public IEVVocabularyPreferencesApplicationPort,
+                                                     public IEVWebProviderSelectionSource,
+                                                     public IEVFeatureLifecycleRole
 {
     GENERATED_BODY()
 
 public:
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVSelectWebProvidersWidget> WBP_SelectWebProviders;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVDBLanguageContextAndTranslationsWidget> WBP_DBLanguageContextAndTranslations;
-
-    class UEVGameInstance* EVGameInstance;
 
     // Disable/Enable or Get controls status on demand
     virtual void SetControlsEnabled(bool bEnabled) override;
@@ -47,12 +50,29 @@ public:
 
     void ApplyVocabularyLanguagePreferences(const FEVVocabularyLanguagePreferences& Preferences);
 
+    virtual FOnEVVocabularyPreferencesChangeRequested& GetVocabularyPreferencesChangeRequestedEvent() override
+    {
+        return OnVocabularyPreferencesChangeRequested;
+    }
+
+    virtual void ApplyVocabularyPreferencesState(const FEVVocabularyPreferencesState& State) override;
+
+    virtual void ApplyFeatureActivationState(bool bIsActive) override;
+
+    virtual FOnEVWebProviderSelectionChanged& GetWebProviderSelectionChangedEvent() override
+    {
+        return OnWebProviderSelectionChanged;
+    }
+
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
     virtual void NativeConstruct() override;
 
 private:
+    FOnEVVocabularyPreferencesChangeRequested OnVocabularyPreferencesChangeRequested;
+    FOnEVWebProviderSelectionChanged OnWebProviderSelectionChanged;
+
     bool bAreInteractionElementsEnabled = true;
 
     UFUNCTION()

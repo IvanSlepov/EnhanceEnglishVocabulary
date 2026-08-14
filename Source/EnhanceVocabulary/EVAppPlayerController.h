@@ -10,16 +10,33 @@
 #include "EVWordEntryActionTypes.h"
 #include "EVConfirmationDialogActionTypes.h"
 #include "EVConfirmationDialogWidgetProvider.h"
-#include "EVWordEntryDisplayWidgetProvider.h"
+
 #include "EVGameInstance.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVFileExchangeTypes.h"
 #include "EVPopUpSettingsTypes.h"
 #include "EVVocabularyInteractionTypes.h"
 #include "EVVocabularyFilterTypes.h"
-#include "EVVocabularyFilterWidgetProvider.h"
+
 #include "EVVocabularyLanguageTypes.h"
+#include "EVVocabularySearchApplicationPort.h"
+#include "EVVocabularyLibraryApplicationPort.h"
+#include "EVVocabularyPreferencesApplicationPort.h"
+#include "EVNetworkConnectivityApplicationPort.h"
+#include "EVGlobalPresentationResolutionPort.h"
+#include "EVEntryDetailsApplicationPort.h"
+#include "EVVocabularyFilterApplicationPort.h"
+#include "EVGlobalPresentationApplicationPort.h"
+#include "EVFileExchangeApplicationPort.h"
+#include "EVNotificationSettingsApplicationPort.h"
+#include "EVVocabularyValueApplicationPort.h"
+#include "EVApplicationLifecyclePort.h"
+#include "EVFeatureNavigationApplicationPort.h"
 #include "EVAppPlayerController.generated.h"
+
+class UEVFileExchangeWorkflowCoordinator;
+class UEVNotificationWorkflowCoordinator;
+class UEVVocabularyInteractionCoordinator;
 
 /**
  *
@@ -62,26 +79,10 @@ public:
     TObjectPtr<UUserWidget> RequestedActionStatusWidgetInstance;
 
     UPROPERTY(EditDefaultsOnly, Category = "UI")
-    TSubclassOf<UUserWidget> DetailedWordEntryWidgetClass;
-
-    UPROPERTY()
-    TObjectPtr<UUserWidget> DetailedWordEntryWidgetInstance;
-
-    IEVWordEntryDisplayWidgetProvider* DetailedWordEntryDisplay = nullptr;
-
-    UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UUserWidget> ConfirmationDialogWidgetClass;
 
     UPROPERTY()
     TObjectPtr<UUserWidget> ConfirmationDialogWidgetInstance;
-
-    UPROPERTY(EditDefaultsOnly, Category = "UI")
-    TSubclassOf<UUserWidget> VocabularyFilterWidgetClass;
-
-    UPROPERTY()
-    TObjectPtr<UUserWidget> VocabularyFilterWidgetInstance;
-
-    IEVVocabularyFilterWidgetProvider* VocabularyFilterWidgetProvider = nullptr;
 
     IEVConfirmationDialogWidgetProvider* ConfirmationDialogWidget = nullptr;
 
@@ -104,41 +105,57 @@ private:
     void PollNotificationState();
     void SynchronizeNotificationSettingsFromDevice();
     void HandlePendingNotificationWord();
+    void BindApplicationPorts();
+    void UnbindApplicationPorts();
+    void InitializeWorkflowCoordinators();
+    void UpdateWorkflowCoordinatorPorts();
+
+    void HandleVocabularySearchRequested(const FEVVocabularySearchRequest& Request);
+    void HandleVocabularyRecordRequested(const FEVVocabularyRecordRequest& Request);
+    void HandleVocabularyQueryRequested(const FEVVocabularyQueryRequest& Request);
+    void HandleVocabularyMutationRequested(const FEVVocabularyMutationRequest& Request);
+    void HandleVocabularyPreferencesChangeRequested(const FEVVocabularyPreferencesChangeRequest& Request);
+
+    void HandleVocabularySearchOutcomeReady(const FEVVocabularySearchOutcome& Outcome);
+    void HandleVocabularyRecordOutcomeReady(const FEVVocabularyRecordOutcome& Outcome);
+    void HandleVocabularyQueryOutcomeReady(const FEVVocabularyQueryOutcome& Outcome);
+    void HandleVocabularyMutationOutcomeReady(const FEVVocabularyMutationOutcome& Outcome);
+    void HandleVocabularyChanged(const FEVVocabularyChangeInfo& ChangeInfo);
+    void HandleVocabularyPreferencesStateReady(const FEVVocabularyPreferencesState& State);
+    void HandleEntryDetailsRequested(const FEVVocabularyRecord& Record);
+    void HandleApplicationExitRequested();
+
+    UFUNCTION()
+    void HandleConnectionStateChanged(EEVConnectionState State);
+
+    IEVVocabularySearchApplicationPort* VocabularySearchApplicationPort = nullptr;
+    IEVVocabularyLibraryApplicationPort* VocabularyLibraryApplicationPort = nullptr;
+    IEVVocabularyPreferencesApplicationPort* VocabularyPreferencesApplicationPort = nullptr;
+    IEVNetworkConnectivityApplicationPort* NetworkConnectivityApplicationPort = nullptr;
+    IEVGlobalPresentationResolutionPort* GlobalPresentationResolutionPort = nullptr;
+    IEVEntryDetailsApplicationPort* EntryDetailsApplicationPort = nullptr;
+    IEVVocabularyFilterApplicationPort* VocabularyFilterApplicationPort = nullptr;
+    IEVGlobalPresentationApplicationPort* GlobalPresentationApplicationPort = nullptr;
+    IEVFileExchangeApplicationPort* FileExchangeApplicationPort = nullptr;
+    IEVNotificationSettingsApplicationPort* NotificationSettingsApplicationPort = nullptr;
+    IEVVocabularyValueApplicationPort* VocabularyValueApplicationPort = nullptr;
+    IEVApplicationLifecyclePort* ApplicationLifecyclePort = nullptr;
+    IEVFeatureNavigationApplicationPort* FeatureNavigationApplicationPort = nullptr;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UEVFileExchangeWorkflowCoordinator> FileExchangeWorkflowCoordinator;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UEVNotificationWorkflowCoordinator> NotificationWorkflowCoordinator;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UEVVocabularyInteractionCoordinator> VocabularyInteractionCoordinator;
 
     FEVErrorInfo EVErrorInfo;
 
     FDelegateHandle ApplicationEnteredForegroundHandle;
     FTimerHandle NotificationStatePollTimerHandle;
-    // Cache the data we receive from the the WordEntry
-    // we decided to review
-    FEVWordEntryActionInfo CachedWordEntryWidgetInfo;
-
-    // Structured record currently confirmed and displayed in Detailed View.
-    FEVVocabularyRecord CachedConfirmedVocabularyRecord;
-
-    // Structured edits waiting for confirmation.
-    FEVVocabularyRecord CachedPendingVocabularyRecord;
-
-    FEVFileOperationInfo PendingFileOperationInfo;
-
     EEVConfirmationDialogType PendingConfirmationDialogType = EEVConfirmationDialogType::Unknown;
-    FEVVocabularyValueActionRequest PendingVocabularyValueActionRequest;
-
-    // ======== Notification settings and transitions ===========
-    // Settings that are currently accepted by the controller.
-    FEVPopUpSettingsInfo CurrentAcceptedSettings;
-
-    // Complete settings snapshot most recently requested by the widget.
-    FEVPopUpSettingsInfo PendingRequestedSettings;
-
-    // Settings waiting specifically for Android permission/settings resolution.
-    FEVPopUpSettingsInfo PendingPermissionSettings;
-
-    bool bHasPendingRequestedSettings = false;
-    bool bHasPendingPermissionSettings = false;
-    bool bWaitingForNotificationSettings = false;
-    bool bNotificationTransitionInProgress = false;
-    //============================================================
 
     UFUNCTION()
     void HandleWidgetErrors(const FEVErrorInfo& WidgetErrorInfo);
@@ -168,31 +185,11 @@ private:
     void HandleVocabularyFiltersApplied(const FEVVocabularyQueryCriteria& Criteria);
 
     UFUNCTION()
-    void HandleVocabularyFilterWidgetCloseRequested();
-
-    UFUNCTION()
     void HandleVocabularyLanguagePreferencesChanged(const FEVVocabularyLanguagePreferences& Preferences);
 
-    void HandleRelationValueAction(const FEVVocabularyValueActionRequest& Request);
-    void HandleTranslationValueAction(const FEVVocabularyValueActionRequest& Request);
-    EEVVocabularyLanguageSupportState ResolveTranslationLanguageSupport(const FString& LanguageCode) const;
-    bool DoesTranslationWordExistInTargetContext(const FEVVocabularyTranslation& Translation) const;
-    void HandleTranslationContextCreationConfirmed();
-    void HandleTranslationExistingWordConfirmed();
-    void HandleTranslationMissingWordConfirmed();
-
-    // Handlers for the "EVWordEntryWidgetDetailed.h" buttons
-    UFUNCTION()
-    void HandleDetailedViewButtonPressed();
-
-    UFUNCTION()
-    void HandleDetailedEditButtonPressed();
-
-    UFUNCTION()
-    void HandleDetailedDeleteButtonPressed();
-
-    UFUNCTION()
-    void HandleDetailedSaveChangesButtonPressed(const FEVVocabularyRecord& NewVocabularyRecord);
+    void HandleEntryDetailsCloseRequested();
+    void HandleEntryDetailsDeleteRequested();
+    void HandleEntryDetailsSaveRequested(const FEVVocabularyRecord& NewVocabularyRecord);
 
     // Handlers for the "EVConfirmationDialogWidget.h"
     UFUNCTION()
@@ -201,40 +198,9 @@ private:
     UFUNCTION()
     void HandleConfirmationDialog_ButtonPressed(bool bIsOperationConfirmed);
 
-    // Handle Edit word entry
-    UFUNCTION()
-    void ProcessConfirmedWordUpdate();
-
-    // Handle Delete word entry
-    UFUNCTION()
-    void ProcessConfirmedWordDelete();
-
-    // Handle widget destruction
-    void DestroyWidget(TObjectPtr<UUserWidget>& Widget);
-
     // Handle complete notification settings emitted by the settings widget.
     UFUNCTION()
     void HandleNotificationSettingsChanged(const FEVPopUpSettingsInfo& RequestedSettings);
-
-    void EvaluateNotificationSettingsChange();
-    void EvaluateRandomWordModeChange();
-    void EvaluateTestModeChange();
-    void HandleNotificationIntervalChange();
-    void RequestNotificationModeChange();
-    void CommitPendingModeChange();
-    void RejectPendingModeChange();
-    void ProcessNotificationSettingsRequest(const FEVPopUpSettingsInfo& RequestedSettings);
-
-    UFUNCTION()
-    void ApplyResolvedNotificationSettings(const FEVPopUpSettingsInfo& ResolvedSettings);
-
-    void CommitPendingPermissionSettings();
-    void RejectPendingNotificationRequest();
-    void ClearPendingNotificationRequest();
-
-    bool HasActiveNotificationSchedule() const;
-    bool HasNotificationIntervalChanged() const;
-    bool HasNotificationModeChanged() const;
 
     void HandleNotificationPermissionResult(bool bGranted);
 };

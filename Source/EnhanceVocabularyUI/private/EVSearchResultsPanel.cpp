@@ -7,7 +7,6 @@
 #include "Components/TextBlock.h"
 #include "EVEntryItem.h"
 #include "EVVocabularyUiStyle.h"
-#include "EnhanceVocabulary/EVGameInstance.h"
 #include "EVVocabularyLanguageTypes.h"
 
 void UEVSearchResultsPanel::NativeOnInitialized()
@@ -104,6 +103,18 @@ void UEVSearchResultsPanel::ClearSearchResult()
 const FEVVocabularyRecord& UEVSearchResultsPanel::GetCurrentVocabularyRecord() const
 {
     return CurrentVocabularyRecord;
+}
+
+void UEVSearchResultsPanel::ApplyVocabularyPreferences(const FEVVocabularyLanguagePreferences& Preferences)
+{
+    VocabularyPreferences = Preferences;
+    VocabularyPreferences.Normalize();
+
+    if (!CurrentVocabularyRecord.Word.IsEmpty())
+    {
+        PopulatePronunciationFields();
+        PopulateMeaningList();
+    }
 }
 
 void UEVSearchResultsPanel::HandleSaveClicked()
@@ -220,30 +231,25 @@ const FEVVocabularyPronunciation* UEVSearchResultsPanel::ResolvePrimaryPronuncia
 
 FString UEVSearchResultsPanel::ResolveSelectedVocabularyLanguageCode() const
 {
-    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
-    {
-        return EVVocabularyLanguage::GetDatabaseContextPronunciationLanguageCode(
-            GameInstance->GetVocabularyLanguagePreferences().DatabaseContext);
-    }
-    return TEXT("en");
+    return EVVocabularyLanguage::GetDatabaseContextPronunciationLanguageCode(VocabularyPreferences.DatabaseContext);
 }
 
 TArray<FString> UEVSearchResultsPanel::ResolveSelectedTranslationLanguageCodes() const
 {
     TArray<FString> Codes;
-    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
+    for (const EEVVocabularyTranslationLanguage Language : VocabularyPreferences.SelectedTranslations)
     {
-        for (const EEVVocabularyTranslationLanguage Language :
-             GameInstance->GetVocabularyLanguagePreferences().SelectedTranslations)
+        const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
+        if (!Code.IsEmpty())
         {
-            const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
-            if (!Code.IsEmpty())
+            Codes.AddUnique(Code);
+            if (Language == EEVVocabularyTranslationLanguage::Ukrainian)
             {
-                Codes.AddUnique(Code);
-                if (Language == EEVVocabularyTranslationLanguage::Ukrainian)
-                    Codes.AddUnique(TEXT("ua"));
-                else if (Language == EEVVocabularyTranslationLanguage::EnglishUSA)
-                    Codes.AddUnique(TEXT("en"));
+                Codes.AddUnique(TEXT("ua"));
+            }
+            else if (Language == EEVVocabularyTranslationLanguage::EnglishUSA)
+            {
+                Codes.AddUnique(TEXT("en"));
             }
         }
     }
