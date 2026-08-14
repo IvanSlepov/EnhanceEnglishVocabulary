@@ -10,7 +10,6 @@ public class EnhanceVocabularyUI: ModuleRules
             "Engine",
             "UMG",
             "EnhanceVocabularyStorage",
-            "EnhanceVocabulary",
             "EnhanceVocabularyCore",
             "EnhanceVocabularyStorage",
             "EnhanceVocabularyWeb"
@@ -24,7 +23,6 @@ public class EnhanceVocabularyUI: ModuleRules
             "Slate",
             "SlateCore",
             "EnhanceVocabularyStorage",
-            "EnhanceVocabulary",
             "EnhanceVocabularyCore",
             "EnhanceVocabularyStorage",
             "EnhanceVocabularyWeb"

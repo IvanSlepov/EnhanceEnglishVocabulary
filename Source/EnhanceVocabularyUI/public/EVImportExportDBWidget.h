@@ -6,6 +6,7 @@
 #include "Blueprint/UserWidget.h"
 #include "EVSelectImpExpDBOptionsWidget.h"
 #include "EVFileExchangeTypes.h"
+#include "EVFeatureRoles.h"
 #include "EVImportExportDBWidget.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnImportExportDownloadDBIssued, const FEVFileOperationInfo&,
@@ -15,16 +16,21 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnImportExportDownloadDBIssued, con
  *
  */
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVImportExportDBWidget : public UUserWidget
+class ENHANCEVOCABULARYUI_API UEVImportExportDBWidget : public UUserWidget, public IEVFileExchangeFeatureRole
 {
     GENERATED_BODY()
 
 public:
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVSelectImpExpDBOptionsWidget> WBP_SelectImportExportOptions;
 
     UPROPERTY(BlueprintCallable)
     FOnImportExportDownloadDBIssued OnImportExportDownloadDBIssued;
+
+    virtual FOnEVFeatureFileOperationRequested& GetFileOperationRequestedEvent() override
+    {
+        return OnFeatureFileOperationRequested;
+    }
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -32,6 +38,8 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
+    FOnEVFeatureFileOperationRequested OnFeatureFileOperationRequested;
+
     UFUNCTION()
     void HandleOnImportExportDownloadDBIssued(const FEVFileOperationInfo& FileOperationInfoFromSelectorWidget);
 };

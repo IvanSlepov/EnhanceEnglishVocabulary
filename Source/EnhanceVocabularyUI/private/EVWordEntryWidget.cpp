@@ -5,7 +5,7 @@
 #include "EVEntryItem.h"
 #include "EVVocabularyUiStyle.h"
 #include "EVVocabularyEntryMeaningWidget.h"
-#include "EnhanceVocabulary/EVGameInstance.h"
+#include "EVVocabularyFilterTypes.h"
 #include "EVVocabularyLanguageTypes.h"
 #include "EVVocabularyTranslationUtils.h"
 
@@ -71,6 +71,20 @@ const FEVVocabularyRecord& UEVWordEntryWidget::GetCurrentVocabularyRecord() cons
     return CurrentVocabularyRecord;
 }
 
+void UEVWordEntryWidget::ApplyPresentationContext(const FEVVocabularyQueryCriteria& Criteria,
+                                                  const FEVVocabularyLanguagePreferences& Preferences)
+{
+    ActiveQueryCriteria = Criteria;
+    ActiveQueryCriteria.Normalize();
+    VocabularyPreferences = Preferences;
+    VocabularyPreferences.Normalize();
+
+    if (!CurrentVocabularyRecord.Word.IsEmpty())
+    {
+        PopulateVocabularyRecord();
+    }
+}
+
 void UEVWordEntryWidget::PopulateVocabularyRecord()
 {
     const FString DisplayWord = EVVocabularyUiStyle::BuildWrappedWordForDisplay(CurrentVocabularyRecord.Word);
@@ -119,6 +133,12 @@ void UEVWordEntryWidget::PopulateMeanings()
     {
         const FEVVocabularyMeaning& Meaning = CurrentVocabularyRecord.Meanings[MeaningIndex];
 
+        if (ActiveQueryCriteria.HasActiveFilters() &&
+            !EVVocabularyFilter::MeaningMatchesCriteria(Meaning, ActiveQueryCriteria))
+        {
+            continue;
+        }
+
         UEVEntryItem* Item = NewObject<UEVEntryItem>(this);
 
         if (!Item)
@@ -160,34 +180,25 @@ const FEVVocabularyPronunciation* UEVWordEntryWidget::ResolvePrimaryPronunciatio
 
 FString UEVWordEntryWidget::ResolveSelectedVocabularyLanguageCode() const
 {
-    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
-    {
-        return EVVocabularyLanguage::GetDatabaseContextPronunciationLanguageCode(
-            GameInstance->GetVocabularyLanguagePreferences().DatabaseContext);
-    }
-    return TEXT("en");
+    return EVVocabularyLanguage::GetDatabaseContextPronunciationLanguageCode(VocabularyPreferences.DatabaseContext);
 }
 
 TArray<FString> UEVWordEntryWidget::ResolveSelectedTranslationLanguageCodes() const
 {
     TArray<FString> Codes;
-    if (const UEVGameInstance* GameInstance = Cast<UEVGameInstance>(GetGameInstance()))
+    for (const EEVVocabularyTranslationLanguage Language : VocabularyPreferences.SelectedTranslations)
     {
-        for (const EEVVocabularyTranslationLanguage Language :
-             GameInstance->GetVocabularyLanguagePreferences().SelectedTranslations)
+        const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
+        if (!Code.IsEmpty())
         {
-            const FString Code = EVVocabularyLanguage::GetTranslationStorageCode(Language);
-            if (!Code.IsEmpty())
+            Codes.AddUnique(Code);
+            if (Language == EEVVocabularyTranslationLanguage::Ukrainian)
             {
-                Codes.AddUnique(Code);
-                if (Language == EEVVocabularyTranslationLanguage::Ukrainian)
-                {
-                    Codes.AddUnique(TEXT("ua")); // legacy compatibility
-                }
-                else if (Language == EEVVocabularyTranslationLanguage::EnglishUSA)
-                {
-                    Codes.AddUnique(TEXT("en")); // legacy broad English code
-                }
+                Codes.AddUnique(TEXT("ua")); // legacy compatibility
+            }
+            else if (Language == EEVVocabularyTranslationLanguage::EnglishUSA)
+            {
+                Codes.AddUnique(TEXT("en")); // legacy broad English code
             }
         }
     }
@@ -238,6 +249,7 @@ FEVVocabularyMeaning UEVWordEntryWidget::BuildMeaningForDisplay(const FEVVocabul
 
 void UEVWordEntryWidget::HandleOnWordEntry_ViewButtonPressed()
 {
+    OnEntryDetailsRequested.Broadcast(CurrentVocabularyRecord);
     OnWordEntryViewButtonPressed.Broadcast(this);
 }
 

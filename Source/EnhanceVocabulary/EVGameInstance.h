@@ -8,11 +8,12 @@
 #include "EVWebProviderTypes.h"
 #include "EVFileExchangeTypes.h"
 #include "EVRequestedActionTypes.h"
-#include "EVFileExchangeDefaults.h"
 #include "EVPopUpSettingsTypes.h"
 #include "EVVocabularyFilterTypes.h"
 #include "EVVocabularyLanguageTypes.h"
 #include "EVApplicationRequestTypes.h"
+#include "EVFileExchangeApplicationCoordinator.h"
+#include "EVNotificationApplicationCoordinator.h"
 
 #include "EVGameInstance.generated.h"
 
@@ -27,9 +28,6 @@ class UEVDeviceService;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVConnectionStateChanged, EEVConnectionState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEVWordSearchCompletedFromEVGameInstance, const FWordSearchResult&, Result);
-DECLARE_MULTICAST_DELEGATE_OneParam(FEVFileOperationCompletedFromGameInstance, const FEVRequestedActionInfo&);
-DECLARE_MULTICAST_DELEGATE_OneParam(FEVImportFilePickCompleted, const FEVFileExchangeResultInfo&);
-DECLARE_MULTICAST_DELEGATE_OneParam(FEVNotificationPermissionResultFromGameInstance, bool /* bGranted */);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularySearchOutcomeReady, const FEVVocabularySearchOutcome&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyRecordOutcomeReady, const FEVVocabularyRecordOutcome&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FEVVocabularyQueryOutcomeReady, const FEVVocabularyQueryOutcome&);
@@ -45,14 +43,6 @@ enum class EEVVocabularyStorageServiceResult : uint8
     DatabaseError,
     VocabularyStorageInstanceError,
     Empty
-};
-
-enum class EEVPendingFileSavePurpose : uint8
-{
-    None,
-    DownloadTemplate,
-    ExportDatabase,
-    ImportValidationReport
 };
 
 UCLASS()
@@ -72,6 +62,12 @@ public:
 
     UPROPERTY()
     TObjectPtr<UEVDeviceService> DeviceService;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UEVFileExchangeApplicationCoordinator> FileExchangeCoordinator;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UEVNotificationApplicationCoordinator> NotificationCoordinator;
 
     UFUNCTION(BlueprintCallable, Category = "Vocabulary Storage")
     EEVVocabularyStorageServiceResult DoesWordExist(const FString& Word, FText& OutErrorMessage);
@@ -157,15 +153,9 @@ public:
 
     FEVFileOperationCompletedFromGameInstance& OnFileOperationCompleted();
 
-    FEVImportFilePickCompleted& OnImportFilePickCompleted()
-    {
-        return ImportFilePickCompletedDelegate;
-    }
+    FEVImportFilePickCompleted& OnImportFilePickCompleted();
 
-    FEVNotificationPermissionResultFromGameInstance& OnNotificationPermissionResult()
-    {
-        return NotificationPermissionResultDelegate;
-    }
+    FEVNotificationPermissionResultFromGameInstance& OnNotificationPermissionResult();
 
     FEVVocabularySearchOutcomeReady& OnVocabularySearchOutcomeReady()
     {
@@ -223,9 +213,6 @@ private:
     UFUNCTION()
     void HandleEVWordSearchCompletedFromEVGameInstance(const FWordSearchResult& SearchWordResultPassedByGameInstance);
 
-    UFUNCTION()
-    void HandlePopUpTimerExpired();
-
     // We need to assign local ENUM var (Cause unassigned enum type var takes the very first entry from that enum)
     // and we need to assign smth that differ from the Offline in this case, to address the issue when
     // the app is launched with already disabled Internet access but the corresponding error message never appears
@@ -233,47 +220,9 @@ private:
     // the connectivity var being set to Offline and that makes the check in the corresponding Handler to return
     // immediately
     EEVConnectionState EVConnectionState = EEVConnectionState::Connecting;
-    EEVPendingFileSavePurpose PendingFileSavePurpose = EEVPendingFileSavePurpose::None;
-
-    void HandleFileSaved(const FEVFileExchangeResultInfo& ResultInfo);
-
-    // HandleImportFilePicked related funcs
-    void HandleImportFilePicked(const FEVFileExchangeResultInfo& ResultInfo, const TArray<uint8>& Bytes);
-
-    void CompleteImportFileOperation(const FEVFileExchangeResultInfo& ResultInfo);
-
-    bool TrySaveImportValidationReport(FEVFileExchangeResultInfo ValidationResult,
-                                       const TArray<uint8>& ValidationReportBytes);
-
-    FEVFileExchangeResultInfo ExecuteImportDatabaseOperation(const TArray<FEVVocabularyRecord>& ValidatedRecords);
-
-    void PopulateImportResultFileInfo(FEVFileExchangeResultInfo& ResultInfo,
-                                      const FEVFileExchangeResultInfo& PickResult, int32 ByteCount) const;
-    // --- end of the HandleImportFilePicked funcs
-
-    FEVRequestedActionInfo HandleDownloadTemplateRequested(const FEVFileOperationInfo& FileOperationInfo);
-
-    FEVRequestedActionInfo HandleExportDBRequested(const FEVFileOperationInfo& FileOperationInfo);
-
-    FEVRequestedActionInfo HandleImportDBOverwriteRequested(const FEVFileOperationInfo& FileOperationInfo);
-
-    FEVRequestedActionInfo HandleImportDBAppendRequested(const FEVFileOperationInfo& FileOperationInfo);
-
-    FEVRequestedActionInfo
-    ConvertFileExchangeResultToRequestedAction(const FEVFileExchangeResultInfo& ResultInfo) const;
-
-    FEVFileOperationCompletedFromGameInstance FileOperationCompletedDelegate;
-    FEVImportFilePickCompleted ImportFilePickCompletedDelegate;
-
-    FEVFileOperationInfo PendingImportFileOperationInfo;
-    FEVFileExchangeResultInfo PendingImportValidationResult;
-
-    FEVPopUpSettingsInfo CurrentPopUpSettings;
 
     UPROPERTY(Transient)
     FEVVocabularyQueryCriteria ActiveVocabularyQueryCriteria;
-
-    FEVNotificationPermissionResultFromGameInstance NotificationPermissionResultDelegate;
 
     FEVVocabularySearchOutcomeReady VocabularySearchOutcomeReadyDelegate;
     FEVVocabularyRecordOutcomeReady VocabularyRecordOutcomeReadyDelegate;
@@ -291,6 +240,4 @@ private:
     void LoadVocabularyLanguagePreferences();
     void SaveVocabularyLanguagePreferences() const;
     void HandleApplicationWillEnterBackground();
-
-    void HandleNotificationPermissionResult(const bool bGranted);
 };

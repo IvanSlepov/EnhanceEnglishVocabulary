@@ -31,6 +31,18 @@
 #include "EVVocabularyPreferencesApplicationPort.h"
 #include "EVNetworkConnectivityApplicationPort.h"
 #include "EVGlobalPresentationResolutionPort.h"
+#include "EVEntryDetailsApplicationPort.h"
+#include "EVVocabularyFilterApplicationPort.h"
+#include "EVGlobalPresentationApplicationPort.h"
+#include "EVFileExchangeApplicationPort.h"
+#include "EVNotificationSettingsApplicationPort.h"
+#include "EVVocabularyValueApplicationPort.h"
+#include "EVApplicationLifecyclePort.h"
+#include "EVFeatureNavigationApplicationPort.h"
+#include "EVFeatureRoles.h"
+#include "EVFeatureRegistry.h"
+#include "EVWordEntryDisplayWidgetProvider.h"
+#include "EVVocabularyFilterWidgetProvider.h"
 
 #include "EVRootWidget.generated.h"
 
@@ -46,7 +58,15 @@ class ENHANCEVOCABULARYUI_API UEVRootWidget : public UUserWidget,
                                               public IEVVocabularyLibraryApplicationPort,
                                               public IEVVocabularyPreferencesApplicationPort,
                                               public IEVNetworkConnectivityApplicationPort,
-                                              public IEVGlobalPresentationResolutionPort
+                                              public IEVGlobalPresentationResolutionPort,
+                                              public IEVEntryDetailsApplicationPort,
+                                              public IEVVocabularyFilterApplicationPort,
+                                              public IEVGlobalPresentationApplicationPort,
+                                              public IEVFileExchangeApplicationPort,
+                                              public IEVNotificationSettingsApplicationPort,
+                                              public IEVVocabularyValueApplicationPort,
+                                              public IEVApplicationLifecyclePort,
+                                              public IEVFeatureNavigationApplicationPort
 {
     GENERATED_BODY()
 
@@ -62,30 +82,32 @@ public:
     TObjectPtr<UWidgetSwitcher> WidgetSwitcher_Main;
 
     /*The EV app WBPs added to the WidgetSwitcher_Main*/
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget), Category = "Online Dependant")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional), Category = "Online Dependant")
     TObjectPtr<UEVAddWordWidget> AddWord;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UEVNoMenuWidget> NoMenu;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVMainMenuWidget> MainMenu;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVReviewWordsWidget> ReviewWords;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVAppSettingsWidget> Settings_SelectWebProviders;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVImportExportDBWidget> ImportExportDB;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVPopUpSettingsWidget> PopUpSettings;
 
-    class UEVGameInstance* EVGameInstance;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
+    TObjectPtr<UUserWidget> WordEntryWIdgetDetailedView;
 
-    class AEVAppPlayerController* EVAppPlayerController;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
+    TObjectPtr<UUserWidget> VocabularyFilterWidget;
 
     /*Events*/
 
@@ -180,6 +202,81 @@ public:
     virtual void ApplyNetworkConnectivityState(EEVApplicationConnectivityState State) override;
     virtual void ApplyGlobalErrorResolution(const FEVErrorInfo& ErrorInfo) override;
 
+    virtual FOnEVEntryDetailsRequested& GetEntryDetailsRequestedEvent() override
+    {
+        return OnEntryDetailsRequested;
+    }
+
+    virtual FOnEVEntryDetailsCloseRequested& GetEntryDetailsCloseRequestedEvent() override
+    {
+        return OnEntryDetailsCloseRequested;
+    }
+
+    virtual FOnEVEntryDetailsDeleteRequested& GetEntryDetailsDeleteRequestedEvent() override
+    {
+        return OnEntryDetailsDeleteRequested;
+    }
+
+    virtual FOnEVEntryDetailsSaveRequested& GetEntryDetailsSaveRequestedEvent() override
+    {
+        return OnEntryDetailsSaveRequested;
+    }
+
+    virtual void PresentEntryDetails(const FEVVocabularyRecord& Record) override;
+    virtual void DismissEntryDetails() override;
+
+    virtual FOnEVVocabularyFiltersRequested& GetVocabularyFilterPresentationRequestedEvent() override
+    {
+        return OnVocabularyFiltersRequestedByFeature;
+    }
+
+    virtual FOnEVVocabularyFilterCriteriaChangeRequested& GetVocabularyFilterCriteriaChangeRequestedEvent() override
+    {
+        return OnVocabularyFilterCriteriaChangeRequested;
+    }
+
+    virtual void PresentVocabularyFilters(const FEVVocabularyQueryCriteria& Criteria) override;
+    virtual void ApplyVocabularyFilterCriteria(const FEVVocabularyQueryCriteria& Criteria) override;
+
+    virtual FOnEVGlobalErrorRequested& GetGlobalErrorRequestedEvent() override
+    {
+        return OnGlobalErrorRequested;
+    }
+
+    virtual FOnEVGlobalLoadingStateChanged& GetGlobalLoadingStateChangedEvent() override
+    {
+        return OnGlobalLoadingStateChanged;
+    }
+
+    virtual FOnEVGlobalStatusRequested& GetGlobalStatusRequestedEvent() override
+    {
+        return OnGlobalStatusRequested;
+    }
+
+    virtual FOnEVFileOperationRequested& GetFileOperationRequestedEvent() override
+    {
+        return OnFileOperationRequested;
+    }
+
+    virtual FOnEVNotificationSettingsChangeRequested& GetNotificationSettingsChangeRequestedEvent() override
+    {
+        return OnNotificationSettingsChangeRequested;
+    }
+
+    virtual void ApplyNotificationSettingsState(const FEVPopUpSettingsInfo& Settings) override;
+
+    virtual FOnEVVocabularyValueActionRequested& GetVocabularyValueApplicationRequestedEvent() override
+    {
+        return OnVocabularyValueActionRequestedByFeature;
+    }
+
+    virtual FOnEVApplicationExitRequested& GetApplicationExitRequestedEvent() override
+    {
+        return OnApplicationExitRequested;
+    }
+
+    virtual void ApplyFeatureNavigation(const FEVFeatureNavigationRequest& Request) override;
+
     // This method is getting called from the PC to
     // confirm a user-selected Pop-up Interval. And it always forces the
     // EEVPopUpIntervals::TurnedOff, regardless of WHAT user has selected other than this option
@@ -190,8 +287,14 @@ protected:
     virtual void NativeOnInitialized() override;
     virtual void NativePreConstruct() override;
     virtual void NativeConstruct() override;
+    virtual void NativeDestruct() override;
 
 private:
+    void HandleVocabularySearchRequested(const FEVVocabularySearchRequest& Request);
+    void HandleVocabularyRecordRequested(const FEVVocabularyRecordRequest& Request);
+    void HandleVocabularyQueryRequested(const FEVVocabularyQueryRequest& Request);
+    void HandleVocabularyMutationRequested(const FEVVocabularyMutationRequest& Request);
+
     void SetupConnectionErrorInfo(FEVErrorInfo& ConnectionErrorInfo);
     bool HandleWidgetControlsState(IEVWidgetControllable* Widget, bool bIsConnectionStatusOnline);
     void HandleOnlineDependantWidgetsActivation(UUserWidget* Widget, bool bIsConnectionStatusOnline);
@@ -254,6 +357,68 @@ private:
     FOnEVVocabularyQueryRequested OnVocabularyQueryRequested;
     FOnEVVocabularyMutationRequested OnVocabularyMutationRequested;
     FOnEVVocabularyPreferencesChangeRequested OnVocabularyPreferencesChangeRequested;
+    FOnEVEntryDetailsRequested OnEntryDetailsRequested;
+    FOnEVEntryDetailsCloseRequested OnEntryDetailsCloseRequested;
+    FOnEVEntryDetailsDeleteRequested OnEntryDetailsDeleteRequested;
+    FOnEVEntryDetailsSaveRequested OnEntryDetailsSaveRequested;
+    FOnEVVocabularyFiltersRequested OnVocabularyFiltersRequestedByFeature;
+    FOnEVVocabularyFilterCriteriaChangeRequested OnVocabularyFilterCriteriaChangeRequested;
+    FOnEVGlobalErrorRequested OnGlobalErrorRequested;
+    FOnEVGlobalLoadingStateChanged OnGlobalLoadingStateChanged;
+    FOnEVGlobalStatusRequested OnGlobalStatusRequested;
+    FOnEVFileOperationRequested OnFileOperationRequested;
+    FOnEVNotificationSettingsChangeRequested OnNotificationSettingsChangeRequested;
+    FOnEVVocabularyValueActionRequested OnVocabularyValueActionRequestedByFeature;
+    FOnEVApplicationExitRequested OnApplicationExitRequested;
+
+    IEVVocabularySearchApplicationPort* AddWordVocabularySearchPort = nullptr;
+    IEVVocabularyLibraryApplicationPort* AddWordVocabularyLibraryPort = nullptr;
+    IEVVocabularyLibraryApplicationPort* ReviewWordsVocabularyLibraryPort = nullptr;
+    IEVFeatureFeedbackSource* AddWordFeedbackSource = nullptr;
+    IEVNetworkConnectivityApplicationPort* AddWordConnectivityPort = nullptr;
+    IEVWebProviderSelectionConsumer* AddWordWebProviderConsumer = nullptr;
+    IEVVocabularyPreferencesFeatureRole* AddWordPreferencesRole = nullptr;
+    IEVWordContextFeatureRole* AddWordWordContextRole = nullptr;
+    IEVReviewFeatureRole* ReviewFeatureRole = nullptr;
+    IEVVocabularyPreferencesFeatureRole* ReviewPreferencesRole = nullptr;
+    IEVWordContextFeatureRole* ReviewWordContextRole = nullptr;
+    IEVVocabularyPreferencesApplicationPort* SettingsPreferencesPort = nullptr;
+    IEVWebProviderSelectionSource* SettingsWebProviderSource = nullptr;
+    IEVFileExchangeFeatureRole* FileExchangeFeatureRole = nullptr;
+    IEVNotificationSettingsFeatureRole* NotificationSettingsFeatureRole = nullptr;
+    IEVMainMenuFeatureRole* MainMenuFeatureRole = nullptr;
+    IEVWordEntryDisplayWidgetProvider* EntryDetailsDisplay = nullptr;
+    IEVVocabularyFilterWidgetProvider* VocabularyFilterDisplay = nullptr;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UEVFeatureRegistry> FeatureRegistry;
+
+    FName LastContentFeatureId = EVApplicationFeature::None;
+    bool bMainMenuVisible = false;
+
+    void RegisterFeatures();
+    bool ActivateFeature(FName FeatureId, bool bRememberCurrent = true);
+    void UpdateMainMenuAvailability();
+    void HandleFeatureNavigationRequested(FName FeatureId);
+    void HandleApplicationExitRequested();
+    void HandleFeatureEntryDetailsRequested(const FEVVocabularyRecord& Record);
+    void HandleFeatureFiltersRequested();
+    void HandleFeatureVocabularyValueActionRequested(const FEVVocabularyValueActionRequest& Request);
+    void HandleFeatureFileOperationRequested(const FEVFileOperationInfo& FileOperationInfo);
+    void HandleFeatureNotificationSettingsChanged(const FEVPopUpSettingsInfo& Settings);
+    void HandleWebProviderSelectionChanged(EEVWebProvider DefinitionProvider, EEVWebProvider TranslationProvider);
+    void HandleSettingsPreferencesChangeRequested(const FEVVocabularyPreferencesChangeRequest& Request);
+
+    void HandleEntryDetailsCloseRequested();
+    void HandleEntryDetailsEditRequested();
+    void HandleEntryDetailsDeleteRequested();
+    void HandleEntryDetailsSaveRequested(const FEVVocabularyRecord& Record);
+
+    UFUNCTION()
+    void HandleVocabularyFilterCriteriaSubmitted(const FEVVocabularyQueryCriteria& Criteria);
+
+    UFUNCTION()
+    void HandleVocabularyFilterDismissed();
 
     UFUNCTION()
     void HandleOnConnectionErrorDetected();

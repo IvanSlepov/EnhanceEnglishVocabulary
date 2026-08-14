@@ -36,6 +36,14 @@ void UEVDBLanguageContextAndTranslationsWidget::SetInitialPreferences(
     ApplyPreferencesToChildren();
 }
 
+void UEVDBLanguageContextAndTranslationsWidget::ResetPendingChanges()
+{
+    if (WBP_VocabularyTranslationsWidget)
+    {
+        WBP_VocabularyTranslationsWidget->ResetPendingChanges();
+    }
+}
+
 void UEVDBLanguageContextAndTranslationsWidget::PopulateDatabaseContextComboBox()
 {
     if (!ComboBoxString_DB_Language_Context)

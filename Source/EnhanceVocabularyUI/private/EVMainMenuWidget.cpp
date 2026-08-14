@@ -6,14 +6,28 @@ void UEVMainMenuWidget::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
-    if (Button_AddWord && Button_ImportExport && Button_PopupSettings && Button_Quit && Button_ReviewWords &&
-        Button_AppSettings)
+    if (Button_AddWord)
     {
         Button_AddWord->OnPressed.AddDynamic(this, &ThisClass::HandleAddWordButtonPressed);
+    }
+    if (Button_ReviewWords)
+    {
         Button_ReviewWords->OnPressed.AddDynamic(this, &ThisClass::HandleReviewWordsButtonPressed);
+    }
+    if (Button_ImportExport)
+    {
         Button_ImportExport->OnPressed.AddDynamic(this, &ThisClass::HandleImportExportButtonPressed);
+    }
+    if (Button_PopupSettings)
+    {
         Button_PopupSettings->OnPressed.AddDynamic(this, &ThisClass::HandlePopupSettingsButtonPressed);
+    }
+    if (Button_AppSettings)
+    {
         Button_AppSettings->OnPressed.AddDynamic(this, &ThisClass::HandleAppSettingsButtonPressed);
+    }
+    if (Button_Quit)
+    {
         Button_Quit->OnPressed.AddDynamic(this, &ThisClass::HandleQuitButtonPressed);
     }
 }
@@ -33,6 +47,8 @@ void UEVMainMenuWidget::NativeConstruct()
 
 void UEVMainMenuWidget::HandleAddWordButtonPressed()
 {
+    OnFeatureNavigationRequested.Broadcast(EVApplicationFeature::AddWord);
+
     if (!bIsAddWordActivated)
     {
         bIsAddWordActivated = true;
@@ -54,6 +70,8 @@ void UEVMainMenuWidget::HandleAddWordButtonPressed()
 
 void UEVMainMenuWidget::HandleReviewWordsButtonPressed()
 {
+    OnFeatureNavigationRequested.Broadcast(EVApplicationFeature::ReviewWords);
+
     if (!bIsReviewWordsActivated)
     {
         bIsReviewWordsActivated = true;
@@ -75,6 +93,8 @@ void UEVMainMenuWidget::HandleReviewWordsButtonPressed()
 
 void UEVMainMenuWidget::HandlePopupSettingsButtonPressed()
 {
+    OnFeatureNavigationRequested.Broadcast(EVApplicationFeature::NotificationSettings);
+
     if (!bIsPopupSettingsActivated)
     {
         bIsPopupSettingsActivated = true;
@@ -96,6 +116,8 @@ void UEVMainMenuWidget::HandlePopupSettingsButtonPressed()
 
 void UEVMainMenuWidget::HandleImportExportButtonPressed()
 {
+    OnFeatureNavigationRequested.Broadcast(EVApplicationFeature::ImportExport);
+
     if (!bIsImportExportActivated)
     {
         bIsImportExportActivated = true;
@@ -117,6 +139,8 @@ void UEVMainMenuWidget::HandleImportExportButtonPressed()
 
 void UEVMainMenuWidget::HandleAppSettingsButtonPressed()
 {
+    OnFeatureNavigationRequested.Broadcast(EVApplicationFeature::ApplicationSettings);
+
     if (!bIsAppSettingsActivated)
     {
         bIsAppSettingsActivated = true;
@@ -138,5 +162,37 @@ void UEVMainMenuWidget::HandleAppSettingsButtonPressed()
 
 void UEVMainMenuWidget::HandleQuitButtonPressed()
 {
+    OnApplicationExitRequested.Broadcast();
     OnQuitButtonPressed.Broadcast();
+}
+
+void UEVMainMenuWidget::SetFeatureAvailable(const FName FeatureId, const bool bAvailable)
+{
+    UButton* TargetButton = nullptr;
+
+    if (FeatureId == EVApplicationFeature::AddWord)
+    {
+        TargetButton = Button_AddWord;
+    }
+    else if (FeatureId == EVApplicationFeature::ReviewWords)
+    {
+        TargetButton = Button_ReviewWords;
+    }
+    else if (FeatureId == EVApplicationFeature::NotificationSettings)
+    {
+        TargetButton = Button_PopupSettings;
+    }
+    else if (FeatureId == EVApplicationFeature::ImportExport)
+    {
+        TargetButton = Button_ImportExport;
+    }
+    else if (FeatureId == EVApplicationFeature::ApplicationSettings)
+    {
+        TargetButton = Button_AppSettings;
+    }
+
+    if (TargetButton)
+    {
+        TargetButton->SetIsEnabled(bAvailable);
+    }
 }

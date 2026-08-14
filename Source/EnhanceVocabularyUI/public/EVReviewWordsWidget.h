@@ -9,6 +9,8 @@
 #include "EVWordEntryActionTypes.h"
 #include "EVVocabularyInteractionTypes.h"
 #include "EVVocabularyFilterTypes.h"
+#include "EVVocabularyLibraryApplicationPort.h"
+#include "EVFeatureRoles.h"
 #include "Components/ComboBoxString.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -29,7 +31,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReviewVocabularyValueActionReques
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnReviewFiltersRequested);
 
 UCLASS()
-class ENHANCEVOCABULARYUI_API UEVReviewWordsWidget : public UUserWidget
+class ENHANCEVOCABULARYUI_API UEVReviewWordsWidget : public UUserWidget,
+                                                     public IEVVocabularyLibraryApplicationPort,
+                                                     public IEVReviewFeatureRole,
+                                                     public IEVVocabularyPreferencesFeatureRole,
+                                                     public IEVWordContextFeatureRole
 {
     GENERATED_BODY()
 
@@ -61,12 +67,50 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UTextBlock> TextBlock_AreFiltersAppliedText = nullptr;
 
-    class UEVGameInstance* EVGameInstance;
-
     void DisplayCurrentPage();
     void RefreshReview();
     void SetSearchWord(const FString& Word);
-    void ApplyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria);
+    virtual void ApplyQueryCriteria(const FEVVocabularyQueryCriteria& Criteria) override;
+
+    virtual FOnEVFeatureEntryDetailsRequested& GetEntryDetailsRequestedEvent() override
+    {
+        return OnEntryDetailsRequested;
+    }
+
+    virtual FOnEVFeatureFiltersRequested& GetFiltersRequestedEvent() override
+    {
+        return OnFeatureFiltersRequested;
+    }
+
+    virtual FOnEVFeatureVocabularyValueActionRequested& GetVocabularyValueActionRequestedEvent() override
+    {
+        return OnFeatureVocabularyValueActionRequested;
+    }
+
+    virtual void ApplyVocabularyChange(const FEVVocabularyChangeInfo& ChangeInfo) override;
+    virtual void RefreshFeature() override;
+    virtual void ApplyVocabularyPreferences(const FEVVocabularyLanguagePreferences& Preferences) override;
+    virtual void PresentWordContext(const FString& Word) override;
+
+    virtual FOnEVVocabularyRecordRequested& GetVocabularyRecordRequestedEvent() override
+    {
+        return OnVocabularyRecordRequested;
+    }
+
+    virtual FOnEVVocabularyQueryRequested& GetVocabularyQueryRequestedEvent() override
+    {
+        return OnVocabularyQueryRequested;
+    }
+
+    virtual FOnEVVocabularyMutationRequested& GetVocabularyMutationRequestedEvent() override
+    {
+        return OnVocabularyMutationRequested;
+    }
+
+    virtual void ApplyVocabularyRecordOutcome(const FEVVocabularyRecordOutcome&) override {}
+    virtual void ApplyVocabularyQueryOutcome(const FEVVocabularyQueryOutcome& Outcome) override;
+    virtual void ApplyVocabularyMutationOutcome(const FEVVocabularyMutationOutcome&) override {}
+    virtual void ApplyVocabularyChanged(const FEVVocabularyChangeInfo&) override {}
 
     void UpdateDisplayedWordEntry(const FVocabularyEntry& UpdatedEntry);
     void RemoveDisplayedWordEntry(const FVocabularyEntry& DeletedEntry);
@@ -115,6 +159,12 @@ private:
 
     FEVWordEntryActionInfo EVWordEntryActionInfo;
 
+    FOnEVFeatureEntryDetailsRequested OnEntryDetailsRequested;
+    FOnEVFeatureFiltersRequested OnFeatureFiltersRequested;
+    FOnEVFeatureVocabularyValueActionRequested OnFeatureVocabularyValueActionRequested;
+
+    void HandleEntryDetailsRequested(const FEVVocabularyRecord& Record);
+
     UFUNCTION()
     void HandleWordEntryViewButtonPressed(UEVWordEntryWidget* CurrentWordEntryWidget);
 
@@ -158,6 +208,17 @@ private:
     UPROPERTY(Transient)
     FEVVocabularyQueryCriteria ActiveQueryCriteria;
 
+    UPROPERTY(Transient)
+    FEVVocabularyLanguagePreferences VocabularyPreferences;
+
+    bool bSuppressSearchRefresh = false;
+
     FReviewPaginationState& GetActivePaginationState();
     const FReviewPaginationState& GetActivePaginationState() const;
+
+    FOnEVVocabularyRecordRequested OnVocabularyRecordRequested;
+    FOnEVVocabularyQueryRequested OnVocabularyQueryRequested;
+    FOnEVVocabularyMutationRequested OnVocabularyMutationRequested;
+    FGuid PendingVocabularyQueryRequestId;
+    int32 PendingVocabularyQueryPage = 1;
 };

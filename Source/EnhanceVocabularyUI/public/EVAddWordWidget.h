@@ -13,6 +13,10 @@
 #include "EVWidgetControllable.h"
 #include "EVWidgetCommonEvents.h"
 #include "EVWebProviderTypes.h"
+#include "EVVocabularySearchApplicationPort.h"
+#include "EVVocabularyLibraryApplicationPort.h"
+#include "EVNetworkConnectivityApplicationPort.h"
+#include "EVFeatureRoles.h"
 #include "EVAddWordWidget.generated.h"
 
 /**
@@ -24,7 +28,14 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnError, const FEVErrorInfo&, Error
 UCLASS()
 class ENHANCEVOCABULARYUI_API UEVAddWordWidget : public UUserWidget,
                                                  public IEVWidgetControllable,
-                                                 public IEVWidgetCommonEvents
+                                                 public IEVWidgetCommonEvents,
+                                                 public IEVVocabularySearchApplicationPort,
+                                                 public IEVVocabularyLibraryApplicationPort,
+                                                 public IEVNetworkConnectivityApplicationPort,
+                                                 public IEVFeatureFeedbackSource,
+                                                 public IEVWebProviderSelectionConsumer,
+                                                 public IEVVocabularyPreferencesFeatureRole,
+                                                 public IEVWordContextFeatureRole
 {
     GENERATED_BODY()
 
@@ -40,10 +51,8 @@ public:
     class UButton* Button_Clear;
 
     // The EV app WBPs added to the widget
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidgetOptional))
     TObjectPtr<UEVSearchResultsPanel> WBP_SearchResultsPanel;
-
-    class UEVGameInstance* EVGameInstance;
 
     // Disable/Enable or Get controls status on demand
     virtual void SetControlsEnabled(bool bEnabled) override;
@@ -55,6 +64,33 @@ public:
     // Localy constructed event to pass the Storage/Validation/Widget related errors
     UPROPERTY(BlueprintAssignable, Category = "Add Word Widget Events")
     FOnError OnError;
+
+    virtual FOnEVError* GetFeatureErrorEvent() override
+    {
+        return &OnFeatureError;
+    }
+
+    virtual FOnWidgetInteractionDisabled* GetFeatureInteractionDisabledEvent() override
+    {
+        return &OnWidgetInteractionDisabled;
+    }
+
+    virtual FOnLoadingDataTriggerred* GetFeatureLoadingStateEvent() override
+    {
+        return &OnLoadingDataTriggerred;
+    }
+
+    virtual FOnActionRequested* GetFeatureStatusEvent() override
+    {
+        return &OnActionRequested;
+    }
+
+    virtual void ApplyFeatureErrorResolution(const FEVErrorInfo& ErrorInfo) override;
+    virtual void ApplyNetworkConnectivityState(EEVApplicationConnectivityState State) override;
+    virtual void ApplyWebProviderSelection(EEVWebProvider DefinitionProvider,
+                                           EEVWebProvider TranslationProvider) override;
+    virtual void ApplyVocabularyPreferences(const FEVVocabularyLanguagePreferences& Preferences) override;
+    virtual void PresentWordContext(const FString& Word) override;
 
     // Common event for the web dependant widgets
     virtual FOnWidgetInteractionDisabled* GetWidgetInteractionDisabledEvent() override
@@ -72,6 +108,33 @@ public:
         return &OnActionRequested;
     }
 
+    virtual FOnEVVocabularySearchRequested& GetVocabularySearchRequestedEvent() override
+    {
+        return OnVocabularySearchRequested;
+    }
+
+    virtual void ApplyVocabularySearchOutcome(const FEVVocabularySearchOutcome& Outcome) override;
+
+    virtual FOnEVVocabularyRecordRequested& GetVocabularyRecordRequestedEvent() override
+    {
+        return OnVocabularyRecordRequested;
+    }
+
+    virtual FOnEVVocabularyQueryRequested& GetVocabularyQueryRequestedEvent() override
+    {
+        return OnVocabularyQueryRequested;
+    }
+
+    virtual FOnEVVocabularyMutationRequested& GetVocabularyMutationRequestedEvent() override
+    {
+        return OnVocabularyMutationRequested;
+    }
+
+    virtual void ApplyVocabularyRecordOutcome(const FEVVocabularyRecordOutcome& Outcome) override;
+    virtual void ApplyVocabularyQueryOutcome(const FEVVocabularyQueryOutcome&) override {}
+    virtual void ApplyVocabularyMutationOutcome(const FEVVocabularyMutationOutcome& Outcome) override;
+    virtual void ApplyVocabularyChanged(const FEVVocabularyChangeInfo&) override {}
+
     // Putting this to public as it's being bound in the EVRootWidget.cpp
     UFUNCTION()
     void HandleWebProvidersChanged(EEVWebProvider DefinitionUsageProvider, EEVWebProvider TranslationProvider);
@@ -85,6 +148,8 @@ protected:
     virtual void NativeConstruct() override;
 
 private:
+    FOnEVError OnFeatureError;
+
     void Init();
 
     void ClearStoredSearchResultVariable(FWordSearchResult& CachedWordSearchResult);
@@ -125,6 +190,15 @@ private:
     UPROPERTY(BlueprintAssignable)
     FOnActionRequested OnActionRequested;
 
+    FOnEVVocabularySearchRequested OnVocabularySearchRequested;
+    FGuid PendingVocabularySearchRequestId;
+
+    FOnEVVocabularyRecordRequested OnVocabularyRecordRequested;
+    FOnEVVocabularyQueryRequested OnVocabularyQueryRequested;
+    FOnEVVocabularyMutationRequested OnVocabularyMutationRequested;
+    FGuid PendingVocabularyRecordRequestId;
+    FGuid PendingVocabularyMutationRequestId;
+
     UFUNCTION()
     void HandleOnWidgetInteractionDisabled();
 
@@ -134,8 +208,7 @@ private:
     UFUNCTION()
     void HandleOnActionRequested(const FEVRequestedActionInfo& RequestedActionInfo);
 
-    // Assigning default values to the local WebProviders
-    // and pass them later to the  WordSearchService->SearchWordOnline(Word, DefinitionProvider, TranslationProvider);
+    // Default provider selections used when building vocabulary search requests.
     EEVWebProvider ActiveDefinitionUsageProvider = EEVWebProvider::FreeDictionary;
     EEVWebProvider ActiveTranslationProvider = EEVWebProvider::MyMemory;
 };

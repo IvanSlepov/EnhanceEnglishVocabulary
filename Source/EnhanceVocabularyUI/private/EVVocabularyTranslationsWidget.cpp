@@ -51,6 +51,20 @@ void UEVVocabularyTranslationsWidget::SetInitialState(
     RebuildActiveTranslations();
 }
 
+void UEVVocabularyTranslationsWidget::ResetPendingChanges()
+{
+    WorkingTranslations = CommittedTranslations;
+    NormalizeWorkingTranslations();
+    SynchronizeOptionWidgets();
+    RebuildActiveTranslations();
+
+    bTranslationsExpanded = false;
+    if (Border_TranslationsPanel)
+    {
+        Border_TranslationsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    }
+}
+
 void UEVVocabularyTranslationsWidget::SetDatabaseContext(const EEVVocabularyDBContext InContext)
 {
     DatabaseContext = InContext;
@@ -202,16 +216,7 @@ void UEVVocabularyTranslationsWidget::UpdateEmptyState()
 void UEVVocabularyTranslationsWidget::HandleClosePressed()
 {
     // Close acts as cancel for uncommitted translation changes while keeping the embedded settings section available.
-    WorkingTranslations = CommittedTranslations;
-    NormalizeWorkingTranslations();
-    SynchronizeOptionWidgets();
-    RebuildActiveTranslations();
-
-    bTranslationsExpanded = false;
-    if (Border_TranslationsPanel)
-    {
-        Border_TranslationsPanel->SetVisibility(ESlateVisibility::Collapsed);
-    }
+    ResetPendingChanges();
 }
 
 void UEVVocabularyTranslationsWidget::HandleTranslationSelectorPressed()
@@ -229,6 +234,13 @@ void UEVVocabularyTranslationsWidget::HandleApplyChangesPressed()
     NormalizeWorkingTranslations();
     CommittedTranslations = WorkingTranslations;
     OnTranslationsApplied.Broadcast(CommittedTranslations);
+    RebuildActiveTranslations();
+
+    bTranslationsExpanded = false;
+    if (Border_TranslationsPanel)
+    {
+        Border_TranslationsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    }
 }
 
 void UEVVocabularyTranslationsWidget::HandleTranslationOptionSelectionChanged(

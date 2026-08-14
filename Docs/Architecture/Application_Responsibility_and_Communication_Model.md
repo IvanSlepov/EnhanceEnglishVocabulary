@@ -257,6 +257,58 @@ Adding a future capability should localize change to:
 
 It must not require unrelated widgets or modules to depend on the new implementation.
 
+## Implemented V2 baseline
+
+The following structures implement this contract in the current project:
+
+### UI feature rail
+
+- `UEVRootWidget` is the UI composition authority.
+- `UEVFeatureRegistry` registers Feature identifiers against optional widgets in `WidgetSwitcher_Main`, activates available Features, and remembers the previous Feature for temporary views.
+- The registered Feature set covers Main Menu, Add Word, Review Words, Notification Settings, Import/Export, Application Settings, Entry Details, and Vocabulary Filters.
+- `IEV...FeatureRole` contracts carry semantic Feature intents and presentation state between each Feature and Root.
+- Entry Details and Vocabulary Filters are Root-owned Features. Player Controller does not create, remove, or manipulate either widget.
+- Main Menu controls are enabled according to registered Feature availability.
+- Replaceable Root Features and selected immediate Feature children use optional widget binding while preserving their existing bound names and types.
+
+### Root/Application boundary
+
+- Neutral application ports in `EnhanceVocabularyCore` carry search, library, preferences, connectivity, global presentation, Entry Details, vocabulary filters, file exchange, notification settings, vocabulary-value actions, lifecycle, and Feature navigation messages.
+- `AEVAppPlayerController` binds those ports and remains the single Root-to-application gateway.
+- Legacy Blueprint-facing delegates and functions remain compatibility adapters. A semantic route is preferred when attached; the compatibility route is used only when the semantic contract is unavailable.
+- `EnhanceVocabularyUI` has no compile-time dependency on the `EnhanceVocabulary` application module and contains no Game Instance or Player Controller access.
+
+### Player Controller helpers
+
+Player Controller owns and composes focused helpers within `EnhanceVocabulary`:
+
+- `UEVFileExchangeWorkflowCoordinator` owns UI-originated file-operation workflow state and decisions.
+- `UEVNotificationWorkflowCoordinator` owns notification-settings transition and permission workflow state.
+- `UEVVocabularyInteractionCoordinator` owns Entry Details edit/delete, relation/translation action, and vocabulary-filter workflow state.
+
+These helpers do not own widgets. They request confirmation, loading, and status presentation through controller-owned signals; Player Controller continues to create and own the global overlays and dialogs.
+
+### Game Instance coordinators
+
+Game Instance owns and composes focused application coordinators:
+
+- `UEVFileExchangeApplicationCoordinator` orchestrates Storage and Device capabilities for template download, export, import, validation reports, and completion outcomes.
+- `UEVNotificationApplicationCoordinator` orchestrates Storage and Device capabilities for notification payloads, scheduling, permission state, pending words, and device settings.
+
+Game Instance keeps the controller-facing capability API and is the only owner that composes these coordinators with concrete services. Missing coordinators produce neutral unavailable behavior rather than exposing implementation details to Player Controller.
+
+### Required and optional attachments
+
+`WidgetSwitcher_Main` and the Root shell remain required composition controls. Registered application Features are optional attachments. If an optional Feature is absent:
+
+- registration omits it;
+- Main Menu disables its entry when that entry exists;
+- navigation rejects the unavailable Feature without changing unrelated state;
+- Root and the application continue operating;
+- no concrete Feature pointer is exposed to Player Controller or Game Instance.
+
+This baseline does not remove the incremental-adoption rule. Existing compatibility APIs may be removed only through separately approved work after their final Blueprint or C++ consumer is proven gone.
+
 ## Prohibited coupling
 
 Unless a separately reviewed architecture decision explicitly changes this model, do not introduce:

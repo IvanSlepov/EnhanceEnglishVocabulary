@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "EVVocabularyLanguageTypes.h"
 #include "EVVocabularyTypes.h"
 #include "EVSearchResultsPanel.generated.h"
 
@@ -47,6 +48,8 @@ public:
      * Returns the complete structured record currently displayed.
      */
     const FEVVocabularyRecord& GetCurrentVocabularyRecord() const;
+
+    void ApplyVocabularyPreferences(const FEVVocabularyLanguagePreferences& Preferences);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (BindWidget))
     TObjectPtr<UTextBlock> TextBlock_SearchResultsTranscription_Value = nullptr;
@@ -136,4 +139,7 @@ private:
 private:
     UPROPERTY(Transient)
     FEVVocabularyRecord CurrentVocabularyRecord;
+
+    UPROPERTY(Transient)
+    FEVVocabularyLanguagePreferences VocabularyPreferences;
 };

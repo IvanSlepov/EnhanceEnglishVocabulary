@@ -112,6 +112,7 @@ void UEVPopUpSettingsWidget::BroadcastCurrentSettings()
     EVNotificationSettingsInfo.NotificationMode = SelectedMode;
 
     OnNotificationSettingsChanged.Broadcast(EVNotificationSettingsInfo);
+    OnFeatureNotificationSettingsChanged.Broadcast(EVNotificationSettingsInfo);
 }
 
 void UEVPopUpSettingsWidget::HandleOnNotificationsIntervalSelected(FString SelectedItem,

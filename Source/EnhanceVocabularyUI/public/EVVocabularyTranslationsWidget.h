@@ -23,6 +23,7 @@ class ENHANCEVOCABULARYUI_API UEVVocabularyTranslationsWidget : public UUserWidg
 public:
     void SetInitialState(EEVVocabularyDBContext InContext,
                          const TArray<EEVVocabularyTranslationLanguage>& InSelectedTranslations);
+    void ResetPendingChanges();
 
     void SetDatabaseContext(EEVVocabularyDBContext InContext);
 
